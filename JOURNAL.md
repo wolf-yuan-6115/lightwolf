@@ -6,3 +6,14 @@
   ==================================================================
 -->
 
+## 10/21/2025 - Drew the schematic  
+
+Drew the schematic, read whole bunch of datasheets.
+
+I ultimately decided to use RP2350, with a 8 MB SPI flash, along with high technology... USB-C connector.
+
+There will also be some pins header on the board.
+
+![{5F990981-3B67-4193-A2E5-E059A2378BF3}.png](https://blueprint.hackclub.com/user-attachments/blobs/proxy/eyJfcmFpbHMiOnsiZGF0YSI6NDA3NywicHVyIjoiYmxvYl9pZCJ9fQ==--554f77cf35075343b571b61f6837a3c7d985ff2a/%7B5F990981-3B67-4193-A2E5-E059A2378BF3%7D.png)
+  
+
