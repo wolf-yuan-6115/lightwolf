@@ -17,7 +17,7 @@ There will also be some pins header on the board.
 ![{5F990981-3B67-4193-A2E5-E059A2378BF3}.png](https://blueprint.hackclub.com/user-attachments/blobs/proxy/eyJfcmFpbHMiOnsiZGF0YSI6NDA3NywicHVyIjoiYmxvYl9pZCJ9fQ==--554f77cf35075343b571b61f6837a3c7d985ff2a/%7B5F990981-3B67-4193-A2E5-E059A2378BF3%7D.png)
   
 
-## 10/22/2025 - Partially routed PCB  
+## 10/22/2025 12 AM - Partially routed PCB  
 
 Got some routing on the PCB now!
 
@@ -26,5 +26,14 @@ Currently only placed main MCU on the board and pin header, other thing is still
 I'm concerned about the very limited board size... Hope everything will fit inside the Raspberry Pi Pico size
 
 ![{9D788A10-ED7B-4B8A-98F3-6E1070F1FB00}.png](https://blueprint.hackclub.com/user-attachments/blobs/proxy/eyJfcmFpbHMiOnsiZGF0YSI6NDA5MSwicHVyIjoiYmxvYl9pZCJ9fQ==--4e255c5889eaf166d9c9424512a345b6240c2c1d/%7B9D788A10-ED7B-4B8A-98F3-6E1070F1FB00%7D.png)
+  
+
+## 10/22/2025 11 PM - Routed non GPIO part on PCB  
+
+Ayyyy some great progress... though there's a bigger challenge upcoming.
+
+I routed all non GPIO pins to RP2350! This leaves me with a bunch of GPIOs. I hope I could route them without getting myself crazy.
+
+![{1B7B54A0-DEEC-47AE-A268-759E6EBF53E4}.png](https://blueprint.hackclub.com/user-attachments/blobs/proxy/eyJfcmFpbHMiOnsiZGF0YSI6NDQyNCwicHVyIjoiYmxvYl9pZCJ9fQ==--a7caeb7b3366c71cfb9a5d130fde7ddd4c4ba592/%7B1B7B54A0-DEEC-47AE-A268-759E6EBF53E4%7D.png)
   
 
