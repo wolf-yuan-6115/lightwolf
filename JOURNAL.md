@@ -28,12 +28,21 @@ I'm concerned about the very limited board size... Hope everything will fit insi
 ![{9D788A10-ED7B-4B8A-98F3-6E1070F1FB00}.png](https://blueprint.hackclub.com/user-attachments/blobs/proxy/eyJfcmFpbHMiOnsiZGF0YSI6NDA5MSwicHVyIjoiYmxvYl9pZCJ9fQ==--4e255c5889eaf166d9c9424512a345b6240c2c1d/%7B9D788A10-ED7B-4B8A-98F3-6E1070F1FB00%7D.png)
   
 
-## 10/22/2025 11 PM - Routed non GPIO part on PCB  
+## 10/22/2025 11:03 PM - Routed non GPIO part on PCB  
 
 Ayyyy some great progress... though there's a bigger challenge upcoming.
 
 I routed all non GPIO pins to RP2350! This leaves me with a bunch of GPIOs. I hope I could route them without getting myself crazy.
 
 ![{1B7B54A0-DEEC-47AE-A268-759E6EBF53E4}.png](https://blueprint.hackclub.com/user-attachments/blobs/proxy/eyJfcmFpbHMiOnsiZGF0YSI6NDQyNCwicHVyIjoiYmxvYl9pZCJ9fQ==--a7caeb7b3366c71cfb9a5d130fde7ddd4c4ba592/%7B1B7B54A0-DEEC-47AE-A268-759E6EBF53E4%7D.png)
+  
+
+## 10/22/2025 11:25 PM - Changed to 4 layer board  
+
+2 layer board made by routing a lotttt messy, soo I decided to change my board to a 4 layer board.
+
+After switching, I don't need to deal with 3V3 and 1V1 plane anymore, yayy
+
+![{B510FDCB-A74A-47D3-B862-AC1E20FF8593}.png](https://blueprint.hackclub.com/user-attachments/blobs/proxy/eyJfcmFpbHMiOnsiZGF0YSI6NDQzNywicHVyIjoiYmxvYl9pZCJ9fQ==--3680ea20dc8586a16b31b246e4c818b59f691f21/%7BB510FDCB-A74A-47D3-B862-AC1E20FF8593%7D.png)
   
 
