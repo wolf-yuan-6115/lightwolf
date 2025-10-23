@@ -510,9 +510,9 @@
       "plot": "",
       "pos_files": "",
       "specctra_dsn": "",
-      "step": "",
+      "step": "lightwolf.step",
       "svg": "",
-      "vrml": ""
+      "vrml": "lightwolf.wrl"
     },
     "page_layout_descr_file": ""
   },
