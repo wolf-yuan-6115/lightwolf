@@ -69,3 +69,11 @@ Time for silkscreen art!
 > Sadly Hackatime wasn't up during these hours. I tried my best to remember to run it when I start KiCad
   
 
+## 10/23/2025 11 PM - Finished cooking silkscreen art  
+
+I think I finished my silkscreen art! Though I didn't find a great way to automate the process of labeling GPIO pins, I just adjust and change them manually.
+
+![{1C9DAF62-A3E8-4E65-B2B7-A3804C73B30A}.png](https://blueprint.hackclub.com/user-attachments/blobs/proxy/eyJfcmFpbHMiOnsiZGF0YSI6NDgwMSwicHVyIjoiYmxvYl9pZCJ9fQ==--96f58eb05da2dfe16649b6c7a3b14266728c1a97/%7B1C9DAF62-A3E8-4E65-B2B7-A3804C73B30A%7D.png)
+![{597DD79A-259C-43A4-9CC1-8D560F37D4CA}.png](https://blueprint.hackclub.com/user-attachments/blobs/proxy/eyJfcmFpbHMiOnsiZGF0YSI6NDgwMiwicHVyIjoiYmxvYl9pZCJ9fQ==--23a2ff14aaaf649357ce1cc74ceb78f375492073/%7B597DD79A-259C-43A4-9CC1-8D560F37D4CA%7D.png)
+  
+
