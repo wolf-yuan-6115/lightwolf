@@ -46,12 +46,26 @@ After switching, I don't need to deal with 3V3 and 1V1 plane anymore, yayy
 ![{B510FDCB-A74A-47D3-B862-AC1E20FF8593}.png](https://blueprint.hackclub.com/user-attachments/blobs/proxy/eyJfcmFpbHMiOnsiZGF0YSI6NDQzNywicHVyIjoiYmxvYl9pZCJ9fQ==--3680ea20dc8586a16b31b246e4c818b59f691f21/%7BB510FDCB-A74A-47D3-B862-AC1E20FF8593%7D.png)
   
 
-## 10/23/2025 - Thing didn't go as expected  
+## 10/23/2025 12 AM - Thing didn't go as expected  
 
 After changing the board to a 4 layer one, I don't think I did a great job at trace management...
 
 The board now looks even more messy, I think I need to redo the whole wring someday.
 
 ![{B2D27848-17BB-42CD-B192-9CD66505D1B4}.png](https://blueprint.hackclub.com/user-attachments/blobs/proxy/eyJfcmFpbHMiOnsiZGF0YSI6NDQ1NiwicHVyIjoiYmxvYl9pZCJ9fQ==--1772b27bf5404ebe418be5b7b2e45c89bc21aef0/%7BB2D27848-17BB-42CD-B192-9CD66505D1B4%7D.png)
+  
+
+## 10/23/2025 9 PM - Finished rerouting the PCB!  
+
+Yayyy, finally finished rerouting the PCB with 4 layers board!
+
+The inner layer now acts like 3V3 and 5V pane, it heavily reduced the complexity of my route. I think current one is good to ship... just one thing left...
+
+Time for silkscreen art!
+
+![{F37170FE-6D6B-423A-BAF1-41FB0212BB1D}.png](https://blueprint.hackclub.com/user-attachments/blobs/proxy/eyJfcmFpbHMiOnsiZGF0YSI6NDc1NCwicHVyIjoiYmxvYl9pZCJ9fQ==--e619256c6b47562694b2c053d61ee02ec195e7bb/%7BF37170FE-6D6B-423A-BAF1-41FB0212BB1D%7D.png)
+![{52B02592-BEEA-4F03-BD69-67BDE0F781BA}.png](https://blueprint.hackclub.com/user-attachments/blobs/proxy/eyJfcmFpbHMiOnsiZGF0YSI6NDc1NSwicHVyIjoiYmxvYl9pZCJ9fQ==--3959c984fe8bddd10d78869c5e3d584a6de38089/%7B52B02592-BEEA-4F03-BD69-67BDE0F781BA%7D.png)
+
+> Sadly Hackatime wasn't up during these hours. I tried my best to remember to run it when I start KiCad
   
 
