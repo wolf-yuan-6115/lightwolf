@@ -1,6 +1,7 @@
 # LightWolf
 
 > Sponsored by [Hack Club Blueprint](https://blueprint.hackclub.com/r/137?ref=r) program
+> 
 > To meet program requirements, `JOURNAL.md` and `bom.csv` files are included in this repository root.
 
 LightWolf is a recreate version of Raspberry Pi Pico development board created by me. It's used to experiment with PCB designing and electronics.
