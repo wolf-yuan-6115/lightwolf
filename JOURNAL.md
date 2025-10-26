@@ -77,3 +77,14 @@ I think I finished my silkscreen art! Though I didn't find a great way to automa
 ![{597DD79A-259C-43A4-9CC1-8D560F37D4CA}.png](https://blueprint.hackclub.com/user-attachments/blobs/proxy/eyJfcmFpbHMiOnsiZGF0YSI6NDgwMiwicHVyIjoiYmxvYl9pZCJ9fQ==--23a2ff14aaaf649357ce1cc74ceb78f375492073/%7B597DD79A-259C-43A4-9CC1-8D560F37D4CA%7D.png)
   
 
+## 10/26/2025 - Ahh board design got some trouble  
+
+I posted my design on Reddit and some people helped me :D
+
+Fixed several issues, including problematic BOOTSEL button, the board should be done now! I didn't see that my design uses via-in-pad, so um I need to spend few extra bucks on via :/
+
+Hope the board works when it arrives
+
+![image](https://blueprint.hackclub.com/user-attachments/blobs/proxy/eyJfcmFpbHMiOnsiZGF0YSI6NTcyOCwicHVyIjoiYmxvYl9pZCJ9fQ==--a67e08164ec26fc7dd9624187332531de7cf44a6/image.png)
+  
+
