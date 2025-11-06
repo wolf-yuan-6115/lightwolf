@@ -88,3 +88,15 @@ Hope the board works when it arrives
 ![image](https://blueprint.hackclub.com/user-attachments/blobs/proxy/eyJfcmFpbHMiOnsiZGF0YSI6NTcyOCwicHVyIjoiYmxvYl9pZCJ9fQ==--a67e08164ec26fc7dd9624187332531de7cf44a6/image.png)
   
 
+## 11/6/2025 - Faulty design, faulty board  
+
+So, I just ran into a trouble.
+
+The board arrived, not shorted but RP2350 did not function. I currently suspect that `VREG_AVDD`'s capacitor is not correctly wire up, and RP2350 didn't work afterwards.
+
+I've spend a while trying to debug, but this seems like the only possible reason why the board doesn't work.
+
+![PXL_20251106_130818480](https://blueprint.hackclub.com/user-attachments/blobs/proxy/eyJfcmFpbHMiOnsiZGF0YSI6ODg1MCwicHVyIjoiYmxvYl9pZCJ9fQ==--9d9fa8a088972c52e32a8552781deafdd2ee40c2/PXL_20251106_130818480.jpg)
+
+  
+
