@@ -88,7 +88,7 @@ Hope the board works when it arrives
 ![image](https://blueprint.hackclub.com/user-attachments/blobs/proxy/eyJfcmFpbHMiOnsiZGF0YSI6NTcyOCwicHVyIjoiYmxvYl9pZCJ9fQ==--a67e08164ec26fc7dd9624187332531de7cf44a6/image.png)
   
 
-## 11/6/2025 - Faulty design, faulty board  
+## 11/6/2025 9 PM - Faulty design, faulty board  
 
 So, I just ran into a trouble.
 
@@ -98,5 +98,12 @@ I've spend a while trying to debug, but this seems like the only possible reason
 
 ![PXL_20251106_130818480](https://blueprint.hackclub.com/user-attachments/blobs/proxy/eyJfcmFpbHMiOnsiZGF0YSI6ODg1MCwicHVyIjoiYmxvYl9pZCJ9fQ==--9d9fa8a088972c52e32a8552781deafdd2ee40c2/PXL_20251106_130818480.jpg)
 
+  
+
+## 11/6/2025 11 PM - Fixed the board, sort of...  
+
+I fixed the board! Thanks to `@colon three` in Hack Club Slack, the problem is not capacitor, it's not resistor. It's crystal oscillator! The project is finally ended here, for who got `60wfo` revision board, a working board is only a few tweak away!
+
+![PXL_20251106_145343556](https://blueprint.hackclub.com/user-attachments/blobs/proxy/eyJfcmFpbHMiOnsiZGF0YSI6ODg4MywicHVyIjoiYmxvYl9pZCJ9fQ==--f84ee004c7b9522bb9e2cdb5e771e733ec5e0969/PXL_20251106_145343556.jpg)
   
 
