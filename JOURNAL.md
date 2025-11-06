@@ -92,7 +92,7 @@ Hope the board works when it arrives
 
 So, I just ran into a trouble.
 
-The board arrived, not shorted but RP2350 did not function. I currently suspect that `VREG_AVDD`'s capacitor is not correctly wire up, and RP2350 didn't work afterwards.
+The board arrived, not shorted but RP2350 did not function (USB drive does not appear on the computer, in other word RP2350 is not working correctly). I currently suspect that `VREG_AVDD`'s capacitor is not correctly wire up, and RP2350 didn't work afterwards.
 
 I've spend a while trying to debug, but this seems like the only possible reason why the board doesn't work.
 
