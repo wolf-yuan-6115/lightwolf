@@ -1,3 +1,9 @@
+# 2/11 Reading datasheet...
+
+Just reading datasheet and drawing schematic
+
+<img width="1577" height="1111" alt="image" src="https://github.com/user-attachments/assets/499de1b0-9e54-4de4-84ae-5d808e2ab6ac" />
+
 # 2/10 Snap, ESP32-S3 doesn't have classic BT
 
 Initially I went with ESP32-S3 because it got bunch of processing power. But it looks like S3 only have Bluetooth LE which doesn't have A2DP. Gotta went with C3. Currently searching for chips.
