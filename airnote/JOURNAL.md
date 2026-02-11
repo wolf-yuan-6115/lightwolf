@@ -1,3 +1,13 @@
+# 2/12 Schematic done!
+
+Basically got three TI's chip to get good audio.
+
+From ESP32-C3, to PCM5102A, to OPA2141, finally to OPA1622. 
+
+![airnote_page-0001](https://github.com/user-attachments/assets/ad539967-d62e-4bcb-8750-f78cb7458635)
+
+But I'm not sure if it will work or not. I get into too much field I'm not familiar with.
+
 # 2/11 Reading datasheet...
 
 Just reading datasheet and drawing schematic
