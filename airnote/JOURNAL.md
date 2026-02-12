@@ -1,3 +1,7 @@
+# 2/12 Just added two pin headers
+
+Nothing new, just two additional header for GPIOs and UART.
+
 # 2/12 Schematic done!
 
 Basically got three TI's chip to get good audio.
