@@ -1,0 +1,7 @@
+(fp_lib_table
+  (version 7)
+  (lib (name "ESD122DMXR")(type "KiCad")(uri "${KIPRJMOD}/external/ESD122DMXR")(options "")(descr ""))
+  (lib (name "Imported")(type "KiCad")(uri "${KIPRJMOD}/external/footprints.pretty")(options "")(descr ""))
+  (lib (name "OPA2141AIDR")(type "KiCad")(uri "${KIPRJMOD}/external/OPA2141AIDR")(options "")(descr ""))
+  (lib (name "OPA1622IDRCR")(type "KiCad")(uri "${KIPRJMOD}/external/OPA1622IDRCR")(options "")(descr ""))
+)

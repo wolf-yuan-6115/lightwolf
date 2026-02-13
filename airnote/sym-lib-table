@@ -1,0 +1,8 @@
+(sym_lib_table
+  (version 7)
+  (lib (name "ESD122DMXR")(type "KiCad")(uri "${KIPRJMOD}/external/ESD122DMXR/ESD122DMXR.kicad_sym")(options "")(descr ""))
+  (lib (name "TPA6120A2DWPR")(type "KiCad")(uri "${KIPRJMOD}/external/TPA6120A2DWPR/TPA6120A2DWPR.kicad_sym")(options "")(descr ""))
+  (lib (name "OPA2134UA")(type "KiCad")(uri "${KIPRJMOD}/external/OPA2134UA2K5/OPA2134UA.kicad_sym")(options "")(descr ""))
+  (lib (name "OPA2141AIDR")(type "KiCad")(uri "${KIPRJMOD}/external/OPA2141AIDR/OPA2141AIDR.kicad_sym")(options "")(descr ""))
+  (lib (name "OPA1622IDRCR")(type "KiCad")(uri "${KIPRJMOD}/external/OPA1622IDRCR/OPA1622IDRCR.kicad_sym")(options "")(descr ""))
+)
