@@ -1,3 +1,9 @@
+# 2/14 YEAHHHH no ESP32 now
+
+ESP32-C3 doesn't have native USB (USB OTG) so we will stick with RP2350! (Or 2040)
+
+Since ESP32 WROOM needs to use standard SMT, we can save some money through using 2350 or 2040.
+
 # 2/12 Just added two pin headers
 
 Nothing new, just two additional header for GPIOs and UART.
