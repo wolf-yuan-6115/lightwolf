@@ -1,4 +1,11 @@
+# 2/21 Finished all schematic
+
+![airnote_page-0001](https://github.com/user-attachments/assets/c8b83c06-4f43-4283-b88d-f740532d325d)
+![airnote_page-0002](https://github.com/user-attachments/assets/1e2606b7-b5af-4237-b735-d22856f6136b)
+![airnote_page-0003](https://github.com/user-attachments/assets/2f5f1ae7-694d-4606-b682-078633e2dca6)
+
 # 2/21 RP2354A MCU schematic done!
+
 
 <img width="1256" height="955" alt="image" src="https://github.com/user-attachments/assets/4415ba74-bd70-431d-9a40-1be936211e1e" />
 
