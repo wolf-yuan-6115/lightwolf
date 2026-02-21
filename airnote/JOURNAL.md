@@ -1,3 +1,7 @@
+# 2/21 Back from Lunar New Year holiday
+
+Finally decided to use RP2354A (The one with built in flash), and splitted the design into 3 schematics.
+
 # 2/14 YEAHHHH no ESP32 now
 
 ESP32-C3 doesn't have native USB (USB OTG) so we will stick with RP2350! (Or 2040)
