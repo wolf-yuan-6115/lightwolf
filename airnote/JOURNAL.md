@@ -1,3 +1,7 @@
+# 2/21 RP2354A MCU schematic done!
+
+<img width="1256" height="955" alt="image" src="https://github.com/user-attachments/assets/4415ba74-bd70-431d-9a40-1be936211e1e" />
+
 # 2/21 Back from Lunar New Year holiday
 
 Finally decided to use RP2354A (The one with built in flash), and splitted the design into 3 schematics.
