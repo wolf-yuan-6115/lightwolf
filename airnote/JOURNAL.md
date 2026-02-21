@@ -1,3 +1,7 @@
+# 2/22 Completed RP2354 routing
+
+<img width="1446" height="913" alt="image" src="https://github.com/user-attachments/assets/03a31884-0be3-4464-bd34-3534e839da2b" />
+
 # 2/21 Finished all schematic
 
 ![airnote_page-0001](https://github.com/user-attachments/assets/c8b83c06-4f43-4283-b88d-f740532d325d)
@@ -5,7 +9,6 @@
 ![airnote_page-0003](https://github.com/user-attachments/assets/2f5f1ae7-694d-4606-b682-078633e2dca6)
 
 # 2/21 RP2354A MCU schematic done!
-
 
 <img width="1256" height="955" alt="image" src="https://github.com/user-attachments/assets/4415ba74-bd70-431d-9a40-1be936211e1e" />
 
