@@ -1,3 +1,15 @@
+# 2/23 Airnote is now pumper
+
+I initially named it Airnote because I want it to me a portable Bluetooth DAC. But it seems like it's not possible and it's now just a USB DAC.
+
+But I finished the schematic and PCB routing!
+
+![pumper_page-0001](https://github.com/user-attachments/assets/9b66d4d0-3a07-4ef3-8897-47add342ec57)
+![pumper_page-0002](https://github.com/user-attachments/assets/a6e22ff1-c22c-4aaa-a048-2cf3c4da49d9)
+![pumper_page-0003](https://github.com/user-attachments/assets/205a3835-ac56-4dd4-8beb-c82a06feb3e8)
+
+<img width="461" height="1222" alt="image" src="https://github.com/user-attachments/assets/825b45a6-9812-4633-bb84-fee97516b045" />
+
 # 2/22 It's been a big day
 
 Well I threw my schematic into an AI tool and it told me... OPA2141 is too weak (well I mean tl;dr)
