@@ -1,3 +1,9 @@
+# 2/22 Completed whole routing
+
+Yayyy, but I'm still not sure wether this board will work or not...
+
+<img width="499" height="1229" alt="image" src="https://github.com/user-attachments/assets/cc035b9e-1de3-4c9e-807e-66b037ab3941" />
+
 # 2/22 Completed power and OPA2141 routing
 
 The power is harder than I was expecting. The chip is so small...
