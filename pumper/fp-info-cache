@@ -1,4 +1,18 @@
-27441718717548501
+27450577061641669
+2350B
+RP2350A_QFN-60_EP_7.75x7.75_Pitch0.4mm
+
+
+0
+86
+61
+2350B
+RP2350B_QFN-80_EP_10.573x10.573_Pitch0.4mm
+
+
+0
+106
+81
 Audio_Module
 Reverb_BTDR-1H
 Digital Reverberation Unit, http://www.belton.co.kr/inc/downfile.php?seq=17&file=pdf (footprint from http://www.uk-electronic.de/PDF/BTDR-1.pdf)
@@ -72974,6 +72988,13 @@ IC_OPA1622IDRCR
 0
 15
 15
+OPA1652AIDR
+SOIC127P599X175-8N
+
+
+0
+8
+8
 OPA2141AIDR
 SOIC127P599X175-8N
 
@@ -102724,6 +102745,20 @@ Logo WEEE
 0
 0
 0
+TPD1E10B06DPYR
+DIO_TPD1E10B06DPYR
+
+
+0
+2
+2
+TPD2E001DZDR
+SOT192P237X122-4N
+
+
+0
+4
+4
 TerminalBlock
 TerminalBlock_Altech_AK300-2_P5.00mm
 Altech AK300 terminal block, pitch 5.0mm, 45 degree angled, see http://www.mouser.com/ds/2/16/PCBMETRC-24178.pdf

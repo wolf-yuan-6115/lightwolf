@@ -4,4 +4,8 @@
   (lib (name "Imported")(type "KiCad")(uri "${KIPRJMOD}/external/footprints.pretty")(options "")(descr ""))
   (lib (name "OPA2141AIDR")(type "KiCad")(uri "${KIPRJMOD}/external/OPA2141AIDR")(options "")(descr ""))
   (lib (name "OPA1622IDRCR")(type "KiCad")(uri "${KIPRJMOD}/external/OPA1622IDRCR")(options "")(descr ""))
+  (lib (name "2350B")(type "KiCad")(uri "${KIPRJMOD}/external/RP2350_KiCad")(options "")(descr ""))
+  (lib (name "TPD2E001DZDR")(type "KiCad")(uri "${KIPRJMOD}/external/TPD2E001DZDR")(options "")(descr ""))
+  (lib (name "OPA1652AIDR")(type "KiCad")(uri "${KIPRJMOD}/external/OPA1652AIDR")(options "")(descr ""))
+  (lib (name "TPD1E10B06DPYR")(type "KiCad")(uri "${KIPRJMOD}/external/TPD1E10B06DPYR")(options "")(descr ""))
 )

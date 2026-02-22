@@ -5,4 +5,8 @@
   (lib (name "OPA2134UA")(type "KiCad")(uri "${KIPRJMOD}/external/OPA2134UA2K5/OPA2134UA.kicad_sym")(options "")(descr ""))
   (lib (name "OPA2141AIDR")(type "KiCad")(uri "${KIPRJMOD}/external/OPA2141AIDR/OPA2141AIDR.kicad_sym")(options "")(descr ""))
   (lib (name "OPA1622IDRCR")(type "KiCad")(uri "${KIPRJMOD}/external/OPA1622IDRCR/OPA1622IDRCR.kicad_sym")(options "")(descr ""))
+  (lib (name "2350A")(type "KiCad")(uri "${KIPRJMOD}/external/RP2350_KiCad/rp2350a-qfn60.kicad_sym")(options "")(descr ""))
+  (lib (name "TPD2E001DZDR")(type "KiCad")(uri "${KIPRJMOD}/external/TPD2E001DZDR/TPD2E001DZDR.kicad_sym")(options "")(descr ""))
+  (lib (name "OPA1652AIDR")(type "KiCad")(uri "${KIPRJMOD}/external/OPA1652AIDR/OPA1652AIDR.kicad_sym")(options "")(descr ""))
+  (lib (name "TPD1E10B06DPYR")(type "KiCad")(uri "${KIPRJMOD}/external/TPD1E10B06DPYR/TPD1E10B06DPYR.kicad_sym")(options "")(descr ""))
 )
