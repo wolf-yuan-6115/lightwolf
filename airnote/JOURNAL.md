@@ -1,3 +1,11 @@
+# 2/22 It's been a big day
+
+Well I threw my schematic into an AI tool and it told me... OPA2141 is too weak (well I mean tl;dr)
+
+<img width="1591" height="1306" alt="image" src="https://github.com/user-attachments/assets/b710e3d1-9ce5-403d-9a93-d21896a03e61" />
+
+Going to replace it with OPA1652
+
 # 2/22 Completed whole routing
 
 Yayyy, but I'm still not sure wether this board will work or not...
