@@ -1,3 +1,9 @@
+# 2/22 Completed power and OPA2141 routing
+
+The power is harder than I was expecting. The chip is so small...
+
+<img width="458" height="1040" alt="image" src="https://github.com/user-attachments/assets/67a569ea-afb5-42c0-9bb6-06fcf9e855a2" />
+
 # 2/22 Completed RP2354 routing
 
 <img width="1446" height="913" alt="image" src="https://github.com/user-attachments/assets/03a31884-0be3-4464-bd34-3534e839da2b" />
