@@ -48,6 +48,8 @@ The power is harder than I was expecting. The chip is so small...
 
 Finally decided to use RP2354A (The one with built in flash), and splitted the design into 3 schematics.
 
+<img width="592" height="583" alt="image" src="https://github.com/user-attachments/assets/dcd2952d-9bb8-4a62-aec2-b7e8de2b6889" />
+
 # 2/14 YEAHHHH no ESP32 now
 
 ESP32-C3 doesn't have native USB (USB OTG) so we will stick with RP2350! (Or 2040)
