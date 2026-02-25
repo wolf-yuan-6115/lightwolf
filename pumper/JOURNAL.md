@@ -1,3 +1,9 @@
+# 2/25 Getting rid of LM27762
+
+Posted the design in KiCad Discord server, and I got some feedback. The most important one is LM27762 is VERY noisy and picky about PCB design from my research. I'm gonna upgrade (Kinda of) and make both AMP run in BTL mode.
+
+<img width="822" height="912" alt="image" src="https://github.com/user-attachments/assets/50e451c0-9c57-4b39-8451-0a592cada16c" />
+
 # 2/23 Airnote is now pumper
 
 I initially named it Airnote because I want it to me a portable Bluetooth DAC. But it seems like it's not possible and it's now just a USB DAC.
