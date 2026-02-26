@@ -1,3 +1,13 @@
+# 2/27 Nah LM27762 you come back
+
+So basically, I've done following:
+
+1. Relocated LM27762 to far corner from analog circuit
+2. Made some cool branding
+3. Rerouted several parts
+
+<img width="421" height="1075" alt="image" src="https://github.com/user-attachments/assets/b632c1d7-4511-4f32-9bc4-d69e4f5b3302" />
+
 # 2/25 Getting rid of LM27762
 
 Posted the design in KiCad Discord server, and I got some feedback. The most important one is LM27762 is VERY noisy and picky about PCB design from my research. I'm gonna upgrade (Kinda of) and make both AMP run in BTL mode.
