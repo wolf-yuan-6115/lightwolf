@@ -2898,7 +2898,7 @@
 			)
 			(embedded_fonts no)
 		)
-		(symbol "PCM_JLCPCB-Inductors:Ferrite,0603"
+		(symbol "PCM_JLCPCB-Inductors:Ferrite,0603,(2)"
 			(pin_numbers
 				(hide yes)
 			)
@@ -2935,7 +2935,7 @@
 					(hide yes)
 				)
 			)
-			(property "Datasheet" "https://www.lcsc.com/datasheet/lcsc_datasheet_2310301640_Sunlord-GZ1608D601TF_C1002.pdf"
+			(property "Datasheet" "https://www.lcsc.com/datasheet/lcsc_datasheet_2304140030_Murata-Electronics-BLM18PG121SN1D_C14709.pdf"
 				(at 0 0 0)
 				(effects
 					(font
@@ -2944,7 +2944,7 @@
 					(hide yes)
 				)
 			)
-			(property "Description" "450mΩ ±25% 600Ω@100MHz 0603 Ferrite Beads ROHS"
+			(property "Description" "50mΩ ±25% 120Ω@100MHz 0603 Ferrite Beads ROHS"
 				(at 0 0 0)
 				(effects
 					(font
@@ -2953,7 +2953,7 @@
 					(hide yes)
 				)
 			)
-			(property "LCSC" "C1002"
+			(property "LCSC" "C14709"
 				(at 0 0 0)
 				(effects
 					(font
@@ -2962,7 +2962,7 @@
 					(hide yes)
 				)
 			)
-			(property "Stock" "789150"
+			(property "Stock" "222675"
 				(at 0 0 0)
 				(effects
 					(font
@@ -2971,7 +2971,7 @@
 					(hide yes)
 				)
 			)
-			(property "Price" "0.010USD"
+			(property "Price" "0.009USD"
 				(at 0 0 0)
 				(effects
 					(font
@@ -2998,7 +2998,7 @@
 					(hide yes)
 				)
 			)
-			(property "Attrition Qty" "6"
+			(property "Attrition Qty" "10"
 				(at 0 0 0)
 				(effects
 					(font
@@ -3025,7 +3025,7 @@
 					(hide yes)
 				)
 			)
-			(property "Manufacturer" "Sunlord"
+			(property "Manufacturer" "Murata Electronics"
 				(at 0 0 0)
 				(effects
 					(font
@@ -3034,7 +3034,7 @@
 					(hide yes)
 				)
 			)
-			(property "Part" "GZ1608D601TF"
+			(property "Part" "BLM18PG121SN1D"
 				(at 0 0 0)
 				(effects
 					(font
@@ -3043,7 +3043,7 @@
 					(hide yes)
 				)
 			)
-			(property "DC Resistance" "450mΩ"
+			(property "DC Resistance" "50mΩ"
 				(at 0 0 0)
 				(effects
 					(font
@@ -3052,7 +3052,7 @@
 					(hide yes)
 				)
 			)
-			(property "Impedance @ Frequency" "600Ω@100MHz"
+			(property "Impedance @ Frequency" "120Ω@100MHz"
 				(at 0 0 0)
 				(effects
 					(font
@@ -3070,7 +3070,7 @@
 					(hide yes)
 				)
 			)
-			(property "Current Rating" "200mA"
+			(property "Current Rating" "2A"
 				(at 3.4036 -1.5274 0)
 				(effects
 					(font
@@ -3097,7 +3097,7 @@
 					(hide yes)
 				)
 			)
-			(symbol "Ferrite,0603_0_1"
+			(symbol "Ferrite,0603,(2)_0_1"
 				(polyline
 					(pts
 						(xy -2.7686 0.4064) (xy -1.7018 2.2606) (xy 2.7686 -0.3048) (xy 1.6764 -2.159) (xy -2.7686 0.4064)
@@ -3135,7 +3135,7 @@
 					)
 				)
 			)
-			(symbol "Ferrite,0603_1_1"
+			(symbol "Ferrite,0603,(2)_1_1"
 				(pin passive line
 					(at 0 3.81 270)
 					(length 2.54)
@@ -3406,6 +3406,276 @@
 				)
 			)
 			(symbol "0402,1kΩ_1_1"
+				(pin passive line
+					(at 0 3.81 270)
+					(length 1.27)
+					(name "~"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "1"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+				(pin passive line
+					(at 0 -3.81 90)
+					(length 1.27)
+					(name "~"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "2"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+			)
+			(embedded_fonts no)
+		)
+		(symbol "PCM_JLCPCB-Resistors:0402,2kΩ"
+			(pin_numbers
+				(hide yes)
+			)
+			(pin_names
+				(offset 0)
+			)
+			(exclude_from_sim no)
+			(in_bom yes)
+			(on_board yes)
+			(property "Reference" "R"
+				(at 1.778 0 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(justify left)
+				)
+			)
+			(property "Value" "2kΩ"
+				(at 0 0 90)
+				(do_not_autoplace)
+				(effects
+					(font
+						(size 0.8 0.8)
+					)
+				)
+			)
+			(property "Footprint" "PCM_JLCPCB:R_0402"
+				(at -1.778 0 90)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(hide yes)
+				)
+			)
+			(property "Datasheet" "https://www.lcsc.com/datasheet/lcsc_datasheet_2206010230_UNI-ROYAL-Uniroyal-Elec-0402WGF2001TCE_C4109.pdf"
+				(at 0 0 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(hide yes)
+				)
+			)
+			(property "Description" "62.5mW Thick Film Resistors 50V ±100ppm/°C ±1% 2kΩ 0402 Chip Resistor - Surface Mount ROHS"
+				(at 0 0 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(hide yes)
+				)
+			)
+			(property "LCSC" "C4109"
+				(at 0 0 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(hide yes)
+				)
+			)
+			(property "Stock" "1980337"
+				(at 0 0 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(hide yes)
+				)
+			)
+			(property "Price" "0.004USD"
+				(at 0 0 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(hide yes)
+				)
+			)
+			(property "Process" "SMT"
+				(at 0 0 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(hide yes)
+				)
+			)
+			(property "Minimum Qty" "20"
+				(at 0 0 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(hide yes)
+				)
+			)
+			(property "Attrition Qty" "10"
+				(at 0 0 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(hide yes)
+				)
+			)
+			(property "Class" "Basic Component"
+				(at 0 0 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(hide yes)
+				)
+			)
+			(property "Category" "Resistors,Chip Resistor - Surface Mount"
+				(at 0 0 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(hide yes)
+				)
+			)
+			(property "Manufacturer" "UNI-ROYAL(Uniroyal Elec)"
+				(at 0 0 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(hide yes)
+				)
+			)
+			(property "Part" "0402WGF2001TCE"
+				(at 0 0 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(hide yes)
+				)
+			)
+			(property "Resistance" "2kΩ"
+				(at 0 0 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(hide yes)
+				)
+			)
+			(property "Power(Watts)" "62.5mW"
+				(at 0 0 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(hide yes)
+				)
+			)
+			(property "Type" "Thick Film Resistors"
+				(at 0 0 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(hide yes)
+				)
+			)
+			(property "Overload Voltage (Max)" "50V"
+				(at 0 0 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(hide yes)
+				)
+			)
+			(property "Operating Temperature Range" "-55°C~+155°C"
+				(at 0 0 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(hide yes)
+				)
+			)
+			(property "Tolerance" "±1%"
+				(at 0 0 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(hide yes)
+				)
+			)
+			(property "Temperature Coefficient" "±100ppm/°C"
+				(at 0 0 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(hide yes)
+				)
+			)
+			(property "ki_fp_filters" "R_*"
+				(at 0 0 0)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(hide yes)
+				)
+			)
+			(symbol "0402,2kΩ_0_1"
+				(rectangle
+					(start -1.016 2.54)
+					(end 1.016 -2.54)
+					(stroke
+						(width 0.254)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
+			)
+			(symbol "0402,2kΩ_1_1"
 				(pin passive line
 					(at 0 3.81 270)
 					(length 1.27)
@@ -4508,7 +4778,7 @@
 		)
 		(uuid "7a591d1d-8d93-42e4-94e7-e3c353b84ce4")
 	)
-	(text "OPA2141 (op-amp)"
+	(text "OPA1652 (op-amp)"
 		(exclude_from_sim no)
 		(at 121.158 70.358 0)
 		(effects
@@ -4571,6 +4841,12 @@
 		(uuid "30b4b210-ffe1-4e69-9515-c80ef442271b")
 	)
 	(junction
+		(at 246.38 43.18)
+		(diameter 0)
+		(color 0 0 0 0)
+		(uuid "362ff8ad-deaa-43ea-afa9-ab66aa6d7f48")
+	)
+	(junction
 		(at 148.59 153.67)
 		(diameter 0)
 		(color 0 0 0 0)
@@ -4595,10 +4871,22 @@
 		(uuid "420715ec-9c7d-487b-a595-71d2d9173446")
 	)
 	(junction
+		(at 167.64 45.72)
+		(diameter 0)
+		(color 0 0 0 0)
+		(uuid "4998a34a-5079-4c48-b54a-f32a8d2c90af")
+	)
+	(junction
 		(at 43.18 46.99)
 		(diameter 0)
 		(color 0 0 0 0)
 		(uuid "6e4d0019-4b56-4524-914d-7534cd3c8d98")
+	)
+	(junction
+		(at 128.27 48.26)
+		(diameter 0)
+		(color 0 0 0 0)
+		(uuid "7409a6c4-3cb0-4f80-b41e-1581cecb8e31")
 	)
 	(junction
 		(at 254 153.67)
@@ -4611,6 +4899,12 @@
 		(diameter 0)
 		(color 0 0 0 0)
 		(uuid "75b16d7f-d15f-4d8e-9e63-de59cd5ba57e")
+	)
+	(junction
+		(at 209.55 45.72)
+		(diameter 0)
+		(color 0 0 0 0)
+		(uuid "83875bdc-a2e4-4a2e-bc87-86fd8b63b711")
 	)
 	(junction
 		(at 93.98 77.47)
@@ -4740,6 +5034,46 @@
 	)
 	(wire
 		(pts
+			(xy 128.27 57.15) (xy 128.27 59.69)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "040171dc-6d3b-4f30-bdc6-b1736663d9ee")
+	)
+	(wire
+		(pts
+			(xy 224.79 40.64) (xy 223.52 40.64)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "0427ed6b-caf4-46f0-a446-c1c7a50fef59")
+	)
+	(wire
+		(pts
+			(xy 139.7 52.07) (xy 167.64 52.07)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "04ac8ce1-ed71-48d2-8595-bc841c01cad3")
+	)
+	(wire
+		(pts
+			(xy 128.27 48.26) (xy 140.97 48.26)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "04fa34d1-e830-4ce8-86dd-9e12b97a12c8")
+	)
+	(wire
+		(pts
 			(xy 181.61 53.34) (xy 190.5 53.34)
 		)
 		(stroke
@@ -4810,13 +5144,13 @@
 	)
 	(wire
 		(pts
-			(xy 212.09 40.64) (xy 224.79 40.64)
+			(xy 223.52 50.8) (xy 246.38 50.8)
 		)
 		(stroke
 			(width 0)
 			(type default)
 		)
-		(uuid "161e1ed1-df88-4218-847d-89f48755dcf2")
+		(uuid "1875995e-05b2-4e1e-8720-11d84c8ee681")
 	)
 	(wire
 		(pts
@@ -4830,6 +5164,16 @@
 	)
 	(wire
 		(pts
+			(xy 209.55 39.37) (xy 219.71 39.37)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "1a6c8677-19ac-41ed-88c3-972b8257a7fd")
+	)
+	(wire
+		(pts
 			(xy 241.3 87.63) (xy 241.3 90.17)
 		)
 		(stroke
@@ -4837,6 +5181,16 @@
 			(type default)
 		)
 		(uuid "1ce1c4f9-7414-4e79-bce9-bf2af42d17e9")
+	)
+	(wire
+		(pts
+			(xy 209.55 54.61) (xy 209.55 57.15)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "1e3a4c0c-3e97-4e3c-a038-11886b9cad5e")
 	)
 	(wire
 		(pts
@@ -4887,6 +5241,26 @@
 			(type default)
 		)
 		(uuid "3389c818-8eb5-4e0a-adb2-5858ddac2c63")
+	)
+	(wire
+		(pts
+			(xy 246.38 50.8) (xy 246.38 43.18)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "3426a97a-0766-4d6b-b12f-644a26abcf52")
+	)
+	(wire
+		(pts
+			(xy 167.64 45.72) (xy 177.8 45.72)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "36ab5f92-74c0-4249-b8df-a36792bd431f")
 	)
 	(wire
 		(pts
@@ -5050,6 +5424,16 @@
 	)
 	(wire
 		(pts
+			(xy 128.27 48.26) (xy 128.27 49.53)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "52089e04-06a9-484f-8e78-6d787a09f5d8")
+	)
+	(wire
+		(pts
 			(xy 139.7 156.21) (xy 153.67 156.21)
 		)
 		(stroke
@@ -5077,6 +5461,16 @@
 			(type default)
 		)
 		(uuid "53e46e59-0b0a-4142-a23e-0157381365f2")
+	)
+	(wire
+		(pts
+			(xy 167.64 52.07) (xy 167.64 45.72)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "5541c97e-88f9-4a41-87a1-57c4a035968c")
 	)
 	(wire
 		(pts
@@ -5190,6 +5584,26 @@
 	)
 	(wire
 		(pts
+			(xy 246.38 43.18) (xy 257.81 43.18)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "70c01b86-99d4-4bf2-b3f6-1985ed48f365")
+	)
+	(wire
+		(pts
+			(xy 139.7 43.18) (xy 139.7 52.07)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "75aac14c-e92d-4446-bcaf-62861ba362f4")
+	)
+	(wire
+		(pts
 			(xy 38.1 38.1) (xy 43.18 38.1)
 		)
 		(stroke
@@ -5240,6 +5654,16 @@
 	)
 	(wire
 		(pts
+			(xy 223.52 40.64) (xy 223.52 50.8)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "7c2420f6-fd8f-4783-913b-0b2f12ee80cd")
+	)
+	(wire
+		(pts
 			(xy 144.78 158.75) (xy 144.78 160.02)
 		)
 		(stroke
@@ -5247,6 +5671,16 @@
 			(type default)
 		)
 		(uuid "7c829b6c-34ce-4ef3-91f3-80f9ffe68b3a")
+	)
+	(wire
+		(pts
+			(xy 140.97 43.18) (xy 139.7 43.18)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "82e80659-3b74-4d47-8eef-8b2af6997b76")
 	)
 	(wire
 		(pts
@@ -5330,7 +5764,7 @@
 	)
 	(wire
 		(pts
-			(xy 245.11 43.18) (xy 257.81 43.18)
+			(xy 245.11 43.18) (xy 246.38 43.18)
 		)
 		(stroke
 			(width 0)
@@ -5377,16 +5811,6 @@
 			(type default)
 		)
 		(uuid "92ac76dc-bd1c-4355-baf8-d2ef7ecab5c7")
-	)
-	(wire
-		(pts
-			(xy 129.54 43.18) (xy 140.97 43.18)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "92bdb941-325a-416d-8310-e5c400de6443")
 	)
 	(wire
 		(pts
@@ -5480,7 +5904,7 @@
 	)
 	(wire
 		(pts
-			(xy 161.29 45.72) (xy 172.72 45.72)
+			(xy 161.29 45.72) (xy 167.64 45.72)
 		)
 		(stroke
 			(width 0)
@@ -5547,6 +5971,16 @@
 			(type default)
 		)
 		(uuid "ac7ff682-8260-42f4-8a99-702870b4b74b")
+	)
+	(wire
+		(pts
+			(xy 209.55 45.72) (xy 209.55 46.99)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "ae5f15e4-a670-4dc5-97d3-5519bb87d4ff")
 	)
 	(wire
 		(pts
@@ -5627,16 +6061,6 @@
 			(type default)
 		)
 		(uuid "b818cf8d-6c0b-4e78-b344-dc6ee037c5e1")
-	)
-	(wire
-		(pts
-			(xy 129.54 48.26) (xy 140.97 48.26)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "bad7a113-204e-4a74-80dd-2fb59224f385")
 	)
 	(wire
 		(pts
@@ -5760,16 +6184,6 @@
 	)
 	(wire
 		(pts
-			(xy 212.09 45.72) (xy 224.79 45.72)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "cbd5efb5-3543-4335-9c8a-e7b21eada825")
-	)
-	(wire
-		(pts
 			(xy 226.06 118.11) (xy 232.41 118.11)
 		)
 		(stroke
@@ -5790,6 +6204,16 @@
 	)
 	(wire
 		(pts
+			(xy 209.55 39.37) (xy 209.55 45.72)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "d2408432-3fa1-49d0-9fa4-33f873f19044")
+	)
+	(wire
+		(pts
 			(xy 243.84 146.05) (xy 255.27 146.05)
 		)
 		(stroke
@@ -5807,6 +6231,16 @@
 			(type default)
 		)
 		(uuid "d370b990-3605-4031-b580-4d4c569b3c4f")
+	)
+	(wire
+		(pts
+			(xy 209.55 45.72) (xy 224.79 45.72)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "d474deb5-de04-44ea-b904-a713517030e7")
 	)
 	(wire
 		(pts
@@ -5890,6 +6324,16 @@
 	)
 	(wire
 		(pts
+			(xy 138.43 41.91) (xy 128.27 41.91)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "ea1c2cca-05db-4048-950d-ab93e48c8608")
+	)
+	(wire
+		(pts
 			(xy 36.83 156.21) (xy 36.83 161.29)
 		)
 		(stroke
@@ -5907,6 +6351,16 @@
 			(type default)
 		)
 		(uuid "f02c4eac-bc43-405c-9761-bbd11a61669d")
+	)
+	(wire
+		(pts
+			(xy 128.27 41.91) (xy 128.27 48.26)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "f20ad771-06d6-4fb9-ad5c-57a88d3a28cf")
 	)
 	(wire
 		(pts
@@ -6039,16 +6493,6 @@
 		(uuid "23e97f05-e50a-4bc5-9341-065137ddc8ec")
 	)
 	(label "1652OUTL"
-		(at 129.54 43.18 0)
-		(effects
-			(font
-				(size 1.27 1.27)
-			)
-			(justify left bottom)
-		)
-		(uuid "29a94365-0138-4234-b024-9f74535d5ceb")
-	)
-	(label "1652OUTL"
 		(at 208.28 151.13 0)
 		(effects
 			(font
@@ -6128,16 +6572,6 @@
 		)
 		(uuid "5f46f39d-d467-4c20-9a91-b629019c830d")
 	)
-	(label "1652OUTR"
-		(at 212.09 40.64 0)
-		(effects
-			(font
-				(size 1.27 1.27)
-			)
-			(justify left bottom)
-		)
-		(uuid "6a420b07-9c1f-4981-9139-830e7593f610")
-	)
 	(label "5102AVDD"
 		(at 68.58 59.69 0)
 		(effects
@@ -6178,18 +6612,8 @@
 		)
 		(uuid "8edcbbb7-7ab2-4f01-b87c-1727bbb9a8e3")
 	)
-	(label "5102OUTL"
-		(at 129.54 48.26 0)
-		(effects
-			(font
-				(size 1.27 1.27)
-			)
-			(justify left bottom)
-		)
-		(uuid "9354615c-3390-45d3-8e9b-64c9f8bba6cc")
-	)
 	(label "1652OUTL"
-		(at 172.72 45.72 180)
+		(at 177.8 45.72 180)
 		(effects
 			(font
 				(size 1.27 1.27)
@@ -6219,6 +6643,16 @@
 		(uuid "9f7b397f-8464-4641-a84e-3e0bd7ae98ca")
 	)
 	(label "5102OUTL"
+		(at 138.43 41.91 180)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify right bottom)
+		)
+		(uuid "a99af511-503b-4489-ad1c-953841435522")
+	)
+	(label "5102OUTL"
 		(at 115.57 74.93 180)
 		(effects
 			(font
@@ -6229,12 +6663,12 @@
 		(uuid "b575a7fa-0277-4e2d-a7cd-9837b61bfab1")
 	)
 	(label "5102OUTR"
-		(at 212.09 45.72 0)
+		(at 219.71 39.37 180)
 		(effects
 			(font
 				(size 1.27 1.27)
 			)
-			(justify left bottom)
+			(justify right bottom)
 		)
 		(uuid "b8a90123-7c54-4432-9c64-62ae0980daf2")
 	)
@@ -6394,7 +6828,7 @@
 		(dnp no)
 		(fields_autoplaced yes)
 		(uuid "0390716f-6be7-4203-b998-8317174504f5")
-		(property "Reference" "C35"
+		(property "Reference" "C38"
 			(at 96.52 78.7399 0)
 			(effects
 				(font
@@ -6574,7 +7008,73 @@
 		(instances
 			(project ""
 				(path "/ff072219-444d-4fc6-9bb4-21a48733c6c1/a3b96776-b2c3-4a94-9d20-380673bf4b45"
-					(reference "C35")
+					(reference "C38")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "power:GND")
+		(at 209.55 57.15 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(fields_autoplaced yes)
+		(uuid "066892ae-d020-4999-81c3-cf5947f7ae00")
+		(property "Reference" "#PWR067"
+			(at 209.55 63.5 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Value" "GND"
+			(at 209.55 62.23 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" ""
+			(at 209.55 57.15 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Datasheet" ""
+			(at 209.55 57.15 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Description" "Power symbol creates a global label with name \"GND\" , ground"
+			(at 209.55 57.15 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(pin "1"
+			(uuid "a1585c17-4584-49df-815b-73c7bf26f02b")
+		)
+		(instances
+			(project "pumper"
+				(path "/ff072219-444d-4fc6-9bb4-21a48733c6c1/a3b96776-b2c3-4a94-9d20-380673bf4b45"
+					(reference "#PWR067")
 					(unit 1)
 				)
 			)
@@ -6590,7 +7090,7 @@
 		(dnp no)
 		(fields_autoplaced yes)
 		(uuid "09e350c3-47e7-4849-b26e-468f9833c1cb")
-		(property "Reference" "C33"
+		(property "Reference" "C36"
 			(at 184.15 54.6099 0)
 			(effects
 				(font
@@ -6770,7 +7270,7 @@
 		(instances
 			(project "airnote"
 				(path "/ff072219-444d-4fc6-9bb4-21a48733c6c1/a3b96776-b2c3-4a94-9d20-380673bf4b45"
-					(reference "C33")
+					(reference "C36")
 					(unit 1)
 				)
 			)
@@ -6786,7 +7286,7 @@
 		(dnp no)
 		(fields_autoplaced yes)
 		(uuid "138b2f6e-0f08-4f1b-86b2-c5054f003823")
-		(property "Reference" "#PWR057"
+		(property "Reference" "#PWR072"
 			(at 107.95 93.98 0)
 			(effects
 				(font
@@ -6836,7 +7336,7 @@
 		(instances
 			(project "airnote"
 				(path "/ff072219-444d-4fc6-9bb4-21a48733c6c1/a3b96776-b2c3-4a94-9d20-380673bf4b45"
-					(reference "#PWR057")
+					(reference "#PWR072")
 					(unit 1)
 				)
 			)
@@ -6852,7 +7352,7 @@
 		(dnp no)
 		(fields_autoplaced yes)
 		(uuid "145b9ca2-984f-419c-8280-9b9a00dd088b")
-		(property "Reference" "#PWR068"
+		(property "Reference" "#PWR083"
 			(at 228.6 127 0)
 			(effects
 				(font
@@ -6902,7 +7402,7 @@
 		(instances
 			(project "airnote"
 				(path "/ff072219-444d-4fc6-9bb4-21a48733c6c1/a3b96776-b2c3-4a94-9d20-380673bf4b45"
-					(reference "#PWR068")
+					(reference "#PWR083")
 					(unit 1)
 				)
 			)
@@ -6918,7 +7418,7 @@
 		(dnp no)
 		(fields_autoplaced yes)
 		(uuid "17c27700-1d33-4d44-b259-cde20a7eb1a4")
-		(property "Reference" "#PWR065"
+		(property "Reference" "#PWR080"
 			(at 148.59 118.11 0)
 			(effects
 				(font
@@ -6968,7 +7468,7 @@
 		(instances
 			(project "airnote"
 				(path "/ff072219-444d-4fc6-9bb4-21a48733c6c1/a3b96776-b2c3-4a94-9d20-380673bf4b45"
-					(reference "#PWR065")
+					(reference "#PWR080")
 					(unit 1)
 				)
 			)
@@ -6984,7 +7484,7 @@
 		(dnp no)
 		(fields_autoplaced yes)
 		(uuid "1d810dfd-d7dc-4642-bae3-d86a34510c18")
-		(property "Reference" "#PWR056"
+		(property "Reference" "#PWR071"
 			(at 93.98 93.98 0)
 			(effects
 				(font
@@ -7034,7 +7534,230 @@
 		(instances
 			(project ""
 				(path "/ff072219-444d-4fc6-9bb4-21a48733c6c1/a3b96776-b2c3-4a94-9d20-380673bf4b45"
-					(reference "#PWR056")
+					(reference "#PWR071")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "PCM_JLCPCB-Resistors:0402,2kΩ")
+		(at 128.27 53.34 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(fields_autoplaced yes)
+		(uuid "21323118-5f2e-4070-b285-819f2459f08b")
+		(property "Reference" "R15"
+			(at 130.81 53.3399 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Value" "2kΩ"
+			(at 128.27 53.34 90)
+			(do_not_autoplace yes)
+			(effects
+				(font
+					(size 0.8 0.8)
+				)
+			)
+		)
+		(property "Footprint" "PCM_JLCPCB:R_0402"
+			(at 126.492 53.34 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Datasheet" "https://www.lcsc.com/datasheet/lcsc_datasheet_2206010230_UNI-ROYAL-Uniroyal-Elec-0402WGF2001TCE_C4109.pdf"
+			(at 128.27 53.34 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Description" "62.5mW Thick Film Resistors 50V ±100ppm/°C ±1% 2kΩ 0402 Chip Resistor - Surface Mount ROHS"
+			(at 128.27 53.34 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "LCSC" "C4109"
+			(at 128.27 53.34 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Stock" "1980337"
+			(at 128.27 53.34 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Price" "0.004USD"
+			(at 128.27 53.34 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Process" "SMT"
+			(at 128.27 53.34 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Minimum Qty" "20"
+			(at 128.27 53.34 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Attrition Qty" "10"
+			(at 128.27 53.34 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Class" "Basic Component"
+			(at 128.27 53.34 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Category" "Resistors,Chip Resistor - Surface Mount"
+			(at 128.27 53.34 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Manufacturer" "UNI-ROYAL(Uniroyal Elec)"
+			(at 128.27 53.34 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Part" "0402WGF2001TCE"
+			(at 128.27 53.34 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Resistance" "2kΩ"
+			(at 128.27 53.34 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Power(Watts)" "62.5mW"
+			(at 128.27 53.34 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Type" "Thick Film Resistors"
+			(at 128.27 53.34 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Overload Voltage (Max)" "50V"
+			(at 128.27 53.34 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Operating Temperature Range" "-55°C~+155°C"
+			(at 128.27 53.34 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Tolerance" "±1%"
+			(at 128.27 53.34 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Temperature Coefficient" "±100ppm/°C"
+			(at 128.27 53.34 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(pin "2"
+			(uuid "cdc6a3e8-2d46-44f7-8374-811f664dca6d")
+		)
+		(pin "1"
+			(uuid "92be707b-e57b-4dad-bef3-fd08791fc4e5")
+		)
+		(instances
+			(project ""
+				(path "/ff072219-444d-4fc6-9bb4-21a48733c6c1/a3b96776-b2c3-4a94-9d20-380673bf4b45"
+					(reference "R15")
 					(unit 1)
 				)
 			)
@@ -7050,7 +7773,7 @@
 		(dnp no)
 		(fields_autoplaced yes)
 		(uuid "2e62f729-ea1a-4bc9-8e83-908f0cddfd79")
-		(property "Reference" "C40"
+		(property "Reference" "C43"
 			(at 88.9 96.5199 0)
 			(effects
 				(font
@@ -7230,7 +7953,7 @@
 		(instances
 			(project "airnote"
 				(path "/ff072219-444d-4fc6-9bb4-21a48733c6c1/a3b96776-b2c3-4a94-9d20-380673bf4b45"
-					(reference "C40")
+					(reference "C43")
 					(unit 1)
 				)
 			)
@@ -7246,7 +7969,7 @@
 		(dnp no)
 		(fields_autoplaced yes)
 		(uuid "2f205348-d993-4dfe-a0f0-7333d53ff4dd")
-		(property "Reference" "#PWR045"
+		(property "Reference" "#PWR058"
 			(at 156.21 24.13 0)
 			(effects
 				(font
@@ -7296,7 +8019,7 @@
 		(instances
 			(project "airnote"
 				(path "/ff072219-444d-4fc6-9bb4-21a48733c6c1/a3b96776-b2c3-4a94-9d20-380673bf4b45"
-					(reference "#PWR045")
+					(reference "#PWR058")
 					(unit 1)
 				)
 			)
@@ -7449,7 +8172,7 @@
 		(on_board yes)
 		(dnp no)
 		(uuid "340c188e-3ed2-4787-ae6f-523e388c1ac5")
-		(property "Reference" "J3"
+		(property "Reference" "J2"
 			(at 132.08 144.78 0)
 			(effects
 				(font
@@ -7507,7 +8230,7 @@
 		(instances
 			(project "airnote"
 				(path "/ff072219-444d-4fc6-9bb4-21a48733c6c1/a3b96776-b2c3-4a94-9d20-380673bf4b45"
-					(reference "J3")
+					(reference "J2")
 					(unit 1)
 				)
 			)
@@ -7523,7 +8246,7 @@
 		(dnp no)
 		(fields_autoplaced yes)
 		(uuid "3fbd1ff1-2273-4d52-b6f9-3aff721291df")
-		(property "Reference" "#PWR069"
+		(property "Reference" "#PWR084"
 			(at 232.41 116.84 0)
 			(effects
 				(font
@@ -7573,7 +8296,7 @@
 		(instances
 			(project "airnote"
 				(path "/ff072219-444d-4fc6-9bb4-21a48733c6c1/a3b96776-b2c3-4a94-9d20-380673bf4b45"
-					(reference "#PWR069")
+					(reference "#PWR084")
 					(unit 1)
 				)
 			)
@@ -7589,7 +8312,7 @@
 		(dnp no)
 		(fields_autoplaced yes)
 		(uuid "4964b831-9c05-4f6d-b006-2945b6636973")
-		(property "Reference" "R18"
+		(property "Reference" "R20"
 			(at 151.13 99.0599 0)
 			(effects
 				(font
@@ -7796,7 +8519,7 @@
 		(instances
 			(project "airnote"
 				(path "/ff072219-444d-4fc6-9bb4-21a48733c6c1/a3b96776-b2c3-4a94-9d20-380673bf4b45"
-					(reference "R18")
+					(reference "R20")
 					(unit 1)
 				)
 			)
@@ -7812,7 +8535,7 @@
 		(dnp no)
 		(fields_autoplaced yes)
 		(uuid "4dee0c3b-b121-45a1-88ed-ca9cd7b077d5")
-		(property "Reference" "#PWR078"
+		(property "Reference" "#PWR093"
 			(at 156.21 181.61 0)
 			(effects
 				(font
@@ -7862,7 +8585,7 @@
 		(instances
 			(project ""
 				(path "/ff072219-444d-4fc6-9bb4-21a48733c6c1/a3b96776-b2c3-4a94-9d20-380673bf4b45"
-					(reference "#PWR078")
+					(reference "#PWR093")
 					(unit 1)
 				)
 			)
@@ -7878,7 +8601,7 @@
 		(dnp no)
 		(fields_autoplaced yes)
 		(uuid "51d1354c-ef86-4218-a2b8-ca4d7f3584fe")
-		(property "Reference" "#PWR075"
+		(property "Reference" "#PWR090"
 			(at 87.63 163.83 0)
 			(effects
 				(font
@@ -7928,7 +8651,7 @@
 		(instances
 			(project "airnote"
 				(path "/ff072219-444d-4fc6-9bb4-21a48733c6c1/a3b96776-b2c3-4a94-9d20-380673bf4b45"
-					(reference "#PWR075")
+					(reference "#PWR090")
 					(unit 1)
 				)
 			)
@@ -8162,7 +8885,7 @@
 		(dnp no)
 		(fields_autoplaced yes)
 		(uuid "52682510-5583-4926-a90a-2db3bcd9b599")
-		(property "Reference" "C37"
+		(property "Reference" "C40"
 			(at 83.82 83.8199 0)
 			(effects
 				(font
@@ -8342,7 +9065,7 @@
 		(instances
 			(project "airnote"
 				(path "/ff072219-444d-4fc6-9bb4-21a48733c6c1/a3b96776-b2c3-4a94-9d20-380673bf4b45"
-					(reference "C37")
+					(reference "C40")
 					(unit 1)
 				)
 			)
@@ -8358,7 +9081,7 @@
 		(dnp no)
 		(fields_autoplaced yes)
 		(uuid "5466b153-d259-4d96-8634-588dad7231e6")
-		(property "Reference" "R20"
+		(property "Reference" "R22"
 			(at 175.26 106.68 90)
 			(effects
 				(font
@@ -8564,7 +9287,7 @@
 		(instances
 			(project "airnote"
 				(path "/ff072219-444d-4fc6-9bb4-21a48733c6c1/a3b96776-b2c3-4a94-9d20-380673bf4b45"
-					(reference "R20")
+					(reference "R22")
 					(unit 1)
 				)
 			)
@@ -8580,7 +9303,7 @@
 		(dnp no)
 		(fields_autoplaced yes)
 		(uuid "576fcbd2-3b6d-4d1d-8655-7c63c5986f43")
-		(property "Reference" "C27"
+		(property "Reference" "C30"
 			(at 158.75 24.1299 0)
 			(effects
 				(font
@@ -8760,7 +9483,7 @@
 		(instances
 			(project "airnote"
 				(path "/ff072219-444d-4fc6-9bb4-21a48733c6c1/a3b96776-b2c3-4a94-9d20-380673bf4b45"
-					(reference "C27")
+					(reference "C30")
 					(unit 1)
 				)
 			)
@@ -8776,7 +9499,7 @@
 		(dnp no)
 		(fields_autoplaced yes)
 		(uuid "5cb0da13-a268-42d4-8f0f-29bc073086bf")
-		(property "Reference" "#PWR048"
+		(property "Reference" "#PWR061"
 			(at 93.98 33.02 0)
 			(effects
 				(font
@@ -8826,7 +9549,7 @@
 		(instances
 			(project "airnote"
 				(path "/ff072219-444d-4fc6-9bb4-21a48733c6c1/a3b96776-b2c3-4a94-9d20-380673bf4b45"
-					(reference "#PWR048")
+					(reference "#PWR061")
 					(unit 1)
 				)
 			)
@@ -8842,7 +9565,7 @@
 		(dnp no)
 		(fields_autoplaced yes)
 		(uuid "5e834c32-eb61-4b9a-b77e-a9a8b071b8e1")
-		(property "Reference" "#PWR073"
+		(property "Reference" "#PWR088"
 			(at 208.28 160.02 0)
 			(effects
 				(font
@@ -8892,7 +9615,7 @@
 		(instances
 			(project "airnote"
 				(path "/ff072219-444d-4fc6-9bb4-21a48733c6c1/a3b96776-b2c3-4a94-9d20-380673bf4b45"
-					(reference "#PWR073")
+					(reference "#PWR088")
 					(unit 1)
 				)
 			)
@@ -8908,7 +9631,7 @@
 		(dnp no)
 		(fields_autoplaced yes)
 		(uuid "5f3f0cee-2877-4cb8-870c-4eecadcfd0b2")
-		(property "Reference" "R16"
+		(property "Reference" "R18"
 			(at 171.45 86.3599 0)
 			(effects
 				(font
@@ -9115,7 +9838,7 @@
 		(instances
 			(project "airnote"
 				(path "/ff072219-444d-4fc6-9bb4-21a48733c6c1/a3b96776-b2c3-4a94-9d20-380673bf4b45"
-					(reference "R16")
+					(reference "R18")
 					(unit 1)
 				)
 			)
@@ -9131,7 +9854,7 @@
 		(dnp no)
 		(fields_autoplaced yes)
 		(uuid "6035aa2d-dce4-4621-ac4b-7985077a6edf")
-		(property "Reference" "#PWR059"
+		(property "Reference" "#PWR074"
 			(at 45.72 102.87 0)
 			(effects
 				(font
@@ -9181,7 +9904,7 @@
 		(instances
 			(project "airnote"
 				(path "/ff072219-444d-4fc6-9bb4-21a48733c6c1/a3b96776-b2c3-4a94-9d20-380673bf4b45"
-					(reference "#PWR059")
+					(reference "#PWR074")
 					(unit 1)
 				)
 			)
@@ -9197,7 +9920,7 @@
 		(dnp no)
 		(fields_autoplaced yes)
 		(uuid "629ec6da-40a0-4cb4-8d65-6a7cbdc1ed69")
-		(property "Reference" "#PWR052"
+		(property "Reference" "#PWR065"
 			(at 43.18 54.61 0)
 			(effects
 				(font
@@ -9247,7 +9970,7 @@
 		(instances
 			(project "airnote"
 				(path "/ff072219-444d-4fc6-9bb4-21a48733c6c1/a3b96776-b2c3-4a94-9d20-380673bf4b45"
-					(reference "#PWR052")
+					(reference "#PWR065")
 					(unit 1)
 				)
 			)
@@ -9263,7 +9986,7 @@
 		(dnp no)
 		(fields_autoplaced yes)
 		(uuid "66d38240-fa34-436f-8862-b22e4fd99d5d")
-		(property "Reference" "#PWR070"
+		(property "Reference" "#PWR085"
 			(at 241.3 130.81 0)
 			(effects
 				(font
@@ -9313,7 +10036,7 @@
 		(instances
 			(project "airnote"
 				(path "/ff072219-444d-4fc6-9bb4-21a48733c6c1/a3b96776-b2c3-4a94-9d20-380673bf4b45"
-					(reference "#PWR070")
+					(reference "#PWR085")
 					(unit 1)
 				)
 			)
@@ -9329,7 +10052,7 @@
 		(dnp no)
 		(fields_autoplaced yes)
 		(uuid "6c84f3d6-3b41-4146-b26b-c1ab71061b1a")
-		(property "Reference" "C32"
+		(property "Reference" "C35"
 			(at 45.72 40.6399 0)
 			(effects
 				(font
@@ -9509,7 +10232,7 @@
 		(instances
 			(project "airnote"
 				(path "/ff072219-444d-4fc6-9bb4-21a48733c6c1/a3b96776-b2c3-4a94-9d20-380673bf4b45"
-					(reference "C32")
+					(reference "C35")
 					(unit 1)
 				)
 			)
@@ -9525,7 +10248,7 @@
 		(dnp no)
 		(fields_autoplaced yes)
 		(uuid "76bffd83-e947-4316-9a2c-89cba45a85b7")
-		(property "Reference" "#PWR046"
+		(property "Reference" "#PWR059"
 			(at 31.75 30.48 0)
 			(effects
 				(font
@@ -9575,7 +10298,7 @@
 		(instances
 			(project "airnote"
 				(path "/ff072219-444d-4fc6-9bb4-21a48733c6c1/a3b96776-b2c3-4a94-9d20-380673bf4b45"
-					(reference "#PWR046")
+					(reference "#PWR059")
 					(unit 1)
 				)
 			)
@@ -9591,7 +10314,7 @@
 		(dnp no)
 		(fields_autoplaced yes)
 		(uuid "77589a7a-a2d3-4d94-b8a1-6db525717d7e")
-		(property "Reference" "C30"
+		(property "Reference" "C33"
 			(at 107.95 38.0999 0)
 			(effects
 				(font
@@ -9771,7 +10494,73 @@
 		(instances
 			(project "airnote"
 				(path "/ff072219-444d-4fc6-9bb4-21a48733c6c1/a3b96776-b2c3-4a94-9d20-380673bf4b45"
-					(reference "C30")
+					(reference "C33")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "power:GND")
+		(at 128.27 59.69 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(fields_autoplaced yes)
+		(uuid "78c0b0b4-eb1b-455b-b1e4-854c7f530120")
+		(property "Reference" "#PWR068"
+			(at 128.27 66.04 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Value" "GND"
+			(at 128.27 64.77 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" ""
+			(at 128.27 59.69 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Datasheet" ""
+			(at 128.27 59.69 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Description" "Power symbol creates a global label with name \"GND\" , ground"
+			(at 128.27 59.69 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(pin "1"
+			(uuid "8533f9d6-7ff3-4daa-b73d-0eb01ec16685")
+		)
+		(instances
+			(project ""
+				(path "/ff072219-444d-4fc6-9bb4-21a48733c6c1/a3b96776-b2c3-4a94-9d20-380673bf4b45"
+					(reference "#PWR068")
 					(unit 1)
 				)
 			)
@@ -9787,7 +10576,7 @@
 		(dnp no)
 		(fields_autoplaced yes)
 		(uuid "7bddeb0a-557b-48e7-a650-6f60cf2410a2")
-		(property "Reference" "R19"
+		(property "Reference" "R21"
 			(at 151.13 106.6799 0)
 			(effects
 				(font
@@ -9994,7 +10783,230 @@
 		(instances
 			(project "airnote"
 				(path "/ff072219-444d-4fc6-9bb4-21a48733c6c1/a3b96776-b2c3-4a94-9d20-380673bf4b45"
-					(reference "R19")
+					(reference "R21")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "PCM_JLCPCB-Resistors:0402,2kΩ")
+		(at 209.55 50.8 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(fields_autoplaced yes)
+		(uuid "86a5b296-bb4c-4b04-9212-baeccdeceaf3")
+		(property "Reference" "R14"
+			(at 212.09 50.7999 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Value" "2kΩ"
+			(at 209.55 50.8 90)
+			(do_not_autoplace yes)
+			(effects
+				(font
+					(size 0.8 0.8)
+				)
+			)
+		)
+		(property "Footprint" "PCM_JLCPCB:R_0402"
+			(at 207.772 50.8 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Datasheet" "https://www.lcsc.com/datasheet/lcsc_datasheet_2206010230_UNI-ROYAL-Uniroyal-Elec-0402WGF2001TCE_C4109.pdf"
+			(at 209.55 50.8 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Description" "62.5mW Thick Film Resistors 50V ±100ppm/°C ±1% 2kΩ 0402 Chip Resistor - Surface Mount ROHS"
+			(at 209.55 50.8 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "LCSC" "C4109"
+			(at 209.55 50.8 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Stock" "1980337"
+			(at 209.55 50.8 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Price" "0.004USD"
+			(at 209.55 50.8 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Process" "SMT"
+			(at 209.55 50.8 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Minimum Qty" "20"
+			(at 209.55 50.8 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Attrition Qty" "10"
+			(at 209.55 50.8 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Class" "Basic Component"
+			(at 209.55 50.8 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Category" "Resistors,Chip Resistor - Surface Mount"
+			(at 209.55 50.8 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Manufacturer" "UNI-ROYAL(Uniroyal Elec)"
+			(at 209.55 50.8 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Part" "0402WGF2001TCE"
+			(at 209.55 50.8 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Resistance" "2kΩ"
+			(at 209.55 50.8 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Power(Watts)" "62.5mW"
+			(at 209.55 50.8 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Type" "Thick Film Resistors"
+			(at 209.55 50.8 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Overload Voltage (Max)" "50V"
+			(at 209.55 50.8 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Operating Temperature Range" "-55°C~+155°C"
+			(at 209.55 50.8 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Tolerance" "±1%"
+			(at 209.55 50.8 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Temperature Coefficient" "±100ppm/°C"
+			(at 209.55 50.8 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(pin "2"
+			(uuid "9a15628e-0a76-4220-8095-95d3869267b6")
+		)
+		(pin "1"
+			(uuid "5accf2f8-b7d4-4f67-9c1c-94477fa6d5e8")
+		)
+		(instances
+			(project "pumper"
+				(path "/ff072219-444d-4fc6-9bb4-21a48733c6c1/a3b96776-b2c3-4a94-9d20-380673bf4b45"
+					(reference "R14")
 					(unit 1)
 				)
 			)
@@ -10010,7 +11022,7 @@
 		(dnp no)
 		(fields_autoplaced yes)
 		(uuid "8a74d92a-25c0-4ed1-821c-07b9b49390f0")
-		(property "Reference" "#PWR054"
+		(property "Reference" "#PWR069"
 			(at 181.61 68.58 0)
 			(effects
 				(font
@@ -10060,7 +11072,7 @@
 		(instances
 			(project "airnote"
 				(path "/ff072219-444d-4fc6-9bb4-21a48733c6c1/a3b96776-b2c3-4a94-9d20-380673bf4b45"
-					(reference "#PWR054")
+					(reference "#PWR069")
 					(unit 1)
 				)
 			)
@@ -10076,7 +11088,7 @@
 		(dnp no)
 		(fields_autoplaced yes)
 		(uuid "8b4d754a-71da-4e0b-8525-8c6c25e43748")
-		(property "Reference" "#PWR066"
+		(property "Reference" "#PWR081"
 			(at 241.3 116.84 0)
 			(effects
 				(font
@@ -10126,7 +11138,7 @@
 		(instances
 			(project "airnote"
 				(path "/ff072219-444d-4fc6-9bb4-21a48733c6c1/a3b96776-b2c3-4a94-9d20-380673bf4b45"
-					(reference "#PWR066")
+					(reference "#PWR081")
 					(unit 1)
 				)
 			)
@@ -10142,7 +11154,7 @@
 		(dnp no)
 		(fields_autoplaced yes)
 		(uuid "8e5fd3da-4ead-45b8-9812-f9183cbe010e")
-		(property "Reference" "C43"
+		(property "Reference" "C46"
 			(at 243.84 116.8399 0)
 			(effects
 				(font
@@ -10322,7 +11334,7 @@
 		(instances
 			(project ""
 				(path "/ff072219-444d-4fc6-9bb4-21a48733c6c1/a3b96776-b2c3-4a94-9d20-380673bf4b45"
-					(reference "C43")
+					(reference "C46")
 					(unit 1)
 				)
 			)
@@ -10338,7 +11350,7 @@
 		(dnp no)
 		(fields_autoplaced yes)
 		(uuid "9111b5a2-2b0f-4664-8359-696eec76f46a")
-		(property "Reference" "C31"
+		(property "Reference" "C34"
 			(at 40.64 40.6399 0)
 			(effects
 				(font
@@ -10518,7 +11530,7 @@
 		(instances
 			(project ""
 				(path "/ff072219-444d-4fc6-9bb4-21a48733c6c1/a3b96776-b2c3-4a94-9d20-380673bf4b45"
-					(reference "C31")
+					(reference "C34")
 					(unit 1)
 				)
 			)
@@ -10534,7 +11546,7 @@
 		(dnp no)
 		(fields_autoplaced yes)
 		(uuid "94225ccc-6ea0-40e1-9bc5-6ff4fa9ced29")
-		(property "Reference" "D3"
+		(property "Reference" "D5"
 			(at 156.21 166.3699 90)
 			(effects
 				(font
@@ -10739,7 +11751,7 @@
 		(instances
 			(project ""
 				(path "/ff072219-444d-4fc6-9bb4-21a48733c6c1/a3b96776-b2c3-4a94-9d20-380673bf4b45"
-					(reference "D3")
+					(reference "D5")
 					(unit 1)
 				)
 			)
@@ -10755,7 +11767,7 @@
 		(dnp no)
 		(fields_autoplaced yes)
 		(uuid "968102d1-33a5-4df5-b063-b08f68d8b5e0")
-		(property "Reference" "C41"
+		(property "Reference" "C44"
 			(at 82.55 100.3299 0)
 			(effects
 				(font
@@ -10935,7 +11947,7 @@
 		(instances
 			(project "airnote"
 				(path "/ff072219-444d-4fc6-9bb4-21a48733c6c1/a3b96776-b2c3-4a94-9d20-380673bf4b45"
-					(reference "C41")
+					(reference "C44")
 					(unit 1)
 				)
 			)
@@ -10951,7 +11963,7 @@
 		(dnp no)
 		(fields_autoplaced yes)
 		(uuid "9c9260db-90a7-466c-b185-90762eb51dad")
-		(property "Reference" "#PWR058"
+		(property "Reference" "#PWR073"
 			(at 241.3 91.44 0)
 			(effects
 				(font
@@ -11001,7 +12013,7 @@
 		(instances
 			(project "airnote"
 				(path "/ff072219-444d-4fc6-9bb4-21a48733c6c1/a3b96776-b2c3-4a94-9d20-380673bf4b45"
-					(reference "#PWR058")
+					(reference "#PWR073")
 					(unit 1)
 				)
 			)
@@ -11017,7 +12029,7 @@
 		(dnp no)
 		(fields_autoplaced yes)
 		(uuid "b31b31b0-5211-4157-b965-e9352c9a2d08")
-		(property "Reference" "D2"
+		(property "Reference" "D4"
 			(at 147.32 166.3699 90)
 			(effects
 				(font
@@ -11222,7 +12234,7 @@
 		(instances
 			(project "airnote"
 				(path "/ff072219-444d-4fc6-9bb4-21a48733c6c1/a3b96776-b2c3-4a94-9d20-380673bf4b45"
-					(reference "D2")
+					(reference "D4")
 					(unit 1)
 				)
 			)
@@ -11238,7 +12250,7 @@
 		(dnp no)
 		(fields_autoplaced yes)
 		(uuid "b7771625-8558-4183-846f-84f3cfc528c2")
-		(property "Reference" "#PWR051"
+		(property "Reference" "#PWR064"
 			(at 105.41 53.34 0)
 			(effects
 				(font
@@ -11288,7 +12300,7 @@
 		(instances
 			(project "airnote"
 				(path "/ff072219-444d-4fc6-9bb4-21a48733c6c1/a3b96776-b2c3-4a94-9d20-380673bf4b45"
-					(reference "#PWR051")
+					(reference "#PWR064")
 					(unit 1)
 				)
 			)
@@ -11304,7 +12316,7 @@
 		(dnp no)
 		(fields_autoplaced yes)
 		(uuid "b919cdce-043a-497d-b447-5ead8e931749")
-		(property "Reference" "C39"
+		(property "Reference" "C42"
 			(at 252.73 91.4399 0)
 			(effects
 				(font
@@ -11484,7 +12496,7 @@
 		(instances
 			(project "airnote"
 				(path "/ff072219-444d-4fc6-9bb4-21a48733c6c1/a3b96776-b2c3-4a94-9d20-380673bf4b45"
-					(reference "C39")
+					(reference "C42")
 					(unit 1)
 				)
 			)
@@ -11500,7 +12512,7 @@
 		(dnp no)
 		(fields_autoplaced yes)
 		(uuid "ba459412-7d8a-463b-808b-143fb2776289")
-		(property "Reference" "#PWR064"
+		(property "Reference" "#PWR079"
 			(at 171.45 110.49 0)
 			(effects
 				(font
@@ -11551,7 +12563,7 @@
 		(instances
 			(project "airnote"
 				(path "/ff072219-444d-4fc6-9bb4-21a48733c6c1/a3b96776-b2c3-4a94-9d20-380673bf4b45"
-					(reference "#PWR064")
+					(reference "#PWR079")
 					(unit 1)
 				)
 			)
@@ -11567,7 +12579,7 @@
 		(dnp no)
 		(fields_autoplaced yes)
 		(uuid "be1151b3-9aaa-443e-9db7-fdb9baae2ed9")
-		(property "Reference" "#PWR061"
+		(property "Reference" "#PWR076"
 			(at 241.3 105.41 0)
 			(effects
 				(font
@@ -11617,7 +12629,7 @@
 		(instances
 			(project "airnote"
 				(path "/ff072219-444d-4fc6-9bb4-21a48733c6c1/a3b96776-b2c3-4a94-9d20-380673bf4b45"
-					(reference "#PWR061")
+					(reference "#PWR076")
 					(unit 1)
 				)
 			)
@@ -11633,7 +12645,7 @@
 		(dnp no)
 		(fields_autoplaced yes)
 		(uuid "c170e355-c5d0-4559-9187-51c8c29d685a")
-		(property "Reference" "C44"
+		(property "Reference" "C47"
 			(at 252.73 116.8399 0)
 			(effects
 				(font
@@ -11813,7 +12825,7 @@
 		(instances
 			(project "airnote"
 				(path "/ff072219-444d-4fc6-9bb4-21a48733c6c1/a3b96776-b2c3-4a94-9d20-380673bf4b45"
-					(reference "C44")
+					(reference "C47")
 					(unit 1)
 				)
 			)
@@ -11829,7 +12841,7 @@
 		(dnp no)
 		(fields_autoplaced yes)
 		(uuid "c1cc567c-3a47-41f1-9afe-9e0bb79dc0ec")
-		(property "Reference" "#PWR067"
+		(property "Reference" "#PWR082"
 			(at 181.61 125.73 0)
 			(effects
 				(font
@@ -11879,7 +12891,7 @@
 		(instances
 			(project "airnote"
 				(path "/ff072219-444d-4fc6-9bb4-21a48733c6c1/a3b96776-b2c3-4a94-9d20-380673bf4b45"
-					(reference "#PWR067")
+					(reference "#PWR082")
 					(unit 1)
 				)
 			)
@@ -11895,7 +12907,7 @@
 		(dnp no)
 		(fields_autoplaced yes)
 		(uuid "c30f4380-9aab-4f1b-a25e-82df80b1d6ca")
-		(property "Reference" "C28"
+		(property "Reference" "C31"
 			(at 167.64 24.1299 0)
 			(effects
 				(font
@@ -12075,7 +13087,7 @@
 		(instances
 			(project "airnote"
 				(path "/ff072219-444d-4fc6-9bb4-21a48733c6c1/a3b96776-b2c3-4a94-9d20-380673bf4b45"
-					(reference "C28")
+					(reference "C31")
 					(unit 1)
 				)
 			)
@@ -12091,7 +13103,7 @@
 		(dnp no)
 		(fields_autoplaced yes)
 		(uuid "c4ca6ba8-8320-4fa5-953d-2598020e51fd")
-		(property "Reference" "R17"
+		(property "Reference" "R19"
 			(at 171.45 93.9799 0)
 			(effects
 				(font
@@ -12298,7 +13310,7 @@
 		(instances
 			(project "airnote"
 				(path "/ff072219-444d-4fc6-9bb4-21a48733c6c1/a3b96776-b2c3-4a94-9d20-380673bf4b45"
-					(reference "R17")
+					(reference "R19")
 					(unit 1)
 				)
 			)
@@ -12314,7 +13326,7 @@
 		(dnp no)
 		(fields_autoplaced yes)
 		(uuid "c4da82e8-51ec-4124-9ac5-44d735be5965")
-		(property "Reference" "R14"
+		(property "Reference" "R16"
 			(at 86.36 71.12 90)
 			(effects
 				(font
@@ -12520,7 +13532,7 @@
 		(instances
 			(project "airnote"
 				(path "/ff072219-444d-4fc6-9bb4-21a48733c6c1/a3b96776-b2c3-4a94-9d20-380673bf4b45"
-					(reference "R14")
+					(reference "R16")
 					(unit 1)
 				)
 			)
@@ -12660,7 +13672,7 @@
 		(dnp no)
 		(fields_autoplaced yes)
 		(uuid "c82a19e6-4909-4683-835e-300939209858")
-		(property "Reference" "#PWR062"
+		(property "Reference" "#PWR077"
 			(at 86.36 111.76 0)
 			(effects
 				(font
@@ -12710,7 +13722,7 @@
 		(instances
 			(project "airnote"
 				(path "/ff072219-444d-4fc6-9bb4-21a48733c6c1/a3b96776-b2c3-4a94-9d20-380673bf4b45"
-					(reference "#PWR062")
+					(reference "#PWR077")
 					(unit 1)
 				)
 			)
@@ -12943,7 +13955,7 @@
 		(dnp no)
 		(fields_autoplaced yes)
 		(uuid "c9ef6e09-25ea-4d87-8f34-0ef18cafce00")
-		(property "Reference" "#PWR049"
+		(property "Reference" "#PWR062"
 			(at 156.21 38.1 0)
 			(effects
 				(font
@@ -12993,7 +14005,7 @@
 		(instances
 			(project "airnote"
 				(path "/ff072219-444d-4fc6-9bb4-21a48733c6c1/a3b96776-b2c3-4a94-9d20-380673bf4b45"
-					(reference "#PWR049")
+					(reference "#PWR062")
 					(unit 1)
 				)
 			)
@@ -13009,7 +14021,7 @@
 		(dnp no)
 		(fields_autoplaced yes)
 		(uuid "cab7a8cc-2aaa-4d00-b722-8b694bbc80f1")
-		(property "Reference" "#PWR047"
+		(property "Reference" "#PWR060"
 			(at 62.23 33.02 0)
 			(effects
 				(font
@@ -13059,7 +14071,7 @@
 		(instances
 			(project "airnote"
 				(path "/ff072219-444d-4fc6-9bb4-21a48733c6c1/a3b96776-b2c3-4a94-9d20-380673bf4b45"
-					(reference "#PWR047")
+					(reference "#PWR060")
 					(unit 1)
 				)
 			)
@@ -13075,7 +14087,7 @@
 		(dnp no)
 		(fields_autoplaced yes)
 		(uuid "ce952d57-a3cb-411e-b5bf-717e637d4626")
-		(property "Reference" "#PWR074"
+		(property "Reference" "#PWR089"
 			(at 254 160.02 0)
 			(effects
 				(font
@@ -13125,14 +14137,14 @@
 		(instances
 			(project "airnote"
 				(path "/ff072219-444d-4fc6-9bb4-21a48733c6c1/a3b96776-b2c3-4a94-9d20-380673bf4b45"
-					(reference "#PWR074")
+					(reference "#PWR089")
 					(unit 1)
 				)
 			)
 		)
 	)
 	(symbol
-		(lib_id "PCM_JLCPCB-Inductors:Ferrite,0603")
+		(lib_id "PCM_JLCPCB-Inductors:Ferrite,0603,(2)")
 		(at 31.75 31.75 0)
 		(unit 1)
 		(exclude_from_sim no)
@@ -13168,7 +14180,7 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" "https://www.lcsc.com/datasheet/lcsc_datasheet_2310301640_Sunlord-GZ1608D601TF_C1002.pdf"
+		(property "Datasheet" "https://www.lcsc.com/datasheet/lcsc_datasheet_2304140030_Murata-Electronics-BLM18PG121SN1D_C14709.pdf"
 			(at 31.75 31.75 0)
 			(effects
 				(font
@@ -13177,7 +14189,7 @@
 				(hide yes)
 			)
 		)
-		(property "Description" "450mΩ ±25% 600Ω@100MHz 0603 Ferrite Beads ROHS"
+		(property "Description" "50mΩ ±25% 120Ω@100MHz 0603 Ferrite Beads ROHS"
 			(at 31.75 31.75 0)
 			(effects
 				(font
@@ -13186,7 +14198,7 @@
 				(hide yes)
 			)
 		)
-		(property "LCSC" "C1002"
+		(property "LCSC" "C14709"
 			(at 31.75 31.75 0)
 			(effects
 				(font
@@ -13195,7 +14207,7 @@
 				(hide yes)
 			)
 		)
-		(property "Stock" "789150"
+		(property "Stock" "222675"
 			(at 31.75 31.75 0)
 			(effects
 				(font
@@ -13204,7 +14216,7 @@
 				(hide yes)
 			)
 		)
-		(property "Price" "0.010USD"
+		(property "Price" "0.009USD"
 			(at 31.75 31.75 0)
 			(effects
 				(font
@@ -13231,7 +14243,7 @@
 				(hide yes)
 			)
 		)
-		(property "Attrition Qty" "6"
+		(property "Attrition Qty" "10"
 			(at 31.75 31.75 0)
 			(effects
 				(font
@@ -13258,7 +14270,7 @@
 				(hide yes)
 			)
 		)
-		(property "Manufacturer" "Sunlord"
+		(property "Manufacturer" "Murata Electronics"
 			(at 31.75 31.75 0)
 			(effects
 				(font
@@ -13267,7 +14279,7 @@
 				(hide yes)
 			)
 		)
-		(property "Part" "GZ1608D601TF"
+		(property "Part" "BLM18PG121SN1D"
 			(at 31.75 31.75 0)
 			(effects
 				(font
@@ -13276,7 +14288,7 @@
 				(hide yes)
 			)
 		)
-		(property "DC Resistance" "450mΩ"
+		(property "DC Resistance" "50mΩ"
 			(at 31.75 31.75 0)
 			(effects
 				(font
@@ -13285,7 +14297,7 @@
 				(hide yes)
 			)
 		)
-		(property "Impedance @ Frequency" "600Ω@100MHz"
+		(property "Impedance @ Frequency" "120Ω@100MHz"
 			(at 31.75 31.75 0)
 			(effects
 				(font
@@ -13303,7 +14315,7 @@
 				(hide yes)
 			)
 		)
-		(property "Current Rating" "200mA"
+		(property "Current Rating" "2A"
 			(at 35.56 34.2392 0)
 			(effects
 				(font
@@ -13346,7 +14358,7 @@
 		(dnp no)
 		(fields_autoplaced yes)
 		(uuid "d3f0ce2d-00df-4fd9-a8cc-a2d1d75f488b")
-		(property "Reference" "R15"
+		(property "Reference" "R17"
 			(at 86.36 73.66 90)
 			(effects
 				(font
@@ -13552,7 +14564,7 @@
 		(instances
 			(project "airnote"
 				(path "/ff072219-444d-4fc6-9bb4-21a48733c6c1/a3b96776-b2c3-4a94-9d20-380673bf4b45"
-					(reference "R15")
+					(reference "R17")
 					(unit 1)
 				)
 			)
@@ -13568,7 +14580,7 @@
 		(dnp no)
 		(fields_autoplaced yes)
 		(uuid "d87b7feb-c65e-4872-8c6f-876688cb10d8")
-		(property "Reference" "C38"
+		(property "Reference" "C41"
 			(at 243.84 91.4399 0)
 			(effects
 				(font
@@ -13748,7 +14760,7 @@
 		(instances
 			(project ""
 				(path "/ff072219-444d-4fc6-9bb4-21a48733c6c1/a3b96776-b2c3-4a94-9d20-380673bf4b45"
-					(reference "C38")
+					(reference "C41")
 					(unit 1)
 				)
 			)
@@ -13764,7 +14776,7 @@
 		(dnp no)
 		(fields_autoplaced yes)
 		(uuid "ddc5be8b-1b1a-456c-8687-21f5996c464e")
-		(property "Reference" "C36"
+		(property "Reference" "C39"
 			(at 110.49 78.7399 0)
 			(effects
 				(font
@@ -13944,7 +14956,7 @@
 		(instances
 			(project "airnote"
 				(path "/ff072219-444d-4fc6-9bb4-21a48733c6c1/a3b96776-b2c3-4a94-9d20-380673bf4b45"
-					(reference "C36")
+					(reference "C39")
 					(unit 1)
 				)
 			)
@@ -13960,7 +14972,7 @@
 		(dnp no)
 		(fields_autoplaced yes)
 		(uuid "ddf7459c-2a4c-45f5-8e43-558ec6060ace")
-		(property "Reference" "C29"
+		(property "Reference" "C32"
 			(at 76.2 38.0999 0)
 			(effects
 				(font
@@ -14140,7 +15152,7 @@
 		(instances
 			(project "airnote"
 				(path "/ff072219-444d-4fc6-9bb4-21a48733c6c1/a3b96776-b2c3-4a94-9d20-380673bf4b45"
-					(reference "C29")
+					(reference "C32")
 					(unit 1)
 				)
 			)
@@ -14156,7 +15168,7 @@
 		(dnp no)
 		(fields_autoplaced yes)
 		(uuid "e4abf9ca-10f4-40a4-a249-27fd98b6e8c0")
-		(property "Reference" "#PWR055"
+		(property "Reference" "#PWR070"
 			(at 35.56 88.9 0)
 			(effects
 				(font
@@ -14206,7 +15218,7 @@
 		(instances
 			(project "airnote"
 				(path "/ff072219-444d-4fc6-9bb4-21a48733c6c1/a3b96776-b2c3-4a94-9d20-380673bf4b45"
-					(reference "#PWR055")
+					(reference "#PWR070")
 					(unit 1)
 				)
 			)
@@ -14439,7 +15451,7 @@
 		(dnp no)
 		(fields_autoplaced yes)
 		(uuid "e51e4d48-25cc-4f6b-ba20-8d3b4ab66508")
-		(property "Reference" "C42"
+		(property "Reference" "C45"
 			(at 184.15 111.7599 0)
 			(effects
 				(font
@@ -14619,7 +15631,7 @@
 		(instances
 			(project "airnote"
 				(path "/ff072219-444d-4fc6-9bb4-21a48733c6c1/a3b96776-b2c3-4a94-9d20-380673bf4b45"
-					(reference "C42")
+					(reference "C45")
 					(unit 1)
 				)
 			)
@@ -14635,7 +15647,7 @@
 		(dnp no)
 		(fields_autoplaced yes)
 		(uuid "e57aa4d3-6b6e-4efd-8575-c6f4abf65439")
-		(property "Reference" "#PWR050"
+		(property "Reference" "#PWR063"
 			(at 73.66 53.34 0)
 			(effects
 				(font
@@ -14685,7 +15697,7 @@
 		(instances
 			(project "airnote"
 				(path "/ff072219-444d-4fc6-9bb4-21a48733c6c1/a3b96776-b2c3-4a94-9d20-380673bf4b45"
-					(reference "#PWR050")
+					(reference "#PWR063")
 					(unit 1)
 				)
 			)
@@ -14701,7 +15713,7 @@
 		(dnp no)
 		(fields_autoplaced yes)
 		(uuid "ed1a86a5-5b49-43c4-b3b7-b931661745d0")
-		(property "Reference" "#PWR053"
+		(property "Reference" "#PWR066"
 			(at 181.61 54.61 0)
 			(effects
 				(font
@@ -14751,7 +15763,7 @@
 		(instances
 			(project "airnote"
 				(path "/ff072219-444d-4fc6-9bb4-21a48733c6c1/a3b96776-b2c3-4a94-9d20-380673bf4b45"
-					(reference "#PWR053")
+					(reference "#PWR066")
 					(unit 1)
 				)
 			)
@@ -14766,7 +15778,7 @@
 		(on_board yes)
 		(dnp no)
 		(uuid "ed63f433-1251-4317-8378-975ed27316f9")
-		(property "Reference" "C34"
+		(property "Reference" "C37"
 			(at 193.04 54.6099 0)
 			(effects
 				(font
@@ -14946,7 +15958,7 @@
 		(instances
 			(project "airnote"
 				(path "/ff072219-444d-4fc6-9bb4-21a48733c6c1/a3b96776-b2c3-4a94-9d20-380673bf4b45"
-					(reference "C34")
+					(reference "C37")
 					(unit 1)
 				)
 			)
@@ -14962,7 +15974,7 @@
 		(dnp no)
 		(fields_autoplaced yes)
 		(uuid "f08e7a80-d4c3-4fa9-9da5-fe5772c643cd")
-		(property "Reference" "#PWR060"
+		(property "Reference" "#PWR075"
 			(at 168.91 105.41 0)
 			(effects
 				(font
@@ -15012,7 +16024,7 @@
 		(instances
 			(project "airnote"
 				(path "/ff072219-444d-4fc6-9bb4-21a48733c6c1/a3b96776-b2c3-4a94-9d20-380673bf4b45"
-					(reference "#PWR060")
+					(reference "#PWR075")
 					(unit 1)
 				)
 			)
@@ -15028,7 +16040,7 @@
 		(dnp no)
 		(fields_autoplaced yes)
 		(uuid "f21e4cea-993b-4cde-b58b-9cd1231ed04c")
-		(property "Reference" "#PWR071"
+		(property "Reference" "#PWR086"
 			(at 203.2 152.4 0)
 			(effects
 				(font
@@ -15078,7 +16090,7 @@
 		(instances
 			(project "airnote"
 				(path "/ff072219-444d-4fc6-9bb4-21a48733c6c1/a3b96776-b2c3-4a94-9d20-380673bf4b45"
-					(reference "#PWR071")
+					(reference "#PWR086")
 					(unit 1)
 				)
 			)
@@ -15094,7 +16106,7 @@
 		(dnp no)
 		(fields_autoplaced yes)
 		(uuid "f2cb3633-0dd9-4f5c-b6bc-810eaf169f1e")
-		(property "Reference" "#PWR072"
+		(property "Reference" "#PWR087"
 			(at 148.59 160.02 0)
 			(effects
 				(font
@@ -15144,7 +16156,7 @@
 		(instances
 			(project "airnote"
 				(path "/ff072219-444d-4fc6-9bb4-21a48733c6c1/a3b96776-b2c3-4a94-9d20-380673bf4b45"
-					(reference "#PWR072")
+					(reference "#PWR087")
 					(unit 1)
 				)
 			)
@@ -15160,7 +16172,7 @@
 		(dnp no)
 		(fields_autoplaced yes)
 		(uuid "f4d38a05-996b-49aa-833a-7789198e0833")
-		(property "Reference" "#PWR063"
+		(property "Reference" "#PWR078"
 			(at 63.5 116.84 0)
 			(effects
 				(font
@@ -15210,7 +16222,7 @@
 		(instances
 			(project "airnote"
 				(path "/ff072219-444d-4fc6-9bb4-21a48733c6c1/a3b96776-b2c3-4a94-9d20-380673bf4b45"
-					(reference "#PWR063")
+					(reference "#PWR078")
 					(unit 1)
 				)
 			)
@@ -15226,7 +16238,7 @@
 		(dnp no)
 		(fields_autoplaced yes)
 		(uuid "fa58cd22-01f4-4c11-a705-1200725eb59d")
-		(property "Reference" "#PWR076"
+		(property "Reference" "#PWR091"
 			(at 36.83 167.64 0)
 			(effects
 				(font
@@ -15276,7 +16288,7 @@
 		(instances
 			(project "airnote"
 				(path "/ff072219-444d-4fc6-9bb4-21a48733c6c1/a3b96776-b2c3-4a94-9d20-380673bf4b45"
-					(reference "#PWR076")
+					(reference "#PWR091")
 					(unit 1)
 				)
 			)
@@ -15292,7 +16304,7 @@
 		(dnp no)
 		(fields_autoplaced yes)
 		(uuid "fbf08b53-d1a9-4901-a61a-bdedbadaff1a")
-		(property "Reference" "#PWR077"
+		(property "Reference" "#PWR092"
 			(at 66.04 167.64 0)
 			(effects
 				(font
@@ -15342,7 +16354,7 @@
 		(instances
 			(project "airnote"
 				(path "/ff072219-444d-4fc6-9bb4-21a48733c6c1/a3b96776-b2c3-4a94-9d20-380673bf4b45"
-					(reference "#PWR077")
+					(reference "#PWR092")
 					(unit 1)
 				)
 			)
