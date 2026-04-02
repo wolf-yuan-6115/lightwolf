@@ -116,7 +116,7 @@ size_t i2s_out_write_stereo16(const int16_t *interleaved, size_t frame_count) {
   for (size_t i = 0; i < can_write; i++) {
     int16_t left = interleaved[i * 2u];
     int16_t right = interleaved[i * 2u + 1u];
-    s_ring[s_head] = ((uint32_t)(uint16_t)left << 16u) | (uint16_t)right;
+    s_ring[s_head] = ((uint32_t)(uint16_t)right << 16u) | (uint16_t)left;
     s_head = (s_head + 1u) & (I2S_RING_FRAMES - 1u);
   }
   restore_interrupts(save);
