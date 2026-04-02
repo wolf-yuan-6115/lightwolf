@@ -3,57 +3,287 @@
 #include <string.h>
 
 #include "bsp/board_api.h"
+#include "hardware/pwm.h"
+#include "pico/stdlib.h"
 #include "tusb.h"
 
 #include "i2s_out.h"
 #include "usb_descriptors.h"
 
-#define AUDIO_SAMPLE_RATE_HZ 48000u
 #define AUDIO_CHANNELS 2u
 #define AUDIO_FRAME_BYTES 4u
+#define LED_RED_PIN 10u
+#define LED_BLUE_PIN 9u
+#define LED_PWM_WRAP 255u
+#define LED_PWM_ON_LEVEL ((LED_PWM_WRAP * 7u) / 100u)
 
-static uint8_t s_mute[AUDIO_CHANNELS + 1];
+static uint32_t const sample_rates[] = {44100u, 48000u, 96000u, 192000u};
+#define N_SAMPLE_RATES TU_ARRAY_SIZE(sample_rates)
+
+static int8_t s_mute[AUDIO_CHANNELS + 1];
 static int16_t s_volume_q8[AUDIO_CHANNELS + 1];
-static uint32_t s_sample_rate_hz = AUDIO_SAMPLE_RATE_HZ;
+static uint32_t s_sample_rate_hz = 48000u;
+static bool s_blue_led_on = false;
+static volatile uint16_t s_rx_size = 0;
+
+static void led_pwm_init(uint pin) {
+  gpio_set_function(pin, GPIO_FUNC_PWM);
+  uint slice = pwm_gpio_to_slice_num(pin);
+  uint channel = pwm_gpio_to_channel(pin);
+
+  pwm_config cfg = pwm_get_default_config();
+  pwm_config_set_wrap(&cfg, LED_PWM_WRAP);
+  pwm_init(slice, &cfg, false);
+
+  // Board LEDs are active-low: invert PWM so level 0 = fully off (pin high).
+  bool invert_a = (channel == PWM_CHAN_A);
+  bool invert_b = (channel == PWM_CHAN_B);
+  pwm_set_output_polarity(slice, invert_a, invert_b);
+  pwm_set_chan_level(slice, channel, 0);
+  pwm_set_enabled(slice, true);
+}
+
+static void led_set(uint pin, bool on) {
+  uint slice = pwm_gpio_to_slice_num(pin);
+  uint channel = pwm_gpio_to_channel(pin);
+  pwm_set_chan_level(slice, channel, on ? LED_PWM_ON_LEVEL : 0);
+}
+
+static bool send_zero_control(uint8_t rhport, tusb_control_request_t const *p_request) {
+  static uint8_t const zero_buf[64] = {0};
+  uint16_t len = tu_le16toh(p_request->wLength);
+  if (len > sizeof(zero_buf)) len = sizeof(zero_buf);
+  return tud_control_xfer(rhport, p_request, (void *) zero_buf, len);
+}
+
+static void handle_sample_rate_change(uint32_t new_rate_hz) {
+  if (new_rate_hz == 0) return;
+  s_sample_rate_hz = new_rate_hz;
+  i2s_out_set_sample_rate(s_sample_rate_hz);
+}
 
 static void audio_task(void) {
   int16_t sample_buf[CFG_TUD_AUDIO_FUNC_1_EP_OUT_SZ_MAX / sizeof(int16_t)];
 
-  while (tud_audio_available() >= AUDIO_FRAME_BYTES) {
+  while (s_rx_size >= AUDIO_FRAME_BYTES) {
     size_t free_frames = i2s_out_free_frames();
-    if (free_frames == 0) {
-      break;
-    }
+    if (free_frames == 0) break;
 
-    uint16_t to_read = tud_audio_available();
-    if (to_read > sizeof(sample_buf)) {
-      to_read = sizeof(sample_buf);
-    }
-
+    uint16_t to_read = s_rx_size;
+    if (to_read > sizeof(sample_buf)) to_read = sizeof(sample_buf);
     to_read = (uint16_t) (to_read & ~(AUDIO_FRAME_BYTES - 1u));
-    if (to_read == 0) {
-      break;
-    }
+    if (to_read == 0) break;
 
     uint16_t got = tud_audio_read(sample_buf, to_read);
     uint16_t frames = (uint16_t) (got / AUDIO_FRAME_BYTES);
     size_t accepted = i2s_out_write_stereo16(sample_buf, frames);
 
-    if (accepted < frames) {
-      break;
+    if (got != 0) {
+      s_blue_led_on = !s_blue_led_on;
+      led_set(LED_BLUE_PIN, s_blue_led_on);
+    }
+
+    if (accepted < frames) break;
+    s_rx_size = 0;
+  }
+}
+
+static bool tud_audio_clock_get_request(uint8_t rhport, audio_control_request_t const *request) {
+  uint16_t const w_length = tu_le16toh(((tusb_control_request_t const *) request)->wLength);
+
+  if (request->bControlSelector == AUDIO_CS_CTRL_SAM_FREQ) {
+    if (request->bRequest == AUDIO_CS_REQ_CUR) {
+      if (w_length == 3) {
+        uint8_t freq[3] = {
+            (uint8_t) (s_sample_rate_hz & 0xffu),
+            (uint8_t) ((s_sample_rate_hz >> 8u) & 0xffu),
+            (uint8_t) ((s_sample_rate_hz >> 16u) & 0xffu),
+        };
+        return tud_audio_buffer_and_schedule_control_xfer(rhport, (tusb_control_request_t const *) request, freq, sizeof(freq));
+      }
+      audio_control_cur_4_t curf = { (int32_t) s_sample_rate_hz };
+      return tud_audio_buffer_and_schedule_control_xfer(rhport, (tusb_control_request_t const *) request, &curf, sizeof(curf));
+    } else if (request->bRequest == AUDIO_CS_REQ_RANGE) {
+      audio_control_range_4_n_t(N_SAMPLE_RATES) rangef = {
+          .wNumSubRanges = tu_htole16(N_SAMPLE_RATES),
+      };
+      for (uint8_t i = 0; i < N_SAMPLE_RATES; i++) {
+        rangef.subrange[i].bMin = (int32_t) sample_rates[i];
+        rangef.subrange[i].bMax = (int32_t) sample_rates[i];
+        rangef.subrange[i].bRes = 0;
+      }
+      return tud_audio_buffer_and_schedule_control_xfer(rhport, (tusb_control_request_t const *) request, &rangef, sizeof(rangef));
+    }
+  } else if (request->bControlSelector == AUDIO_CS_CTRL_CLK_VALID && request->bRequest == AUDIO_CS_REQ_RANGE) {
+    audio_control_range_1_n_t(1) range_valid = {
+        .wNumSubRanges = tu_htole16(1),
+        .subrange[0] = { .bMin = 1, .bMax = 1, .bRes = 0 },
+    };
+    return tud_audio_buffer_and_schedule_control_xfer(rhport, (tusb_control_request_t const *) request, &range_valid, sizeof(range_valid));
+  } else if (request->bControlSelector == AUDIO_CS_CTRL_CLK_VALID && request->bRequest == AUDIO_CS_REQ_CUR) {
+    audio_control_cur_1_t cur_valid = {.bCur = 1};
+    return tud_audio_buffer_and_schedule_control_xfer(rhport, (tusb_control_request_t const *) request, &cur_valid, sizeof(cur_valid));
+  }
+  return false;
+}
+
+static bool tud_audio_feature_unit_get_request(uint8_t rhport, audio_control_request_t const *request) {
+  if (request->bControlSelector == AUDIO_FU_CTRL_MUTE && request->bRequest == AUDIO_CS_REQ_CUR) {
+    audio_control_cur_1_t mute1 = {.bCur = (uint8_t) s_mute[request->bChannelNumber]};
+    return tud_audio_buffer_and_schedule_control_xfer(rhport, (tusb_control_request_t const *) request, &mute1, sizeof(mute1));
+  }
+
+  if (request->bControlSelector == AUDIO_FU_CTRL_VOLUME) {
+    if (request->bRequest == AUDIO_CS_REQ_RANGE) {
+      audio_control_range_2_n_t(1) range_vol = {
+          .wNumSubRanges = tu_htole16(1),
+          .subrange[0] = { .bMin = tu_htole16(-12800), .bMax = tu_htole16(0), .bRes = tu_htole16(256) },
+      };
+      return tud_audio_buffer_and_schedule_control_xfer(rhport, (tusb_control_request_t const *) request, &range_vol, sizeof(range_vol));
+    } else if (request->bRequest == AUDIO_CS_REQ_CUR) {
+      audio_control_cur_2_t cur_vol = {.bCur = tu_htole16(s_volume_q8[request->bChannelNumber])};
+      return tud_audio_buffer_and_schedule_control_xfer(rhport, (tusb_control_request_t const *) request, &cur_vol, sizeof(cur_vol));
     }
   }
+  return false;
+}
+
+static bool tud_audio_feature_unit_set_request(audio_control_request_t const *request, uint8_t const *buf) {
+  TU_VERIFY(request->bRequest == AUDIO_CS_REQ_CUR);
+
+  if (request->bControlSelector == AUDIO_FU_CTRL_MUTE) {
+    TU_VERIFY(request->wLength == sizeof(audio_control_cur_1_t));
+    s_mute[request->bChannelNumber] = ((audio_control_cur_1_t const *) buf)->bCur;
+    return true;
+  } else if (request->bControlSelector == AUDIO_FU_CTRL_VOLUME) {
+    TU_VERIFY(request->wLength == sizeof(audio_control_cur_2_t));
+    s_volume_q8[request->bChannelNumber] = ((audio_control_cur_2_t const *) buf)->bCur;
+    return true;
+  }
+  return false;
+}
+
+bool tud_audio_get_req_entity_cb(uint8_t rhport, tusb_control_request_t const *p_request) {
+  audio_control_request_t const *request = (audio_control_request_t const *) p_request;
+  if (request->bEntityID == UAC2_ENTITY_CLOCK) return tud_audio_clock_get_request(rhport, request);
+  if (request->bEntityID == UAC2_ENTITY_FEATURE_UNIT) return tud_audio_feature_unit_get_request(rhport, request);
+  return send_zero_control(rhport, p_request);
+}
+
+bool tud_audio_set_req_entity_cb(uint8_t rhport, tusb_control_request_t const *p_request, uint8_t *buf) {
+  (void) rhport;
+  audio_control_request_t const *request = (audio_control_request_t const *) p_request;
+
+  if (request->bEntityID == UAC2_ENTITY_CLOCK && request->bControlSelector == AUDIO_CS_CTRL_SAM_FREQ &&
+      request->bRequest == AUDIO_CS_REQ_CUR) {
+    uint16_t const w_length = tu_le16toh(p_request->wLength);
+    if (w_length == 3) {
+      uint32_t rate = (uint32_t) buf[0] | ((uint32_t) buf[1] << 8u) | ((uint32_t) buf[2] << 16u);
+      handle_sample_rate_change(rate);
+      return true;
+    }
+    if (w_length == sizeof(audio_control_cur_4_t)) {
+      handle_sample_rate_change((uint32_t) ((audio_control_cur_4_t const *) buf)->bCur);
+      return true;
+    }
+  }
+
+  if (request->bEntityID == UAC2_ENTITY_FEATURE_UNIT) return tud_audio_feature_unit_set_request(request, buf);
+  return true;
+}
+
+bool tud_audio_set_itf_close_EP_cb(uint8_t rhport, tusb_control_request_t const *p_request) {
+  (void) rhport;
+  uint8_t const itf = tu_u16_low(tu_le16toh(p_request->wIndex));
+  uint8_t const alt = tu_u16_low(tu_le16toh(p_request->wValue));
+  if (itf == ITF_NUM_AUDIO_STREAMING && alt == 0) led_set(LED_RED_PIN, false);
+  return true;
+}
+
+bool tud_audio_set_itf_cb(uint8_t rhport, tusb_control_request_t const *p_request) {
+  (void) rhport;
+  uint8_t const itf = tu_u16_low(tu_le16toh(p_request->wIndex));
+  uint8_t const alt = tu_u16_low(tu_le16toh(p_request->wValue));
+  if (itf == ITF_NUM_AUDIO_STREAMING) {
+    led_set(LED_RED_PIN, alt != 0);
+    s_rx_size = 0;
+  }
+  return true;
+}
+
+bool tud_audio_rx_done_pre_read_cb(uint8_t rhport, uint16_t n_bytes_received, uint8_t func_id, uint8_t ep_out, uint8_t cur_alt_setting) {
+  (void) rhport;
+  (void) func_id;
+  (void) ep_out;
+  (void) cur_alt_setting;
+  s_rx_size = n_bytes_received;
+  return true;
+}
+
+bool tud_audio_set_req_ep_cb(uint8_t rhport, tusb_control_request_t const *p_request, uint8_t *pBuff) {
+  (void) rhport;
+  if (p_request->bRequest == AUDIO_CS_REQ_CUR) {
+    if (p_request->wLength == 3) {
+      uint32_t rate = (uint32_t) pBuff[0] | ((uint32_t) pBuff[1] << 8u) | ((uint32_t) pBuff[2] << 16u);
+      handle_sample_rate_change(rate);
+      return true;
+    }
+    if (p_request->wLength == 4) {
+      handle_sample_rate_change((uint32_t) ((audio_control_cur_4_t const *) pBuff)->bCur);
+      return true;
+    }
+  }
+  return false;
+}
+
+bool tud_audio_get_req_ep_cb(uint8_t rhport, tusb_control_request_t const *p_request) {
+  uint16_t const w_length = tu_le16toh(p_request->wLength);
+
+  if (p_request->bRequest == AUDIO_CS_REQ_CUR) {
+    if (w_length == 3) {
+      uint8_t freq[3] = {
+          (uint8_t) (s_sample_rate_hz & 0xffu),
+          (uint8_t) ((s_sample_rate_hz >> 8u) & 0xffu),
+          (uint8_t) ((s_sample_rate_hz >> 16u) & 0xffu),
+      };
+      return tud_audio_buffer_and_schedule_control_xfer(rhport, p_request, freq, sizeof(freq));
+    }
+    if (w_length == 4) {
+      audio_control_cur_4_t curf = { (int32_t) s_sample_rate_hz };
+      return tud_audio_buffer_and_schedule_control_xfer(rhport, p_request, &curf, sizeof(curf));
+    }
+  } else if (p_request->bRequest == AUDIO_CS_REQ_RANGE) {
+    audio_control_range_4_n_t(N_SAMPLE_RATES) rangef = {
+        .wNumSubRanges = tu_htole16(N_SAMPLE_RATES),
+    };
+    for (uint8_t i = 0; i < N_SAMPLE_RATES; i++) {
+      rangef.subrange[i].bMin = (int32_t) sample_rates[i];
+      rangef.subrange[i].bMax = (int32_t) sample_rates[i];
+      rangef.subrange[i].bRes = 0;
+    }
+    return tud_audio_buffer_and_schedule_control_xfer(rhport, p_request, &rangef, sizeof(rangef));
+  }
+  return send_zero_control(rhport, p_request);
+}
+
+void tud_audio_feedback_params_cb(uint8_t func_id, uint8_t alt_itf, audio_feedback_params_t *feedback_param) {
+  (void) func_id;
+  (void) alt_itf;
+  feedback_param->method = AUDIO_FEEDBACK_METHOD_FREQUENCY_FIXED;
+  feedback_param->sample_freq = s_sample_rate_hz;
 }
 
 int main(void) {
   board_init();
-  i2s_out_init(AUDIO_SAMPLE_RATE_HZ);
 
-  tusb_rhport_init_t dev_init = {
-      .role = TUSB_ROLE_DEVICE,
-      .speed = TUSB_SPEED_AUTO,
-  };
-  tusb_init(BOARD_TUD_RHPORT, &dev_init);
+  led_pwm_init(LED_RED_PIN);
+  led_pwm_init(LED_BLUE_PIN);
+  led_set(LED_RED_PIN, false);
+  led_set(LED_BLUE_PIN, false);
+
+  i2s_out_init(s_sample_rate_hz);
+
+  tud_init(BOARD_TUD_RHPORT);
   board_init_after_tusb();
 
   memset(s_mute, 0, sizeof(s_mute));
@@ -63,113 +293,4 @@ int main(void) {
     tud_task();
     audio_task();
   }
-}
-
-bool tud_audio_set_itf_cb(uint8_t rhport, tusb_control_request_t const *p_request) {
-  (void) rhport;
-  (void) p_request;
-  return true;
-}
-
-bool tud_audio_set_itf_close_ep_cb(uint8_t rhport, tusb_control_request_t const *p_request) {
-  (void) rhport;
-  (void) p_request;
-  return true;
-}
-
-bool tud_audio_set_req_ep_cb(uint8_t rhport, tusb_control_request_t const *p_request, uint8_t *pBuff) {
-  (void) rhport;
-  uint8_t ctrl_sel = TU_U16_HIGH(p_request->wValue);
-  if (ctrl_sel == AUDIO10_EP_CTRL_SAMPLING_FREQ && p_request->bRequest == AUDIO10_CS_REQ_SET_CUR) {
-    TU_VERIFY(p_request->wLength == 3);
-    uint32_t req_rate = (uint32_t) pBuff[0] | ((uint32_t) pBuff[1] << 8u) | ((uint32_t) pBuff[2] << 16u);
-    if (req_rate == AUDIO_SAMPLE_RATE_HZ) {
-      s_sample_rate_hz = req_rate;
-      i2s_out_set_sample_rate(req_rate);
-      return true;
-    }
-  }
-  return false;
-}
-
-bool tud_audio_get_req_ep_cb(uint8_t rhport, tusb_control_request_t const *p_request) {
-  uint8_t ctrl_sel = TU_U16_HIGH(p_request->wValue);
-  if (ctrl_sel == AUDIO10_EP_CTRL_SAMPLING_FREQ && p_request->bRequest == AUDIO10_CS_REQ_GET_CUR) {
-    uint8_t freq[3] = {
-        (uint8_t) (s_sample_rate_hz & 0xffu),
-        (uint8_t) ((s_sample_rate_hz >> 8u) & 0xffu),
-        (uint8_t) ((s_sample_rate_hz >> 16u) & 0xffu),
-    };
-    return tud_audio_buffer_and_schedule_control_xfer(rhport, p_request, freq, sizeof(freq));
-  }
-  return false;
-}
-
-bool tud_audio_set_req_entity_cb(uint8_t rhport, tusb_control_request_t const *p_request, uint8_t *buf) {
-  (void) rhport;
-  uint8_t channel = TU_U16_LOW(p_request->wValue);
-  uint8_t ctrl_sel = TU_U16_HIGH(p_request->wValue);
-  uint8_t entity_id = TU_U16_HIGH(p_request->wIndex);
-
-  if (entity_id != UAC1_ENTITY_FEATURE_UNIT) {
-    return false;
-  }
-  if (channel > AUDIO_CHANNELS) {
-    return false;
-  }
-
-  if (ctrl_sel == AUDIO10_FU_CTRL_MUTE && p_request->bRequest == AUDIO10_CS_REQ_SET_CUR) {
-    TU_VERIFY(p_request->wLength == 1);
-    s_mute[channel] = buf[0];
-    return true;
-  }
-
-  if (ctrl_sel == AUDIO10_FU_CTRL_VOLUME && p_request->bRequest == AUDIO10_CS_REQ_SET_CUR) {
-    TU_VERIFY(p_request->wLength == 2);
-    s_volume_q8[channel] = (int16_t) tu_unaligned_read16(buf);
-    return true;
-  }
-
-  return false;
-}
-
-bool tud_audio_get_req_entity_cb(uint8_t rhport, tusb_control_request_t const *p_request) {
-  uint8_t channel = TU_U16_LOW(p_request->wValue);
-  uint8_t ctrl_sel = TU_U16_HIGH(p_request->wValue);
-  uint8_t entity_id = TU_U16_HIGH(p_request->wIndex);
-
-  if (entity_id != UAC1_ENTITY_FEATURE_UNIT || channel > AUDIO_CHANNELS) {
-    return false;
-  }
-
-  if (ctrl_sel == AUDIO10_FU_CTRL_MUTE) {
-    return tud_audio_buffer_and_schedule_control_xfer(rhport, p_request, &s_mute[channel], 1);
-  }
-
-  if (ctrl_sel == AUDIO10_FU_CTRL_VOLUME) {
-    if (p_request->bRequest == AUDIO10_CS_REQ_GET_CUR) {
-      return tud_audio_buffer_and_schedule_control_xfer(rhport, p_request, &s_volume_q8[channel], sizeof(s_volume_q8[channel]));
-    }
-    if (p_request->bRequest == AUDIO10_CS_REQ_GET_MIN) {
-      int16_t min_q8 = (int16_t) (-90 * 256);
-      return tud_audio_buffer_and_schedule_control_xfer(rhport, p_request, &min_q8, sizeof(min_q8));
-    }
-    if (p_request->bRequest == AUDIO10_CS_REQ_GET_MAX) {
-      int16_t max_q8 = (int16_t) (0 * 256);
-      return tud_audio_buffer_and_schedule_control_xfer(rhport, p_request, &max_q8, sizeof(max_q8));
-    }
-    if (p_request->bRequest == AUDIO10_CS_REQ_GET_RES) {
-      int16_t res_q8 = (int16_t) (1 * 256);
-      return tud_audio_buffer_and_schedule_control_xfer(rhport, p_request, &res_q8, sizeof(res_q8));
-    }
-  }
-
-  return false;
-}
-
-void tud_audio_feedback_params_cb(uint8_t func_id, uint8_t alt_itf, audio_feedback_params_t *feedback_param) {
-  (void) func_id;
-  (void) alt_itf;
-  feedback_param->method = AUDIO_FEEDBACK_METHOD_FIFO_COUNT;
-  feedback_param->sample_freq = s_sample_rate_hz;
 }

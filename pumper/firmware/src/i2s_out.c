@@ -4,6 +4,7 @@
 #include "hardware/dma.h"
 #include "hardware/irq.h"
 #include "hardware/pio.h"
+#include "hardware/sync.h"
 #include "pico/stdlib.h"
 
 #include "audio_i2s.pio.h"
@@ -12,8 +13,9 @@
 #define I2S_LRCK_PIN 20
 #define I2S_DIN_PIN  21
 
-#define I2S_RING_FRAMES 2048
-#define I2S_DMA_CHUNK_FRAMES 96
+// Larger buffer for high sample rates (up to 96kHz at 32-bit stereo)
+#define I2S_RING_FRAMES 8192
+#define I2S_DMA_CHUNK_FRAMES 192
 
 static PIO s_pio = pio0;
 static uint s_sm = 0;
@@ -64,9 +66,13 @@ void i2s_out_set_sample_rate(uint32_t sample_rate_hz) {
     return;
   }
   s_rate_hz = sample_rate_hz;
+  // PIO consumes 64 state-machine cycles per stereo frame:
+  // 2 cycles per bit (out + jmp/set) × 32 bits = 64 cycles.
+  // SM frequency = sample_rate × 64.
+  // 8.8 fixed-point: div = clk_sys × 4 / sample_rate (equivalent to clk_sys × 256 / (sample_rate × 64))
   uint32_t clk_hz = clock_get_hz(clk_sys);
-  uint32_t divider = clk_hz * 4u / sample_rate_hz;
-  pio_sm_set_clkdiv_int_frac(s_pio, s_sm, divider >> 8u, divider & 0xffu);
+  uint32_t div_8_8 = clk_hz * 4u / sample_rate_hz;
+  pio_sm_set_clkdiv_int_frac(s_pio, s_sm, div_8_8 >> 8u, div_8_8 & 0xffu);
 }
 
 void i2s_out_init(uint32_t sample_rate_hz) {
@@ -75,7 +81,7 @@ void i2s_out_init(uint32_t sample_rate_hz) {
   gpio_set_function(I2S_BCLK_PIN, GPIO_FUNC_PIO0);
 
   uint offset = pio_add_program(s_pio, &audio_i2s_program);
-  audio_i2s_program_init(s_pio, s_sm, offset, I2S_DIN_PIN, I2S_LRCK_PIN);
+  audio_i2s_program_init(s_pio, s_sm, offset, I2S_DIN_PIN, I2S_BCLK_PIN);
   i2s_out_set_sample_rate(sample_rate_hz);
 
   s_dma_chan = dma_claim_unused_channel(true);
@@ -108,9 +114,9 @@ size_t i2s_out_write_stereo16(const int16_t *interleaved, size_t frame_count) {
     can_write = frame_count;
   }
   for (size_t i = 0; i < can_write; i++) {
-    uint16_t left = (uint16_t) interleaved[i * 2u];
-    uint16_t right = (uint16_t) interleaved[i * 2u + 1u];
-    s_ring[s_head] = ((uint32_t) left << 16u) | right;
+    int16_t left = interleaved[i * 2u];
+    int16_t right = interleaved[i * 2u + 1u];
+    s_ring[s_head] = ((uint32_t)(uint16_t)left << 16u) | (uint16_t)right;
     s_head = (s_head + 1u) & (I2S_RING_FRAMES - 1u);
   }
   restore_interrupts(save);

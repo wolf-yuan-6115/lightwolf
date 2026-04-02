@@ -32,6 +32,7 @@ target_link_libraries(rp2350_usb_dac PRIVATE
   hardware_dma
   hardware_irq
   hardware_clocks
+  hardware_pwm
 )
 
 pico_enable_stdio_usb(rp2350_usb_dac 0)
