@@ -15,7 +15,7 @@
 #define LED_RED_PIN 10u
 #define LED_BLUE_PIN 9u
 #define LED_PWM_WRAP 255u
-#define LED_PWM_ON_LEVEL ((LED_PWM_WRAP * 7u) / 100u)
+#define LED_PWM_ON_LEVEL ((LED_PWM_WRAP * 10u) / 100u)
 
 static uint32_t const sample_rates[] = {44100u, 48000u, 96000u, 192000u};
 #define N_SAMPLE_RATES TU_ARRAY_SIZE(sample_rates)
@@ -23,7 +23,6 @@ static uint32_t const sample_rates[] = {44100u, 48000u, 96000u, 192000u};
 static int8_t s_mute[AUDIO_CHANNELS + 1];
 static int16_t s_volume_q8[AUDIO_CHANNELS + 1];
 static uint32_t s_sample_rate_hz = 48000u;
-static bool s_blue_led_on = false;
 static volatile uint16_t s_rx_size = 0;
 
 static void led_pwm_init(uint pin) {
@@ -47,6 +46,13 @@ static void led_set(uint pin, bool on) {
   uint slice = pwm_gpio_to_slice_num(pin);
   uint channel = pwm_gpio_to_channel(pin);
   pwm_set_chan_level(slice, channel, on ? LED_PWM_ON_LEVEL : 0);
+}
+
+static void led_set_level(uint pin, uint16_t level) {
+  uint slice = pwm_gpio_to_slice_num(pin);
+  uint channel = pwm_gpio_to_channel(pin);
+  if (level > LED_PWM_WRAP) level = LED_PWM_WRAP;
+  pwm_set_chan_level(slice, channel, level);
 }
 
 static bool send_zero_control(uint8_t rhport, tusb_control_request_t const *p_request) {
@@ -76,12 +82,27 @@ static void audio_task(void) {
 
     uint16_t got = tud_audio_read(sample_buf, to_read);
     uint16_t frames = (uint16_t) (got / AUDIO_FRAME_BYTES);
-    size_t accepted = i2s_out_write_stereo16(sample_buf, frames);
 
     if (got != 0) {
-      s_blue_led_on = !s_blue_led_on;
-      led_set(LED_BLUE_PIN, s_blue_led_on);
+      // Calculate audio level (peak) from original samples for LED
+      uint32_t peak = 0;
+      uint16_t num_samples = got / sizeof(int16_t);
+      for (uint16_t i = 0; i < num_samples; i++) {
+        uint32_t abs_sample = (sample_buf[i] < 0) ? (uint32_t)(-sample_buf[i]) : (uint32_t)sample_buf[i];
+        if (abs_sample > peak) peak = abs_sample;
+      }
+      
+      // Map peak (0-32768) to full LED brightness range (0-255)
+      uint16_t led_level = (uint16_t)((peak * LED_PWM_WRAP) / 32768u);
+      led_set_level(LED_BLUE_PIN, led_level);
+      
+      // Apply -3dB attenuation to samples for I2S output: multiply by ~0.707 (181/256)
+      for (uint16_t i = 0; i < num_samples; i++) {
+        sample_buf[i] = (int16_t)((sample_buf[i] * 181) / 256);
+      }
     }
+
+    size_t accepted = i2s_out_write_stereo16(sample_buf, frames);
 
     if (accepted < frames) break;
     s_rx_size = 0;
