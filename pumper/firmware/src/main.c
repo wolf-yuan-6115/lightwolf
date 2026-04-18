@@ -92,8 +92,8 @@ static void audio_task(void) {
         if (abs_sample > peak) peak = abs_sample;
       }
       
-      // Map peak (0-32768) to full LED brightness range (0-255)
-      uint16_t led_level = (uint16_t)((peak * LED_PWM_WRAP) / 32768u);
+      // Map peak (0-32768) to LED brightness at ~33% (0-85) for reduced brightness
+      uint16_t led_level = (uint16_t)((peak * LED_PWM_WRAP) / (32768u * 3u));
       led_set_level(LED_BLUE_PIN, led_level);
       
       // Apply -3dB attenuation to samples for I2S output: multiply by ~0.707 (181/256)
