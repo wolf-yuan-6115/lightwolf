@@ -36,14 +36,31 @@
 #define LED_PWM_WRAP      255u
 #define LED_PWM_ON_LEVEL  ((LED_PWM_WRAP * 10u) / 100u)
 
+// Sample rates advertised to the host via the Clock Source range descriptor.
+// The host picks one and sets it via tud_audio_set_req_entity_cb().
 static uint32_t const sample_rates[] = {44100u, 48000u, 96000u, 192000u};
 #define N_SAMPLE_RATES TU_ARRAY_SIZE(sample_rates)
 
+// Mute state for master (index 0) and each channel (indices 1 and 2).
+// Updated by the host through UAC2 Feature Unit set requests.
 static int8_t s_mute[AUDIO_CHANNELS + 1];
+
+// Volume in UAC2 Q8.8 fixed-point dB (0 = 0 dB, -256 = -1 dB).
+// Range advertised: -50 dB (–12800) to 0 dB, in 1 dB (256) steps.
 static int16_t s_volume_q8[AUDIO_CHANNELS + 1];
+
+// Currently active sample rate; updated when the host sends a SET_CUR request
+// to the Clock Source entity.
 static uint32_t s_sample_rate_hz = 48000u;
+
+// Byte count of the most recent USB isochronous packet, set in the pre-read
+// callback and consumed by audio_task().  Marked volatile because it is written
+// from a TinyUSB callback (interrupt context) and read from the main loop.
 static volatile uint16_t s_rx_size = 0;
 
+// Initialise a GPIO pin as a PWM-driven LED output.
+// The PWM counter runs 0–255; polarity is inverted because the LEDs are
+// active-low (connected between the GPIO and VCC).
 static void led_pwm_init(uint pin) {
   gpio_set_function(pin, GPIO_FUNC_PWM);
   uint slice = pwm_gpio_to_slice_num(pin);
@@ -61,12 +78,14 @@ static void led_pwm_init(uint pin) {
   pwm_set_enabled(slice, true);
 }
 
+// Set a LED to its fixed on-level or fully off.
 static void led_set(uint pin, bool on) {
   uint slice = pwm_gpio_to_slice_num(pin);
   uint channel = pwm_gpio_to_channel(pin);
   pwm_set_chan_level(slice, channel, on ? LED_PWM_ON_LEVEL : 0);
 }
 
+// Set a LED to an arbitrary brightness level (0 = off, LED_PWM_WRAP = full).
 static void led_set_level(uint pin, uint16_t level) {
   uint slice = pwm_gpio_to_slice_num(pin);
   uint channel = pwm_gpio_to_channel(pin);
@@ -74,6 +93,8 @@ static void led_set_level(uint pin, uint16_t level) {
   pwm_set_chan_level(slice, channel, level);
 }
 
+// Respond to an unhandled control request with a zero-filled buffer.
+// Used as a safe fallback for GET requests on unknown entities.
 static bool send_zero_control(uint8_t rhport, tusb_control_request_t const *p_request) {
   static uint8_t const zero_buf[64] = {0};
   uint16_t len = tu_le16toh(p_request->wLength);
@@ -81,12 +102,22 @@ static bool send_zero_control(uint8_t rhport, tusb_control_request_t const *p_re
   return tud_control_xfer(rhport, p_request, (void *) zero_buf, len);
 }
 
+// Apply a host-requested sample rate change and reconfigure the I2S bit clock.
 static void handle_sample_rate_change(uint32_t new_rate_hz) {
   if (new_rate_hz == 0) return;
   s_sample_rate_hz = new_rate_hz;
   i2s_out_set_sample_rate(s_sample_rate_hz);
 }
 
+// Main audio processing task — called every iteration of the main loop.
+//
+// Drains received USB audio data from the TinyUSB software receive buffer,
+// applies peak-level metering to drive the blue LED, attenuates the signal
+// by -3 dB, then forwards the samples to the I2S ring buffer.
+//
+// The function processes at most one buffer's worth of data per call, limited
+// by s_rx_size (set by the USB receive callback) and the space available in
+// the I2S ring buffer.
 static void audio_task(void) {
   int16_t sample_buf[CFG_TUD_AUDIO_FUNC_1_EP_OUT_SZ_MAX / sizeof(int16_t)];
 
@@ -128,6 +159,15 @@ static void audio_task(void) {
   }
 }
 
+// Handle UAC2 GET requests directed at the Clock Source entity.
+//
+// Supported control selectors:
+//   AUDIO_CS_CTRL_SAM_FREQ  — return the current sample rate (CUR) or the list
+//                             of supported rates (RANGE).
+//   AUDIO_CS_CTRL_CLK_VALID — always report clock as valid (1).
+//
+// The sample frequency can be encoded as a 3-byte little-endian value (some
+// older UAC1-style hosts) or as a standard 4-byte UAC2 integer.
 static bool tud_audio_clock_get_request(uint8_t rhport, audio_control_request_t const *request) {
   uint16_t const w_length = tu_le16toh(((tusb_control_request_t const *) request)->wLength);
 
@@ -167,6 +207,11 @@ static bool tud_audio_clock_get_request(uint8_t rhport, audio_control_request_t 
   return false;
 }
 
+// Handle UAC2 GET requests directed at the Feature Unit (mute + volume).
+//
+// MUTE CUR   — return current mute state for the requested channel.
+// VOLUME CUR — return current volume in Q8.8 dB for the requested channel.
+// VOLUME RANGE — return the supported volume range: -50 dB to 0 dB, 1 dB steps.
 static bool tud_audio_feature_unit_get_request(uint8_t rhport, audio_control_request_t const *request) {
   if (request->bControlSelector == AUDIO_FU_CTRL_MUTE && request->bRequest == AUDIO_CS_REQ_CUR) {
     audio_control_cur_1_t mute1 = {.bCur = (uint8_t) s_mute[request->bChannelNumber]};
@@ -188,6 +233,10 @@ static bool tud_audio_feature_unit_get_request(uint8_t rhport, audio_control_req
   return false;
 }
 
+// Handle UAC2 SET requests directed at the Feature Unit.
+// Only SET_CUR is supported; updates s_mute[] or s_volume_q8[] accordingly.
+// Note: volume is stored but not yet applied in software (the I2S DAC chip
+// handles volume independently via its own control interface).
 static bool tud_audio_feature_unit_set_request(audio_control_request_t const *request, uint8_t const *buf) {
   TU_VERIFY(request->bRequest == AUDIO_CS_REQ_CUR);
 
@@ -203,6 +252,7 @@ static bool tud_audio_feature_unit_set_request(audio_control_request_t const *re
   return false;
 }
 
+// TinyUSB callback: dispatch GET control requests to the appropriate entity handler.
 bool tud_audio_get_req_entity_cb(uint8_t rhport, tusb_control_request_t const *p_request) {
   audio_control_request_t const *request = (audio_control_request_t const *) p_request;
   if (request->bEntityID == UAC2_ENTITY_CLOCK) return tud_audio_clock_get_request(rhport, request);
@@ -210,6 +260,9 @@ bool tud_audio_get_req_entity_cb(uint8_t rhport, tusb_control_request_t const *p
   return send_zero_control(rhport, p_request);
 }
 
+// TinyUSB callback: dispatch SET control requests to the appropriate entity handler.
+// Handles sample-rate changes on the Clock entity and mute/volume on the Feature Unit.
+// Both 3-byte (legacy UAC1-style) and 4-byte (UAC2) sample-rate encodings are accepted.
 bool tud_audio_set_req_entity_cb(uint8_t rhport, tusb_control_request_t const *p_request, uint8_t *buf) {
   (void) rhport;
   audio_control_request_t const *request = (audio_control_request_t const *) p_request;
@@ -232,6 +285,8 @@ bool tud_audio_set_req_entity_cb(uint8_t rhport, tusb_control_request_t const *p
   return true;
 }
 
+// TinyUSB callback: called when the host closes the audio streaming interface
+// (switches to alternate setting 0).  Turn off the red streaming indicator LED.
 bool tud_audio_set_itf_close_EP_cb(uint8_t rhport, tusb_control_request_t const *p_request) {
   (void) rhport;
   uint8_t const itf = tu_u16_low(tu_le16toh(p_request->wIndex));
@@ -240,6 +295,9 @@ bool tud_audio_set_itf_close_EP_cb(uint8_t rhport, tusb_control_request_t const 
   return true;
 }
 
+// TinyUSB callback: called when the host selects an alternate setting on the
+// audio streaming interface.  Alternate 0 = idle (no bandwidth), alternate 1 =
+// active streaming.  Turn the red LED on/off accordingly and reset rx counter.
 bool tud_audio_set_itf_cb(uint8_t rhport, tusb_control_request_t const *p_request) {
   (void) rhport;
   uint8_t const itf = tu_u16_low(tu_le16toh(p_request->wIndex));
@@ -251,6 +309,8 @@ bool tud_audio_set_itf_cb(uint8_t rhport, tusb_control_request_t const *p_reques
   return true;
 }
 
+// TinyUSB callback: called just before audio data is read from the USB buffer.
+// Records the number of bytes received so audio_task() knows how much to drain.
 bool tud_audio_rx_done_pre_read_cb(uint8_t rhport, uint16_t n_bytes_received, uint8_t func_id, uint8_t ep_out, uint8_t cur_alt_setting) {
   (void) rhport;
   (void) func_id;
@@ -260,6 +320,10 @@ bool tud_audio_rx_done_pre_read_cb(uint8_t rhport, uint16_t n_bytes_received, ui
   return true;
 }
 
+// TinyUSB callback: SET control request on the audio data endpoint.
+// Some hosts (especially older ones) set the sample rate via the endpoint
+// rather than the Clock Source entity.  Both 3-byte and 4-byte encodings
+// are handled for maximum compatibility.
 bool tud_audio_set_req_ep_cb(uint8_t rhport, tusb_control_request_t const *p_request, uint8_t *pBuff) {
   (void) rhport;
   if (p_request->bRequest == AUDIO_CS_REQ_CUR) {
@@ -276,6 +340,8 @@ bool tud_audio_set_req_ep_cb(uint8_t rhport, tusb_control_request_t const *p_req
   return false;
 }
 
+// TinyUSB callback: GET control request on the audio data endpoint.
+// Returns the current sample rate (CUR) or the list of supported rates (RANGE).
 bool tud_audio_get_req_ep_cb(uint8_t rhport, tusb_control_request_t const *p_request) {
   uint16_t const w_length = tu_le16toh(p_request->wLength);
 
@@ -306,6 +372,9 @@ bool tud_audio_get_req_ep_cb(uint8_t rhport, tusb_control_request_t const *p_req
   return send_zero_control(rhport, p_request);
 }
 
+// TinyUSB callback: provide SOF feedback parameters for asynchronous rate adaptation.
+// FREQUENCY_FIXED tells TinyUSB to send a fixed-frequency feedback value derived
+// from the nominal sample rate rather than measuring the actual I2S clock.
 void tud_audio_feedback_params_cb(uint8_t func_id, uint8_t alt_itf, audio_feedback_params_t *feedback_param) {
   (void) func_id;
   (void) alt_itf;
@@ -316,21 +385,26 @@ void tud_audio_feedback_params_cb(uint8_t func_id, uint8_t alt_itf, audio_feedba
 int main(void) {
   board_init();
 
+  // Initialise both status LEDs and ensure they start off.
   led_pwm_init(LED_RED_PIN);
   led_pwm_init(LED_BLUE_PIN);
   led_set(LED_RED_PIN, false);
   led_set(LED_BLUE_PIN, false);
 
+  // Start the I2S output driver (plays silence until USB audio arrives).
   i2s_out_init(s_sample_rate_hz);
 
+  // Initialise the TinyUSB device stack and any post-TinyUSB board peripherals.
   tud_init(BOARD_TUD_RHPORT);
   board_init_after_tusb();
 
+  // Clear mute and volume state (no mute, 0 dB).
   memset(s_mute, 0, sizeof(s_mute));
   memset(s_volume_q8, 0, sizeof(s_volume_q8));
 
+  // Main loop: process USB events then forward any received audio to I2S.
   while (true) {
-    tud_task();
-    audio_task();
+    tud_task();    // TinyUSB internal event pump (must be called regularly)
+    audio_task();  // Drain USB receive buffer → I2S ring buffer
   }
 }

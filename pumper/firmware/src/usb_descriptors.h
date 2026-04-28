@@ -1,26 +1,33 @@
+// USB descriptor constants and the custom UAC2 descriptor macro for the
+// Pumper stereo speaker with isochronous feedback.
+
 #ifndef USB_DESCRIPTORS_H_
 #define USB_DESCRIPTORS_H_
 
 #include "tusb.h"
 
+// Interface numbers within the single USB configuration.
 enum {
-  ITF_NUM_AUDIO_CONTROL = 0,
-  ITF_NUM_AUDIO_STREAMING,
-  ITF_NUM_TOTAL
+  ITF_NUM_AUDIO_CONTROL = 0,  // UAC2 Audio Control interface
+  ITF_NUM_AUDIO_STREAMING,    // UAC2 Audio Streaming interface (alts 0 and 1)
+  ITF_NUM_TOTAL               // Total interface count (used by config descriptor)
 };
 
+// String descriptor indices (must match the order in string_desc_arr[] in usb_descriptors.c).
 enum {
-  STRID_LANGID = 0,
-  STRID_MANUFACTURER,
-  STRID_PRODUCT,
-  STRID_SERIAL,
-  STRID_AUDIO_IF,
+  STRID_LANGID = 0,    // Language ID (US English, 0x0409)
+  STRID_MANUFACTURER,  // Manufacturer name
+  STRID_PRODUCT,       // Product name
+  STRID_SERIAL,        // Serial number (from hardware unique ID)
+  STRID_AUDIO_IF,      // Audio interface name shown by the OS
 };
 
-#define UAC2_ENTITY_CLOCK           0x04
-#define UAC2_ENTITY_INPUT_TERMINAL  0x01
-#define UAC2_ENTITY_FEATURE_UNIT    0x02
-#define UAC2_ENTITY_OUTPUT_TERMINAL 0x03
+// UAC2 Audio Control entity IDs referenced in audio-control requests.
+// These values must match what is baked into the descriptor macro below.
+#define UAC2_ENTITY_CLOCK           0x04  // Internal programmable clock source
+#define UAC2_ENTITY_INPUT_TERMINAL  0x01  // USB streaming input terminal
+#define UAC2_ENTITY_FEATURE_UNIT    0x02  // Mute + volume feature unit
+#define UAC2_ENTITY_OUTPUT_TERMINAL 0x03  // Headphones output terminal
 
 // Android route naming is affected by UAC2 function category and terminal type.
 // Advertise this DAC as headphones/headset instead of desktop speaker.
@@ -32,6 +39,8 @@ enum {
 #define AUDIO_TERM_TYPE_OUT_HEADPHONES 0x0302
 #endif
 
+// Total byte length of the descriptor block produced by
+// TUD_AUDIO_SPEAKER_STEREO_FB_DESCRIPTOR() below.
 #define TUD_AUDIO_SPEAKER_STEREO_FB_DESC_LEN (TUD_AUDIO_DESC_IAD_LEN \
   + TUD_AUDIO_DESC_STD_AC_LEN \
   + TUD_AUDIO_DESC_CS_AC_LEN \
@@ -47,6 +56,16 @@ enum {
   + TUD_AUDIO_DESC_CS_AS_ISO_EP_LEN \
   + TUD_AUDIO_DESC_STD_AS_ISO_FB_EP_LEN)
 
+// Macro that expands to the full UAC2 descriptor sequence for a stereo speaker
+// with asynchronous isochronous feedback.  Parameters:
+//   _itfnum           First interface number (Audio Control); AS = _itfnum + 1
+//   _stridx           String descriptor index for the audio interface name
+//   _nBytesPerSample  Bytes per audio sample (e.g. 2 for 16-bit)
+//   _nBitsUsedPerSample  Bits per sample actually used (e.g. 16)
+//   _epout            OUT endpoint number for audio data (host → device)
+//   _epoutsize        Max packet size for _epout
+//   _epfb             IN  endpoint number for feedback (device → host)
+//   _epfbsize         Packet size for the feedback endpoint (4 bytes)
 #define TUD_AUDIO_SPEAKER_STEREO_FB_DESCRIPTOR(_itfnum, _stridx, _nBytesPerSample, _nBitsUsedPerSample, _epout, _epoutsize, _epfb, _epfbsize) \
   /* Standard Interface Association Descriptor (IAD) */\
   TUD_AUDIO_DESC_IAD(/*_firstitf*/ _itfnum, /*_nitfs*/ 0x02, /*_stridx*/ 0x00),\
