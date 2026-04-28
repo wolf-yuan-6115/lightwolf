@@ -1,4 +1,4 @@
-// I2S output driver for the RP2040/RP2350.
+// I2S output driver for the RP2350.
 //
 // Audio data received over USB is written into a ring buffer by the main task
 // and continuously consumed by a DMA channel that feeds the PIO state machine.
@@ -104,7 +104,7 @@ void __isr i2s_dma_irq_handler(void) {
 // The PIO program uses 64 SM cycles per stereo frame (2 cycles/bit × 32 bits).
 // Therefore:  SM frequency = sample_rate_hz × 64
 //
-// The RP2040 clock divider is an 8.8 fixed-point number:
+// The RP2350 clock divider is an 8.8 fixed-point number:
 //   div = clk_sys / SM_freq = clk_sys / (sample_rate × 64)
 // Multiplying numerator and denominator by 4 gives the 8.8 value directly:
 //   div_8_8 = (clk_sys × 4) / sample_rate_hz
