@@ -14,7 +14,7 @@ extern "C" {
 // --- Hardware / BSP overrides (normally supplied by the board support package) ---
 
 #ifndef BOARD_TUD_RHPORT
-#define BOARD_TUD_RHPORT 0  // RP2040 has a single USB port on root hub port 0
+#define BOARD_TUD_RHPORT 0  // RP2350 has a single USB port on root hub port 0
 #endif
 
 #ifndef BOARD_TUD_MAX_SPEED

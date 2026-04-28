@@ -1,8 +1,8 @@
 // Pumper USB DAC — main application entry point.
 //
-// This firmware implements a USB Audio Class 2 (UAC2) device on the RP2040/
-// RP2350.  The host (PC, phone, …) streams 16-bit stereo PCM audio over USB;
-// the firmware forwards it to a connected I2S DAC chip via the PIO-based I2S
+// This firmware implements a USB Audio Class 2 (UAC2) device on the RP2350.
+// The host (PC, phone, …) streams 16-bit stereo PCM audio over USB; the
+// firmware forwards it to a connected I2S DAC chip via the PIO-based I2S
 // driver (i2s_out.c/audio_i2s.pio).
 //
 // Features:
