@@ -1,3 +1,17 @@
+// Pumper USB DAC — main application entry point.
+//
+// This firmware implements a USB Audio Class 2 (UAC2) device on the RP2040/
+// RP2350.  The host (PC, phone, …) streams 16-bit stereo PCM audio over USB;
+// the firmware forwards it to a connected I2S DAC chip via the PIO-based I2S
+// driver (i2s_out.c/audio_i2s.pio).
+//
+// Features:
+//   • Supports 44.1 / 48 / 96 / 192 kHz sample rates (host-selectable)
+//   • Per-channel mute and volume control via UAC2 Feature Unit
+//   • Red LED indicates active USB audio streaming
+//   • Blue LED shows audio level (peak VU meter, ~33% max brightness)
+//   • -3 dB software attenuation applied before I2S output
+
 #include <stdbool.h>
 #include <stdint.h>
 #include <string.h>
@@ -10,12 +24,17 @@
 #include "i2s_out.h"
 #include "usb_descriptors.h"
 
-#define AUDIO_CHANNELS 2u
-#define AUDIO_FRAME_BYTES 4u
-#define LED_RED_PIN 10u
-#define LED_BLUE_PIN 9u
-#define LED_PWM_WRAP 255u
-#define LED_PWM_ON_LEVEL ((LED_PWM_WRAP * 10u) / 100u)
+#define AUDIO_CHANNELS   2u   // Stereo: left + right
+#define AUDIO_FRAME_BYTES 4u  // 2 bytes/sample × 2 channels = 4 bytes per stereo frame
+
+// GPIO pins for the two status LEDs (active-low, driven via PWM).
+#define LED_RED_PIN  10u  // Lit when USB audio streaming is active
+#define LED_BLUE_PIN  9u  // Brightness tracks the audio peak level
+
+// PWM configuration: 8-bit counter (wrap = 255).
+// ON_LEVEL is 10% of full scale so the LED is visible but not blinding.
+#define LED_PWM_WRAP      255u
+#define LED_PWM_ON_LEVEL  ((LED_PWM_WRAP * 10u) / 100u)
 
 static uint32_t const sample_rates[] = {44100u, 48000u, 96000u, 192000u};
 #define N_SAMPLE_RATES TU_ARRAY_SIZE(sample_rates)
