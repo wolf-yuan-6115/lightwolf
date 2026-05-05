@@ -16,6 +16,7 @@ add_executable(rp2350_usb_dac
   src/main.c
   src/usb_descriptors.c
   src/i2s_out.c
+  src/eq_dsp.c
 )
 
 pico_generate_pio_header(rp2350_usb_dac ${CMAKE_CURRENT_LIST_DIR}/src/audio_i2s.pio)
@@ -33,6 +34,7 @@ target_link_libraries(rp2350_usb_dac PRIVATE
   hardware_irq
   hardware_clocks
   hardware_pwm
+  m
 )
 
 pico_enable_stdio_usb(rp2350_usb_dac 0)
