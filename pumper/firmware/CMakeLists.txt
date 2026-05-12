@@ -27,6 +27,7 @@ target_include_directories(rp2350_usb_dac PRIVATE
 
 target_link_libraries(rp2350_usb_dac PRIVATE
   pico_stdlib
+  pico_multicore
   tinyusb_device
   tinyusb_board
   hardware_pio

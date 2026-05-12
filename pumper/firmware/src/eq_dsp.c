@@ -62,11 +62,6 @@ static bool eq_build_biquad_coefficients(eq_biquad_t *band, eq_filter_config_t c
     return false;
   }
 
-  float q = cfg->q;
-  if (q <= 0.0f) {
-    return false;
-  }
-
   float w0 = 2.0f * EQ_PI * cfg->frequency_hz / fs;
   float sin_w0 = sinf(w0);
   float cos_w0 = cosf(w0);
@@ -79,7 +74,19 @@ static bool eq_build_biquad_coefficients(eq_biquad_t *band, eq_filter_config_t c
   float a2;
 
   if (cfg->type == EQ_FILTER_PEAKING) {
-    float alpha = sin_w0 / (2.0f * q);
+    float alpha;
+    if (cfg->bw_octaves > 0.0f) {
+      if (fabsf(sin_w0) < 1e-12f) {
+        return false;
+      }
+      alpha = sin_w0 * sinhf((logf(2.0f) * 0.5f) * cfg->bw_octaves * (w0 / sin_w0));
+    } else {
+      float q = cfg->q;
+      if (q <= 0.0f) {
+        return false;
+      }
+      alpha = sin_w0 / (2.0f * q);
+    }
     b0 = 1.0f + alpha * a;
     b1 = -2.0f * cos_w0;
     b2 = 1.0f - alpha * a;
@@ -87,7 +94,10 @@ static bool eq_build_biquad_coefficients(eq_biquad_t *band, eq_filter_config_t c
     a1 = -2.0f * cos_w0;
     a2 = 1.0f - alpha / a;
   } else if (cfg->type == EQ_FILTER_LOW_SHELF || cfg->type == EQ_FILTER_HIGH_SHELF) {
-    float shelf_s = q;
+    float shelf_s = cfg->q;
+    if (shelf_s <= 0.0f) {
+      return false;
+    }
     float alpha = sin_w0 * 0.5f * sqrtf((a + (1.0f / a)) * ((1.0f / shelf_s) - 1.0f) + 2.0f);
     float two_sqrt_a_alpha = 2.0f * sqrtf(a) * alpha;
 
