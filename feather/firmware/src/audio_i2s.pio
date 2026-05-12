@@ -1,0 +1,79 @@
+// PIO program for I2S (Inter-IC Sound) output.
+//
+// Pin assignment (set by the C initializer below):
+//   data_pin       = I2S_DIN_PIN  (serial audio data, 1 bit wide)
+//   clock_pin_base = I2S_LRCK_PIN (left/right word-select clock / FSYNC)
+//   clock_pin_base + 1 = I2S_BCLK_PIN (bit clock)
+//
+// The side-set field drives both clock lines simultaneously on every instruction:
+//   side 0bXY  →  X = BCLK level, Y = LRCK level
+//
+// I2S timing for one 32-bit stereo frame (left word then right word):
+//   - LRCK low  (0) = left  channel (32 bits, MSB first)
+//   - LRCK high (1) = right channel (32 bits, MSB first)
+//   - BCLK toggles once per bit (data is stable on the rising edge)
+//
+// Each iteration of bitloop1/bitloop0 outputs one bit and toggles BCLK.
+// The set x, 14 loads the loop counter for 15 remaining bits (bits 30..16);
+// the two explicit "out pins, 1" instructions outside the loop handle
+// bits 31 (MSB) and 15 (the channel boundary bit), giving 32 bits total
+// per channel.  With 2 cycles per bit × 32 bits = 64 SM cycles per frame.
+
+.program audio_i2s
+.side_set 2
+
+// ---- Left channel (LRCK = 0) ----
+// Output bit 31 (MSB) of the left sample with BCLK low, then high.
+bitloop1:
+    out pins, 1       side 0b01  // LRCK=1(right), BCLK=0: shift next data bit out; data set up before rising edge
+    jmp x-- bitloop1  side 0b11  // LRCK=1, BCLK=1: rising edge - receiver latches bit; loop if bits remain
+    out pins, 1       side 0b00  // LRCK=0(left),  BCLK=0: output last bit of right / first bit of left
+    set x, 14         side 0b10  // LRCK=0, BCLK=1: latch bit; reload counter for 15 more left-channel bits
+
+// ---- Right channel (LRCK = 1) ----
+bitloop0:
+    out pins, 1       side 0b00  // LRCK=0, BCLK=0: shift next data bit out
+    jmp x-- bitloop0  side 0b10  // LRCK=0, BCLK=1: latch bit; loop if bits remain
+    out pins, 1       side 0b01  // LRCK=1(right), BCLK=0: output first bit of right channel
+public entry_point:
+    set x, 14         side 0b11  // LRCK=1, BCLK=1: latch bit; reload counter; this is the program wrap target
+
+% c-sdk {
+// Initialize the I2S PIO state machine.
+//
+// @param pio            PIO instance (pio0 or pio1)
+// @param sm             State machine index to use
+// @param offset         Instruction memory offset returned by pio_add_program()
+// @param data_pin       GPIO pin for I2S serial data (DIN)
+// @param clock_pin_base GPIO pin for LRCK/FSYNC; BCLK must be the next consecutive pin (clock_pin_base + 1)
+static inline void audio_i2s_program_init(PIO pio, uint sm, uint offset, uint data_pin, uint clock_pin_base) {
+    pio_sm_config sm_config = audio_i2s_program_get_default_config(offset);
+
+    // One data output pin (DIN), two side-set pins (BCLK, LRCK).
+    sm_config_set_out_pins(&sm_config, data_pin, 1);
+    sm_config_set_sideset_pins(&sm_config, clock_pin_base);
+
+    // Shift MSB-first, auto-pull every 32 bits, 32-bit shift register width.
+    sm_config_set_out_shift(&sm_config, false, true, 32);
+
+    // Join RX and TX FIFOs into a single 8-entry TX FIFO for deeper buffering.
+    sm_config_set_fifo_join(&sm_config, PIO_FIFO_JOIN_TX);
+
+    pio_sm_init(pio, sm, offset, &sm_config);
+
+    // Set data and clock pins as outputs.
+#if PICO_PIO_USE_GPIO_BASE
+    uint64_t pin_mask = (1ull << data_pin) | (3ull << clock_pin_base);
+    pio_sm_set_pindirs_with_mask64(pio, sm, pin_mask, pin_mask);
+#else
+    uint32_t pin_mask = (1u << data_pin) | (3u << clock_pin_base);
+    pio_sm_set_pindirs_with_mask(pio, sm, pin_mask, pin_mask);
+#endif
+    // Drive all output pins low initially (BCLK and LRCK idle low, DIN = 0).
+    pio_sm_set_pins(pio, sm, 0);
+
+    // Jump to the public entry_point label so the first frame starts cleanly
+    // (LRCK high, about to output the right channel's MSB).
+    pio_sm_exec(pio, sm, pio_encode_jmp(offset + audio_i2s_offset_entry_point));
+}
+%}
