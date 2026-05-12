@@ -1,0 +1,8 @@
+(sym_lib_table
+	(version 7)
+	(lib (name "RP2350") (type "KiCad") (uri "${KIPRJMOD}/external/RP2350_KiCad") (options "") (descr ""))
+	(lib (name "TPD2E001DZDR") (type "KiCad") (uri "${KIPRJMOD}/external/TPD2E001DZDR") (options "") (descr ""))
+	(lib (name "TAD5242IRGER") (type "KiCad") (uri "${KIPRJMOD}/external/TAD5242IRGER") (options "") (descr ""))
+	(lib (name "easyeda2kicad") (type "KiCad") (uri "${KIPRJMOD}/external/easyeda2kicad") (options "") (descr ""))
+	(lib (name "TPD1E10B06DPYR") (type "KiCad") (uri "${KIPRJMOD}/external/TPD1E10B06DPYR") (options "") (descr ""))
+)
