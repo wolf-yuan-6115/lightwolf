@@ -17,7 +17,10 @@
 #include <string.h>
 
 #include "bsp/board_api.h"
+#include "hardware/flash.h"
 #include "hardware/pwm.h"
+#include "hardware/regs/addressmap.h"
+#include "hardware/sync.h"
 #include "pico/stdlib.h"
 #include "tusb.h"
 
@@ -30,6 +33,10 @@
 // GPIO pins for the two status LEDs (active-low, driven via PWM).
 #define LINK_LED_PIN            15u  // Lit when USB audio streaming is active
 #define LOUDNESS_INDICATOR_PIN  14u  // Brightness tracks the audio peak level
+
+// Volume buttons (active-low with pull-ups).
+#define VOLUME_UP_BUTTON_PIN    0u
+#define VOLUME_DOWN_BUTTON_PIN  1u
 
 // Jack detection and indicator GPIOs.
 // GP10/GP11 are active-low jack detect inputs with pull-ups.
@@ -47,6 +54,18 @@
 // ON_LEVEL is 10% of full scale so the LED is visible but not blinding.
 #define LED_PWM_WRAP      255u
 #define LED_PWM_ON_LEVEL  ((LED_PWM_WRAP * 10u) / 100u)
+#define LINK_LED_FLASH_ON_MS  90u
+#define LINK_LED_FLASH_OFF_MS 90u
+
+#define VOLUME_MIN_PERCENT 0u
+#define VOLUME_MAX_PERCENT 100u
+#define VOLUME_STEP_PERCENT 10u
+#define VOLUME_BUTTON_DEBOUNCE_MS 30u
+#define VOLUME_SAVE_DELAY_MS 3000u
+
+#define SETTINGS_FLASH_OFFSET (PICO_FLASH_SIZE_BYTES - FLASH_SECTOR_SIZE)
+#define SETTINGS_MAGIC 0x4C575646u // "LWVF"
+#define SETTINGS_VERSION 1u
 
 // Sample rates advertised to the host via the Clock Source range descriptor.
 // The host picks one and sets it via tud_audio_set_req_entity_cb().
@@ -69,6 +88,194 @@ static uint32_t s_sample_rate_hz = 48000u;
 // callback and consumed by audio_task().  Marked volatile because it is written
 // from a TinyUSB callback (interrupt context) and read from the main loop.
 static volatile uint16_t s_rx_size = 0;
+
+static uint8_t s_output_volume_percent = VOLUME_MAX_PERCENT;
+static uint8_t s_saved_volume_percent = VOLUME_MAX_PERCENT;
+static bool s_volume_dirty = false;
+static uint32_t s_volume_save_deadline_ms = 0;
+
+static bool s_link_led_streaming = false;
+static bool s_link_led_flash_active = false;
+static bool s_link_led_flash_state = false;
+static uint8_t s_link_led_flash_toggles_left = 0;
+static uint32_t s_link_led_flash_next_ms = 0;
+
+typedef struct {
+  bool stable_pressed;
+  bool last_raw_pressed;
+  uint32_t last_raw_change_ms;
+} button_state_t;
+
+static button_state_t s_vol_up_btn = {0};
+static button_state_t s_vol_down_btn = {0};
+
+typedef struct __attribute__((packed)) {
+  uint32_t magic;
+  uint8_t version;
+  uint8_t volume_percent;
+  uint8_t reserved0;
+  uint8_t reserved1;
+  uint32_t checksum;
+} persisted_settings_t;
+
+static void led_set(uint pin, bool on);
+
+static uint32_t settings_checksum(uint8_t volume_percent) {
+  return SETTINGS_MAGIC ^ ((uint32_t) SETTINGS_VERSION << 24u) ^ ((uint32_t) volume_percent << 8u) ^ 0xA55AA55Au;
+}
+
+static void led_set_link(bool on) {
+  led_set(LINK_LED_PIN, on);
+}
+
+static void link_led_apply_current_state(void) {
+  if (s_link_led_flash_active) {
+    led_set_link(s_link_led_flash_state);
+  } else {
+    led_set_link(s_link_led_streaming);
+  }
+}
+
+static void link_led_start_flash(uint8_t flashes) {
+  if (flashes == 0) {
+    return;
+  }
+  s_link_led_flash_active = true;
+  s_link_led_flash_state = true;
+  s_link_led_flash_toggles_left = (uint8_t) (flashes * 2u - 1u); // Start ON immediately, then toggle remaining edges.
+  s_link_led_flash_next_ms = to_ms_since_boot(get_absolute_time()) + LINK_LED_FLASH_ON_MS;
+  link_led_apply_current_state();
+}
+
+static void link_led_task(void) {
+  if (!s_link_led_flash_active) {
+    return;
+  }
+  uint32_t now_ms = to_ms_since_boot(get_absolute_time());
+  if ((int32_t) (now_ms - s_link_led_flash_next_ms) < 0) {
+    return;
+  }
+
+  s_link_led_flash_state = !s_link_led_flash_state;
+  if (s_link_led_flash_toggles_left > 0) {
+    s_link_led_flash_toggles_left--;
+  }
+  if (s_link_led_flash_toggles_left == 0u) {
+    s_link_led_flash_active = false;
+    link_led_apply_current_state();
+    return;
+  }
+
+  s_link_led_flash_next_ms = now_ms + (s_link_led_flash_state ? LINK_LED_FLASH_ON_MS : LINK_LED_FLASH_OFF_MS);
+  link_led_apply_current_state();
+}
+
+static bool button_poll_pressed(button_state_t *state, bool raw_pressed, uint32_t now_ms) {
+  if (raw_pressed != state->last_raw_pressed) {
+    state->last_raw_pressed = raw_pressed;
+    state->last_raw_change_ms = now_ms;
+  }
+  if ((int32_t) (now_ms - state->last_raw_change_ms) >= (int32_t) VOLUME_BUTTON_DEBOUNCE_MS &&
+      state->stable_pressed != state->last_raw_pressed) {
+    state->stable_pressed = state->last_raw_pressed;
+    return state->stable_pressed;
+  }
+  return false;
+}
+
+static bool load_persisted_settings(void) {
+  persisted_settings_t const *stored = (persisted_settings_t const *) (XIP_BASE + SETTINGS_FLASH_OFFSET);
+  if (stored->magic != SETTINGS_MAGIC || stored->version != SETTINGS_VERSION) {
+    return false;
+  }
+  if (stored->volume_percent > VOLUME_MAX_PERCENT) {
+    return false;
+  }
+  if (stored->checksum != settings_checksum(stored->volume_percent)) {
+    return false;
+  }
+
+  s_output_volume_percent = stored->volume_percent;
+  s_saved_volume_percent = stored->volume_percent;
+  return true;
+}
+
+static void save_persisted_settings(void) {
+  uint8_t page_buf[FLASH_PAGE_SIZE];
+  memset(page_buf, 0xFF, sizeof(page_buf));
+
+  persisted_settings_t settings = {
+      .magic = SETTINGS_MAGIC,
+      .version = SETTINGS_VERSION,
+      .volume_percent = s_output_volume_percent,
+      .reserved0 = 0,
+      .reserved1 = 0,
+      .checksum = settings_checksum(s_output_volume_percent),
+  };
+  memcpy(page_buf, &settings, sizeof(settings));
+
+  uint32_t irq_state = save_and_disable_interrupts();
+  flash_range_erase(SETTINGS_FLASH_OFFSET, FLASH_SECTOR_SIZE);
+  flash_range_program(SETTINGS_FLASH_OFFSET, page_buf, FLASH_PAGE_SIZE);
+  restore_interrupts(irq_state);
+
+  s_saved_volume_percent = s_output_volume_percent;
+}
+
+static void volume_buttons_init(void) {
+  gpio_init(VOLUME_UP_BUTTON_PIN);
+  gpio_set_dir(VOLUME_UP_BUTTON_PIN, GPIO_IN);
+  gpio_pull_up(VOLUME_UP_BUTTON_PIN);
+  s_vol_up_btn.last_raw_pressed = !gpio_get(VOLUME_UP_BUTTON_PIN);
+  s_vol_up_btn.stable_pressed = s_vol_up_btn.last_raw_pressed;
+  s_vol_up_btn.last_raw_change_ms = to_ms_since_boot(get_absolute_time());
+
+  gpio_init(VOLUME_DOWN_BUTTON_PIN);
+  gpio_set_dir(VOLUME_DOWN_BUTTON_PIN, GPIO_IN);
+  gpio_pull_up(VOLUME_DOWN_BUTTON_PIN);
+  s_vol_down_btn.last_raw_pressed = !gpio_get(VOLUME_DOWN_BUTTON_PIN);
+  s_vol_down_btn.stable_pressed = s_vol_down_btn.last_raw_pressed;
+  s_vol_down_btn.last_raw_change_ms = to_ms_since_boot(get_absolute_time());
+}
+
+static void apply_volume_step(int8_t delta_percent) {
+  int16_t next = (int16_t) s_output_volume_percent + delta_percent;
+  if (next < (int16_t) VOLUME_MIN_PERCENT) {
+    next = (int16_t) VOLUME_MIN_PERCENT;
+  } else if (next > (int16_t) VOLUME_MAX_PERCENT) {
+    next = (int16_t) VOLUME_MAX_PERCENT;
+  }
+
+  if ((uint8_t) next == s_output_volume_percent) {
+    link_led_start_flash(2);
+    return;
+  }
+
+  s_output_volume_percent = (uint8_t) next;
+  s_volume_dirty = true;
+  s_volume_save_deadline_ms = to_ms_since_boot(get_absolute_time()) + VOLUME_SAVE_DELAY_MS;
+  link_led_start_flash(1);
+}
+
+static void volume_buttons_task(void) {
+  uint32_t now_ms = to_ms_since_boot(get_absolute_time());
+
+  if (button_poll_pressed(&s_vol_up_btn, !gpio_get(VOLUME_UP_BUTTON_PIN), now_ms)) {
+    apply_volume_step((int8_t) VOLUME_STEP_PERCENT);
+  }
+  if (button_poll_pressed(&s_vol_down_btn, !gpio_get(VOLUME_DOWN_BUTTON_PIN), now_ms)) {
+    apply_volume_step(-(int8_t) VOLUME_STEP_PERCENT);
+  }
+
+  if (s_volume_dirty && (int32_t) (now_ms - s_volume_save_deadline_ms) >= 0) {
+    if (s_output_volume_percent != s_saved_volume_percent) {
+      save_persisted_settings();
+    }
+    s_volume_dirty = false;
+  }
+
+  link_led_task();
+}
 
 // Initialise a GPIO pin as a PWM-driven LED output.
 // The PWM counter runs 0–255; polarity is inverted because the LEDs are
@@ -199,9 +406,13 @@ static void audio_task(void) {
       uint16_t led_level = (uint16_t)((peak * LED_PWM_WRAP) / (32768u * 3u));
       led_set_level(LOUDNESS_INDICATOR_PIN, led_level);
       
-      // Apply -3dB attenuation to samples for I2S output: multiply by ~0.707 (181/256)
+      // Apply -3dB attenuation and button-controlled output volume.
       for (uint16_t i = 0; i < num_samples; i++) {
-        sample_buf[i] = (int16_t)((sample_buf[i] * 181) / 256);
+        int32_t scaled = (int32_t) sample_buf[i] * 181 * (int32_t) s_output_volume_percent;
+        scaled /= (256 * 100);
+        if (scaled > 32767) scaled = 32767;
+        if (scaled < -32768) scaled = -32768;
+        sample_buf[i] = (int16_t) scaled;
       }
     }
 
@@ -344,7 +555,10 @@ bool tud_audio_set_itf_close_EP_cb(uint8_t rhport, tusb_control_request_t const 
   (void) rhport;
   uint8_t const itf = tu_u16_low(tu_le16toh(p_request->wIndex));
   uint8_t const alt = tu_u16_low(tu_le16toh(p_request->wValue));
-  if (itf == ITF_NUM_AUDIO_STREAMING && alt == 0) led_set(LINK_LED_PIN, false);
+  if (itf == ITF_NUM_AUDIO_STREAMING && alt == 0) {
+    s_link_led_streaming = false;
+    link_led_apply_current_state();
+  }
   return true;
 }
 
@@ -356,7 +570,8 @@ bool tud_audio_set_itf_cb(uint8_t rhport, tusb_control_request_t const *p_reques
   uint8_t const itf = tu_u16_low(tu_le16toh(p_request->wIndex));
   uint8_t const alt = tu_u16_low(tu_le16toh(p_request->wValue));
   if (itf == ITF_NUM_AUDIO_STREAMING) {
-    led_set(LINK_LED_PIN, alt != 0);
+    s_link_led_streaming = (alt != 0);
+    link_led_apply_current_state();
     s_rx_size = 0;
   }
   return true;
@@ -438,12 +653,15 @@ void tud_audio_feedback_params_cb(uint8_t func_id, uint8_t alt_itf, audio_feedba
 int main(void) {
   board_init();
 
+  load_persisted_settings();
   jack_detection_init();
+  volume_buttons_init();
 
   // Initialise both status LEDs and ensure they start off.
   led_pwm_init(LINK_LED_PIN);
   led_pwm_init(LOUDNESS_INDICATOR_PIN);
-  led_set(LINK_LED_PIN, false);
+  s_link_led_streaming = false;
+  link_led_apply_current_state();
   led_set(LOUDNESS_INDICATOR_PIN, false);
 
   // Start the I2S output driver (plays silence until USB audio arrives).
@@ -462,5 +680,6 @@ int main(void) {
     tud_task();    // TinyUSB internal event pump (must be called regularly)
     audio_task();  // Drain USB receive buffer → I2S ring buffer
     jack_detection_task();
+    volume_buttons_task();
   }
 }

@@ -35,6 +35,7 @@ target_link_libraries(rp2350_usb_dac PRIVATE
   hardware_irq
   hardware_clocks
   hardware_pwm
+  hardware_flash
   m
 )
 

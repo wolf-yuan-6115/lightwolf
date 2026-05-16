@@ -8,35 +8,35 @@
 // The side-set field drives both clock lines simultaneously on every instruction:
 //   side 0bXY  →  X = BCLK level, Y = LRCK level
 //
-// I2S timing for one 32-bit stereo frame (left word then right word):
+// I2S timing for one 64-bit stereo frame (right slot then left slot in this
+// program's execution order):
 //   - LRCK low  (0) = left  channel (32 bits, MSB first)
 //   - LRCK high (1) = right channel (32 bits, MSB first)
 //   - BCLK toggles once per bit (data is stable on the rising edge)
 //
 // Each iteration of bitloop1/bitloop0 outputs one bit and toggles BCLK.
-// The set x, 14 loads the loop counter for 15 remaining bits (bits 30..16);
+// The set x, 30 loads the loop counter for 31 remaining bits (bits 30..0);
 // the two explicit "out pins, 1" instructions outside the loop handle
-// bits 31 (MSB) and 15 (the channel boundary bit), giving 32 bits total
-// per channel.  With 2 cycles per bit × 32 bits = 64 SM cycles per frame.
+// bits 31 (MSB) and the channel-boundary bit, giving 32 bits total per channel.
+// With 2 cycles per bit × 64 bits = 128 SM cycles per frame.
 
 .program audio_i2s
 .side_set 2
 
-// ---- Left channel (LRCK = 0) ----
-// Output bit 31 (MSB) of the left sample with BCLK low, then high.
+// ---- LRCK = 1 slot (right channel) ----
 bitloop1:
     out pins, 1       side 0b01  // LRCK=1(right), BCLK=0: shift next data bit out; data set up before rising edge
     jmp x-- bitloop1  side 0b11  // LRCK=1, BCLK=1: rising edge - receiver latches bit; loop if bits remain
     out pins, 1       side 0b00  // LRCK=0(left),  BCLK=0: output last bit of right / first bit of left
-    set x, 14         side 0b10  // LRCK=0, BCLK=1: latch bit; reload counter for 15 more left-channel bits
+    set x, 30         side 0b10  // LRCK=0, BCLK=1: latch bit; reload counter for 31 more left-channel bits
 
-// ---- Right channel (LRCK = 1) ----
+// ---- LRCK = 0 slot (left channel) ----
 bitloop0:
     out pins, 1       side 0b00  // LRCK=0, BCLK=0: shift next data bit out
     jmp x-- bitloop0  side 0b10  // LRCK=0, BCLK=1: latch bit; loop if bits remain
     out pins, 1       side 0b01  // LRCK=1(right), BCLK=0: output first bit of right channel
 public entry_point:
-    set x, 14         side 0b11  // LRCK=1, BCLK=1: latch bit; reload counter; this is the program wrap target
+    set x, 30         side 0b11  // LRCK=1, BCLK=1: latch bit; reload counter; this is the program wrap target
 
 % c-sdk {
 // Initialize the I2S PIO state machine.
