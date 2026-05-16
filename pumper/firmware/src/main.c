@@ -9,7 +9,7 @@
 //   • Supports 44.1 / 48 / 96 / 192 kHz sample rates (host-selectable)
 //   • Per-channel mute and volume control via UAC2 Feature Unit
 //   • Red LED indicates active USB audio streaming
-//   • Blue LED shows audio level (peak VU meter, ~33% max brightness)
+//   • Blue LED shows audio level (peak VU meter, full max brightness)
 //   • -3 dB software attenuation applied before I2S output
 
 #include <stdbool.h>
@@ -32,9 +32,10 @@
 #define LED_BLUE_PIN  9u  // Brightness tracks the audio peak level
 
 // PWM configuration: 8-bit counter (wrap = 255).
-// ON_LEVEL is 10% of full scale so the LED is visible but not blinding.
+// Red LED fixed ON level is 50% of full scale.
 #define LED_PWM_WRAP      255u
-#define LED_PWM_ON_LEVEL  ((LED_PWM_WRAP * 10u) / 100u)
+#define LED_PWM_ON_LEVEL  ((LED_PWM_WRAP * 50u) / 100u)
+#define LED_BLUE_MAX_PCT  100u
 
 // Sample rates advertised to the host via the Clock Source range descriptor.
 // The host picks one and sets it via tud_audio_set_req_entity_cb().
@@ -142,8 +143,8 @@ static void audio_task(void) {
         if (abs_sample > peak) peak = abs_sample;
       }
       
-      // Map peak (0-32768) to LED brightness at ~33% (0-85) for reduced brightness
-      uint16_t led_level = (uint16_t)((peak * LED_PWM_WRAP) / (32768u * 3u));
+      // Map peak (0-32768) to LED brightness capped at full PWM range.
+      uint16_t led_level = (uint16_t) ((peak * LED_PWM_WRAP * LED_BLUE_MAX_PCT) / (32768u * 100u));
       led_set_level(LED_BLUE_PIN, led_level);
       
       // Apply -3dB attenuation to samples for I2S output: multiply by ~0.707 (181/256)

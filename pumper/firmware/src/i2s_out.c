@@ -18,6 +18,7 @@
 
 #include "hardware/dma.h"
 #include "hardware/irq.h"
+#include "hardware/clocks.h"
 #include "hardware/pio.h"
 #include "hardware/sync.h"
 #include "pico/stdlib.h"
