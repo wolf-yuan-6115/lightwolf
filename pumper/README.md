@@ -8,6 +8,12 @@ This is a experimental project to learn about USB audio and DAC design. The boar
 
 ![PCB](assets/board.png)
 
+---
+
+Build result
+
+![Result](./assets/made.png)
+
 ## BOM
 
 | Name         | Cost        |
