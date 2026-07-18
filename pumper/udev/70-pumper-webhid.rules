@@ -1,0 +1,2 @@
+# Allow the active desktop session to open the Pumper vendor HID interface.
+ACTION!="remove", SUBSYSTEM=="hidraw", KERNEL=="hidraw*", ATTRS{idVendor}=="2e8a", ATTRS{idProduct}=="f10a", MODE:="0660", TAG+="uaccess"
