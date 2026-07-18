@@ -2,10 +2,10 @@
 
 #include <math.h>
 #include <stdbool.h>
-
-#include "eq_config.h"
+#include <string.h>
 
 #define EQ_PI 3.14159265358979323846f
+#define EQ_TRANSITION_MS 10u
 
 typedef struct {
   float b0;
@@ -13,33 +13,37 @@ typedef struct {
   float b2;
   float a1;
   float a2;
+} eq_coefficients_t;
+
+typedef struct {
+  eq_coefficients_t current;
+  eq_coefficients_t target;
   float z1_l;
   float z2_l;
   float z1_r;
   float z2_r;
-  bool enabled;
 } eq_biquad_t;
 
 static eq_biquad_t s_bands[EQ_NUM_FILTERS];
-static uint8_t s_active_band_idx[EQ_NUM_FILTERS];
-static uint32_t s_active_band_count = 0u;
-static float s_preamp_linear = 1.0f;
+static eq_config_t s_config;
+static float s_preamp_current = 1.0f;
+static float s_preamp_target = 1.0f;
+static uint32_t s_transition_frames = 1u;
+static uint32_t s_transition_remaining = 0u;
 static uint32_t s_sample_rate_hz = 48000u;
+
+static eq_coefficients_t const k_identity = {1.0f, 0.0f, 0.0f, 0.0f, 0.0f};
 
 static float db_to_linear(float gain_db) {
   return powf(10.0f, gain_db / 20.0f);
 }
 
-static float eq_process_one(float x, eq_biquad_t *band, bool right_channel) {
-  if (!band->enabled) {
-    return x;
-  }
-
+static float process_one(float x, eq_biquad_t *band, bool right_channel) {
   float z1 = right_channel ? band->z1_r : band->z1_l;
   float z2 = right_channel ? band->z2_r : band->z2_l;
-  float y = band->b0 * x + z1;
-  float new_z1 = band->b1 * x - band->a1 * y + z2;
-  float new_z2 = band->b2 * x - band->a2 * y;
+  float y = band->current.b0 * x + z1;
+  float new_z1 = band->current.b1 * x - band->current.a1 * y + z2;
+  float new_z2 = band->current.b2 * x - band->current.a2 * y;
 
   if (right_channel) {
     band->z1_r = new_z1;
@@ -48,24 +52,19 @@ static float eq_process_one(float x, eq_biquad_t *band, bool right_channel) {
     band->z1_l = new_z1;
     band->z2_l = new_z2;
   }
-
   return y;
 }
 
-static bool eq_build_biquad_coefficients(eq_biquad_t *band, eq_filter_config_t const *cfg, float fs, float nyquist) {
-  if (cfg->frequency_hz <= 0.0f || cfg->frequency_hz >= nyquist) {
-    return false;
-  }
-
-  float gain_db = cfg->gain_db;
-  if (fabsf(gain_db) < 0.0001f) {
-    return false;
+static bool build_coefficients(eq_coefficients_t *out, eq_filter_config_t const *cfg, float fs) {
+  if (!cfg->enabled || fabsf(cfg->gain_db) < 0.0001f || cfg->frequency_hz >= fs * 0.5f) {
+    *out = k_identity;
+    return true;
   }
 
   float w0 = 2.0f * EQ_PI * cfg->frequency_hz / fs;
   float sin_w0 = sinf(w0);
   float cos_w0 = cosf(w0);
-  float a = powf(10.0f, gain_db / 40.0f);
+  float a = powf(10.0f, cfg->gain_db / 40.0f);
   float b0;
   float b1;
   float b2;
@@ -75,17 +74,11 @@ static bool eq_build_biquad_coefficients(eq_biquad_t *band, eq_filter_config_t c
 
   if (cfg->type == EQ_FILTER_PEAKING) {
     float alpha;
-    if (cfg->bw_octaves > 0.0f) {
-      if (fabsf(sin_w0) < 1e-12f) {
-        return false;
-      }
+    if (cfg->width_mode == EQ_WIDTH_BANDWIDTH) {
+      if (fabsf(sin_w0) < 1e-12f) return false;
       alpha = sin_w0 * sinhf((logf(2.0f) * 0.5f) * cfg->bw_octaves * (w0 / sin_w0));
     } else {
-      float q = cfg->q;
-      if (q <= 0.0f) {
-        return false;
-      }
-      alpha = sin_w0 / (2.0f * q);
+      alpha = sin_w0 / (2.0f * cfg->q);
     }
     b0 = 1.0f + alpha * a;
     b1 = -2.0f * cos_w0;
@@ -93,14 +86,10 @@ static bool eq_build_biquad_coefficients(eq_biquad_t *band, eq_filter_config_t c
     a0 = 1.0f + alpha / a;
     a1 = -2.0f * cos_w0;
     a2 = 1.0f - alpha / a;
-  } else if (cfg->type == EQ_FILTER_LOW_SHELF || cfg->type == EQ_FILTER_HIGH_SHELF) {
-    float shelf_s = cfg->q;
-    if (shelf_s <= 0.0f) {
-      return false;
-    }
-    float alpha = sin_w0 * 0.5f * sqrtf((a + (1.0f / a)) * ((1.0f / shelf_s) - 1.0f) + 2.0f);
+  } else {
+    float slope = cfg->q;
+    float alpha = sin_w0 * 0.5f * sqrtf((a + (1.0f / a)) * ((1.0f / slope) - 1.0f) + 2.0f);
     float two_sqrt_a_alpha = 2.0f * sqrtf(a) * alpha;
-
     if (cfg->type == EQ_FILTER_LOW_SHELF) {
       b0 = a * ((a + 1.0f) - (a - 1.0f) * cos_w0 + two_sqrt_a_alpha);
       b1 = 2.0f * a * ((a - 1.0f) - (a + 1.0f) * cos_w0);
@@ -116,23 +105,14 @@ static bool eq_build_biquad_coefficients(eq_biquad_t *band, eq_filter_config_t c
       a1 = 2.0f * ((a - 1.0f) - (a + 1.0f) * cos_w0);
       a2 = (a + 1.0f) - (a - 1.0f) * cos_w0 - two_sqrt_a_alpha;
     }
-  } else {
-    return false;
   }
 
-  if (fabsf(a0) < 1e-12f) {
-    return false;
-  }
-
-  band->b0 = b0 / a0;
-  band->b1 = b1 / a0;
-  band->b2 = b2 / a0;
-  band->a1 = a1 / a0;
-  band->a2 = a2 / a0;
+  if (fabsf(a0) < 1e-12f) return false;
+  *out = (eq_coefficients_t){b0 / a0, b1 / a0, b2 / a0, a1 / a0, a2 / a0};
   return true;
 }
 
-static void eq_reset_state(void) {
+static void reset_states(void) {
   for (uint32_t i = 0; i < EQ_NUM_FILTERS; i++) {
     s_bands[i].z1_l = 0.0f;
     s_bands[i].z2_l = 0.0f;
@@ -141,79 +121,93 @@ static void eq_reset_state(void) {
   }
 }
 
-static void eq_rebuild_coefficients(void) {
-  if (!EQ_ENABLED) {
-    s_preamp_linear = 1.0f;
-    s_active_band_count = 0u;
-    eq_reset_state();
-    return;
-  }
-
-  s_preamp_linear = db_to_linear(EQ_PREAMP_DB);
-  s_active_band_count = 0u;
-
-  float fs = (float) s_sample_rate_hz;
-  float nyquist = fs * 0.5f;
-
+static bool rebuild_targets(eq_config_t const *config, bool immediate) {
+  eq_coefficients_t next[EQ_NUM_FILTERS];
   for (uint32_t i = 0; i < EQ_NUM_FILTERS; i++) {
-    eq_biquad_t *band = &s_bands[i];
-    band->enabled = false;
-    band->b0 = 1.0f;
-    band->b1 = 0.0f;
-    band->b2 = 0.0f;
-    band->a1 = 0.0f;
-    band->a2 = 0.0f;
-
-    if (!eq_build_biquad_coefficients(band, &k_eq_filters[i], fs, nyquist)) {
-      continue;
+    if (!config->enabled) {
+      next[i] = k_identity;
+    } else if (!build_coefficients(&next[i], &config->filters[i], (float)s_sample_rate_hz)) {
+      return false;
     }
-    band->enabled = true;
-    s_active_band_idx[s_active_band_count++] = (uint8_t) i;
   }
 
-  eq_reset_state();
+  s_config = *config;
+  s_preamp_target = config->enabled ? db_to_linear(config->preamp_db) : 1.0f;
+  for (uint32_t i = 0; i < EQ_NUM_FILTERS; i++) {
+    s_bands[i].target = next[i];
+    if (immediate) s_bands[i].current = next[i];
+  }
+  if (immediate) {
+    s_preamp_current = s_preamp_target;
+    s_transition_remaining = 0u;
+  } else {
+    s_transition_remaining = s_transition_frames;
+  }
+  return true;
 }
 
-void eq_init(uint32_t sample_rate_hz) {
-  eq_set_sample_rate(sample_rate_hz);
+static float move_toward(float current, float target, float fraction) {
+  return current + (target - current) * fraction;
+}
+
+static void advance_transition(void) {
+  if (s_transition_remaining == 0u) return;
+  float fraction = 1.0f / (float)s_transition_remaining;
+  s_preamp_current = move_toward(s_preamp_current, s_preamp_target, fraction);
+  for (uint32_t i = 0; i < EQ_NUM_FILTERS; i++) {
+    eq_coefficients_t *current = &s_bands[i].current;
+    eq_coefficients_t const *target = &s_bands[i].target;
+    current->b0 = move_toward(current->b0, target->b0, fraction);
+    current->b1 = move_toward(current->b1, target->b1, fraction);
+    current->b2 = move_toward(current->b2, target->b2, fraction);
+    current->a1 = move_toward(current->a1, target->a1, fraction);
+    current->a2 = move_toward(current->a2, target->a2, fraction);
+  }
+  s_transition_remaining--;
+}
+
+void eq_init(uint32_t sample_rate_hz, eq_config_t const *config) {
+  s_sample_rate_hz = sample_rate_hz == 0u ? 48000u : sample_rate_hz;
+  s_transition_frames = (s_sample_rate_hz * EQ_TRANSITION_MS) / 1000u;
+  if (s_transition_frames == 0u) s_transition_frames = 1u;
+  memset(s_bands, 0, sizeof(s_bands));
+  for (uint32_t i = 0; i < EQ_NUM_FILTERS; i++) s_bands[i].current = k_identity;
+  eq_config_t initial = k_eq_default_config;
+  if (config != NULL && eq_config_validate(config)) initial = *config;
+  (void)rebuild_targets(&initial, true);
+  reset_states();
 }
 
 void eq_set_sample_rate(uint32_t sample_rate_hz) {
-  if (sample_rate_hz == 0u) {
-    return;
-  }
-
+  if (sample_rate_hz == 0u || sample_rate_hz == s_sample_rate_hz) return;
   s_sample_rate_hz = sample_rate_hz;
-  eq_rebuild_coefficients();
+  s_transition_frames = (s_sample_rate_hz * EQ_TRANSITION_MS) / 1000u;
+  if (s_transition_frames == 0u) s_transition_frames = 1u;
+  (void)rebuild_targets(&s_config, true);
+  reset_states();
+}
+
+bool eq_set_config(eq_config_t const *config) {
+  if (!eq_config_validate(config)) return false;
+  return rebuild_targets(config, false);
 }
 
 void eq_process_interleaved_stereo16(int16_t *interleaved, size_t frame_count) {
-  if (!EQ_ENABLED) {
-    return;
-  }
-  if (interleaved == NULL || frame_count == 0u) {
-    return;
-  }
-  if (s_active_band_count == 0u && fabsf(s_preamp_linear - 1.0f) < 0.0001f) {
-    return;
-  }
+  if (interleaved == NULL || frame_count == 0u) return;
 
   for (size_t frame = 0; frame < frame_count; frame++) {
-    float left = (float) interleaved[frame * 2u] * s_preamp_linear;
-    float right = (float) interleaved[frame * 2u + 1u] * s_preamp_linear;
-
-    for (uint32_t i = 0; i < s_active_band_count; i++) {
-      eq_biquad_t *band = &s_bands[s_active_band_idx[i]];
-      left = eq_process_one(left, band, false);
-      right = eq_process_one(right, band, true);
+    advance_transition();
+    float left = (float)interleaved[frame * 2u] * s_preamp_current;
+    float right = (float)interleaved[frame * 2u + 1u] * s_preamp_current;
+    for (uint32_t i = 0; i < EQ_NUM_FILTERS; i++) {
+      left = process_one(left, &s_bands[i], false);
+      right = process_one(right, &s_bands[i], true);
     }
-
     if (left > 32767.0f) left = 32767.0f;
     if (left < -32768.0f) left = -32768.0f;
     if (right > 32767.0f) right = 32767.0f;
     if (right < -32768.0f) right = -32768.0f;
-
-    interleaved[frame * 2u] = (int16_t) lrintf(left);
-    interleaved[frame * 2u + 1u] = (int16_t) lrintf(right);
+    interleaved[frame * 2u] = (int16_t)lrintf(left);
+    interleaved[frame * 2u + 1u] = (int16_t)lrintf(right);
   }
 }

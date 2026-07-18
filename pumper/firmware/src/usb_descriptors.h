@@ -10,6 +10,7 @@
 enum {
   ITF_NUM_AUDIO_CONTROL = 0,  // UAC2 Audio Control interface
   ITF_NUM_AUDIO_STREAMING,    // UAC2 Audio Streaming interface (alts 0 and 1)
+  ITF_NUM_HID,                // Vendor-defined WebHID EQ control interface
   ITF_NUM_TOTAL               // Total interface count (used by config descriptor)
 };
 
@@ -20,6 +21,7 @@ enum {
   STRID_PRODUCT,       // Product name
   STRID_SERIAL,        // Serial number (from hardware unique ID)
   STRID_AUDIO_IF,      // Audio interface name shown by the OS
+  STRID_HID_IF,        // WebHID EQ control interface
 };
 
 // UAC2 Audio Control entity IDs referenced in audio-control requests.

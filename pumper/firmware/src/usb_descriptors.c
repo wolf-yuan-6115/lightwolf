@@ -26,18 +26,42 @@
 // VID 0x2E8A is Raspberry Pi's USB VID.
 #define USB_VID 0x2E8A
 #define USB_PID 0xF10A
-#define USB_BCD 0x0100  // Device release number (BCD): 1.00
+#define USB_BCD 0x0101  // Device release number (BCD): 1.01
 
 // Endpoint numbers for audio data and SOF feedback.
 // EPNUM_AUDIO_OUT is a host→device (OUT) isochronous endpoint.
 // EPNUM_AUDIO_FB  is a device→host (IN)  isochronous feedback endpoint (0x81 = EP1 IN).
 enum {
   EPNUM_AUDIO_OUT = 0x01,
-  EPNUM_AUDIO_FB = 0x81
+  EPNUM_AUDIO_FB = 0x81,
+  EPNUM_HID_OUT = 0x02,
+  EPNUM_HID_IN = 0x82,
 };
 
 // Total byte length of the full Configuration descriptor (all interfaces combined).
-#define CONFIG_TOTAL_LEN (TUD_CONFIG_DESC_LEN + TUD_AUDIO_SPEAKER_STEREO_FB_DESC_LEN)
+#define CONFIG_TOTAL_LEN (TUD_CONFIG_DESC_LEN + TUD_AUDIO_SPEAKER_STEREO_FB_DESC_LEN + TUD_HID_INOUT_DESC_LEN)
+
+// One vendor-defined collection with fixed 64-byte input and output reports.
+// Report IDs are intentionally omitted, so WebHID uses report ID 0.
+static uint8_t const desc_hid_report[] = {
+    0x06, 0x00, 0xff,  // Usage Page (Vendor 0xff00)
+    0x09, 0x01,        // Usage (Pumper EQ Control)
+    0xa1, 0x01,        // Collection (Application)
+    0x15, 0x00,        // Logical Minimum (0)
+    0x26, 0xff, 0x00,  // Logical Maximum (255)
+    0x75, 0x08,        // Report Size (8 bits)
+    0x95, 0x40,        // Report Count (64 bytes)
+    0x09, 0x02,        // Usage (Response)
+    0x81, 0x02,        // Input (Data, Variable, Absolute)
+    0x09, 0x03,        // Usage (Command)
+    0x91, 0x02,        // Output (Data, Variable, Absolute)
+    0xc0,              // End Collection
+};
+
+uint8_t const *tud_hid_descriptor_report_cb(uint8_t instance) {
+  (void)instance;
+  return desc_hid_report;
+}
 
 // Standard USB Device descriptor — identifies the device to the host.
 // bDeviceClass = MISC / IAD signals that interface associations are used.
@@ -70,6 +94,8 @@ static uint8_t const desc_configuration[] = {
     TUD_AUDIO_SPEAKER_STEREO_FB_DESCRIPTOR(ITF_NUM_AUDIO_CONTROL, STRID_AUDIO_IF,
         CFG_TUD_AUDIO_FUNC_1_N_BYTES_PER_SAMPLE_RX, CFG_TUD_AUDIO_FUNC_1_RESOLUTION_RX,
         EPNUM_AUDIO_OUT, CFG_TUD_AUDIO_FUNC_1_EP_OUT_SZ_MAX, EPNUM_AUDIO_FB, 4),
+    TUD_HID_INOUT_DESCRIPTOR(ITF_NUM_HID, STRID_HID_IF, HID_ITF_PROTOCOL_NONE, sizeof(desc_hid_report),
+        EPNUM_HID_OUT, EPNUM_HID_IN, CFG_TUD_HID_EP_BUFSIZE, 1),
 };
 
 // TinyUSB callback: return the configuration descriptor (index is ignored since
@@ -85,12 +111,14 @@ uint8_t const *tud_descriptor_configuration_cb(uint8_t index) {
 //   [2] Product
 //   [3] Serial number (generated at runtime from board hardware ID)
 //   [4] Audio interface name
+//   [5] HID control interface name
 static char const *string_desc_arr[] = {
     (const char[]) {0x09, 0x04},  // STRID_LANGID: US English (0x0409)
     "LightWolf",                  // STRID_MANUFACTURER
     "Pumper USB DAC",             // STRID_PRODUCT
     NULL,                         // STRID_SERIAL (filled in dynamically)
     "LightWolf Pumper DAC",       // STRID_AUDIO_IF
+    "Pumper EQ Control",          // STRID_HID_IF
 };
 
 // Temporary buffer used to build UTF-16LE string descriptors on demand.

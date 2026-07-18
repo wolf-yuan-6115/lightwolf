@@ -9,8 +9,8 @@
 //   • Supports 44.1 / 48 / 96 / 192 kHz sample rates (host-selectable)
 //   • Per-channel mute and volume control via UAC2 Feature Unit
 //   • Red LED indicates active USB audio streaming
-//   • Blue LED shows audio level (peak VU meter, full max brightness)
-//   • -3 dB software attenuation applied before I2S output
+//   • Blue LED shows audio level, capped at the configured LED on-level
+//   • Runtime-configurable ten-band parametric EQ controlled over WebHID
 
 #include <stdbool.h>
 #include <stdint.h>
@@ -18,24 +18,35 @@
 
 #include "bsp/board_api.h"
 #include "hardware/pwm.h"
+#include "pico/critical_section.h"
+#include "pico/multicore.h"
 #include "pico/stdlib.h"
+#include "pico/util/queue.h"
 #include "tusb.h"
 
+#include "eq_config.h"
+#include "eq_dsp.h"
+#include "eq_protocol.h"
+#include "eq_settings.h"
 #include "i2s_out.h"
 #include "usb_descriptors.h"
 
 #define AUDIO_CHANNELS   2u   // Stereo: left + right
 #define AUDIO_FRAME_BYTES 4u  // 2 bytes/sample × 2 channels = 4 bytes per stereo frame
+#define AUDIO_BLOCK_COUNT 8u
+#define METER_REPORT_INTERVAL_MIN_MS 20u
+#define METER_REPORT_INTERVAL_MAX_MS 250u
+#define METER_TIMEOUT_MIN_MS 250u
+#define METER_TIMEOUT_MAX_MS 5000u
 
 // GPIO pins for the two status LEDs (active-low, driven via PWM).
 #define LED_RED_PIN  10u  // Lit when USB audio streaming is active
 #define LED_BLUE_PIN  9u  // Brightness tracks the audio peak level
 
 // PWM configuration: 8-bit counter (wrap = 255).
-// Red LED fixed ON level is 50% of full scale.
+// ON_LEVEL is 40% of full scale so the LEDs are visible but not blinding.
 #define LED_PWM_WRAP      255u
-#define LED_PWM_ON_LEVEL  ((LED_PWM_WRAP * 50u) / 100u)
-#define LED_BLUE_MAX_PCT  100u
+#define LED_PWM_ON_LEVEL  ((LED_PWM_WRAP * 40u) / 100u)
 
 // Sample rates advertised to the host via the Clock Source range descriptor.
 // The host picks one and sets it via tud_audio_set_req_entity_cb().
@@ -52,12 +63,62 @@ static int16_t s_volume_q8[AUDIO_CHANNELS + 1];
 
 // Currently active sample rate; updated when the host sends a SET_CUR request
 // to the Clock Source entity.
-static uint32_t s_sample_rate_hz = 48000u;
+static volatile uint32_t s_sample_rate_hz = 48000u;
 
-// Byte count of the most recent USB isochronous packet, set in the pre-read
-// callback and consumed by audio_task().  Marked volatile because it is written
-// from a TinyUSB callback (interrupt context) and read from the main loop.
-static volatile uint16_t s_rx_size = 0;
+// Fixed pool passed from core 0 (USB) to core 1 (DSP) without allocating.
+typedef struct {
+  uint16_t frames;
+  uint32_t stream_generation;
+  int16_t samples[CFG_TUD_AUDIO_FUNC_1_EP_OUT_SZ_MAX / sizeof(int16_t)];
+} audio_block_t;
+
+static audio_block_t s_audio_blocks[AUDIO_BLOCK_COUNT];
+static queue_t s_free_audio_blocks;
+static queue_t s_pending_audio_blocks;
+
+static critical_section_t s_config_lock;
+static eq_config_t s_desired_config;
+static eq_config_t s_saved_config;
+static volatile uint32_t s_config_generation = 1u;
+static volatile uint32_t s_applied_generation = 0u;
+static volatile uint32_t s_saved_generation = 0u;
+static volatile uint32_t s_dropped_blocks = 0u;
+static volatile bool s_streaming_active = false;
+static volatile uint32_t s_stream_generation = 0u;
+static volatile bool s_dsp_core_ready = false;
+static uint8_t s_active_profile = 0u;
+static uint8_t s_persisted_profile = 0u;
+
+typedef struct {
+  uint16_t left_peak;
+  uint16_t right_peak;
+  uint64_t left_square_sum;
+  uint64_t right_square_sum;
+  uint32_t frame_count;
+} meter_accumulator_t;
+
+static critical_section_t s_meter_lock;
+static meter_accumulator_t s_meter_accumulator;
+static bool s_meter_configured = false;
+static volatile bool s_meter_active = false;
+static uint16_t s_meter_report_interval_ms = 40u;
+static uint16_t s_meter_timeout_ms = 1250u;
+static uint64_t s_meter_deadline_us = 0u;
+static uint64_t s_meter_next_report_us = 0u;
+static uint32_t s_meter_sequence = 0u;
+
+static uint8_t s_hid_response[EQ_PROTOCOL_REPORT_SIZE];
+static bool s_hid_response_pending = false;
+typedef enum {
+  FLASH_ACTION_SAVE_PROFILE,
+  FLASH_ACTION_SET_DEFAULT_PROFILE,
+  FLASH_ACTION_DELETE_PROFILE,
+} flash_action_t;
+static bool s_flash_write_pending = false;
+static flash_action_t s_flash_action = FLASH_ACTION_SAVE_PROFILE;
+static uint8_t s_flash_request_opcode = 0u;
+static uint16_t s_flash_request_id = 0u;
+static uint8_t s_flash_profile_index = 0u;
 
 // Initialise a GPIO pin as a PWM-driven LED output.
 // The PWM counter runs 0–255; polarity is inverted because the LEDs are
@@ -104,34 +165,150 @@ static bool send_zero_control(uint8_t rhport, tusb_control_request_t const *p_re
 }
 
 // Apply a host-requested sample rate change and reconfigure the I2S bit clock.
-static void handle_sample_rate_change(uint32_t new_rate_hz) {
-  if (new_rate_hz == 0) return;
+static bool sample_rate_supported(uint32_t sample_rate_hz) {
+  for (uint8_t i = 0; i < N_SAMPLE_RATES; i++) {
+    if (sample_rates[i] == sample_rate_hz) return true;
+  }
+  return false;
+}
+
+static bool handle_sample_rate_change(uint32_t new_rate_hz) {
+  if (!sample_rate_supported(new_rate_hz)) return false;
   s_sample_rate_hz = new_rate_hz;
   i2s_out_set_sample_rate(s_sample_rate_hz);
+  return true;
+}
+
+static eq_config_t config_snapshot(uint32_t *generation) {
+  critical_section_enter_blocking(&s_config_lock);
+  eq_config_t config = s_desired_config;
+  if (generation != NULL) *generation = s_config_generation;
+  critical_section_exit(&s_config_lock);
+  return config;
+}
+
+static void publish_config(eq_config_t const *config) {
+  critical_section_enter_blocking(&s_config_lock);
+  s_desired_config = *config;
+  s_config_generation++;
+  critical_section_exit(&s_config_lock);
+}
+
+static bool config_is_dirty(void) {
+  eq_config_t config = config_snapshot(NULL);
+  return !eq_config_equal(&config, &s_saved_config);
+}
+
+static void meter_reset(void) {
+  critical_section_enter_blocking(&s_meter_lock);
+  memset(&s_meter_accumulator, 0, sizeof(s_meter_accumulator));
+  critical_section_exit(&s_meter_lock);
+}
+
+static void meter_accumulate(int16_t const *samples, uint16_t frames) {
+  if (!s_meter_active || frames == 0u) return;
+
+  meter_accumulator_t block = {0};
+  block.frame_count = frames;
+  for (uint16_t frame = 0u; frame < frames; frame++) {
+    int32_t left = samples[frame * AUDIO_CHANNELS];
+    int32_t right = samples[frame * AUDIO_CHANNELS + 1u];
+    uint32_t left_magnitude = (uint32_t)(left < 0 ? -left : left);
+    uint32_t right_magnitude = (uint32_t)(right < 0 ? -right : right);
+    if (left_magnitude > block.left_peak) block.left_peak = (uint16_t)left_magnitude;
+    if (right_magnitude > block.right_peak) block.right_peak = (uint16_t)right_magnitude;
+    block.left_square_sum += (uint64_t)left_magnitude * left_magnitude;
+    block.right_square_sum += (uint64_t)right_magnitude * right_magnitude;
+  }
+
+  critical_section_enter_blocking(&s_meter_lock);
+  if (s_meter_active) {
+    if (block.left_peak > s_meter_accumulator.left_peak) s_meter_accumulator.left_peak = block.left_peak;
+    if (block.right_peak > s_meter_accumulator.right_peak) s_meter_accumulator.right_peak = block.right_peak;
+    s_meter_accumulator.left_square_sum += block.left_square_sum;
+    s_meter_accumulator.right_square_sum += block.right_square_sum;
+    s_meter_accumulator.frame_count += block.frame_count;
+  }
+  critical_section_exit(&s_meter_lock);
+}
+
+static void meter_keepalive(void) {
+  uint64_t now = time_us_64();
+  s_meter_active = true;
+  s_meter_deadline_us = now + (uint64_t)s_meter_timeout_ms * 1000u;
+  if (s_meter_next_report_us == 0u) s_meter_next_report_us = now;
+}
+
+static void dsp_core_main(void) {
+  eq_settings_core_init();
+  uint32_t local_generation;
+  eq_config_t local_config = config_snapshot(&local_generation);
+  uint32_t local_sample_rate = s_sample_rate_hz;
+  eq_init(local_sample_rate, &local_config);
+  s_applied_generation = local_generation;
+  s_dsp_core_ready = true;
+
+  while (true) {
+    audio_block_t *block;
+    queue_remove_blocking(&s_pending_audio_blocks, &block);
+
+    uint32_t desired_generation;
+    eq_config_t desired = config_snapshot(&desired_generation);
+    if (local_sample_rate != s_sample_rate_hz) {
+      local_sample_rate = s_sample_rate_hz;
+      eq_set_sample_rate(local_sample_rate);
+    }
+    if (desired_generation != local_generation) {
+      if (eq_set_config(&desired)) {
+        local_generation = desired_generation;
+        s_applied_generation = desired_generation;
+      }
+    }
+
+    if (s_streaming_active && block->stream_generation == s_stream_generation) {
+      eq_process_interleaved_stereo16(block->samples, block->frames);
+      // Report the same post-EQ, saturated samples that are sent to I2S.
+      meter_accumulate(block->samples, block->frames);
+      size_t written = 0u;
+      while (written < block->frames && s_streaming_active && block->stream_generation == s_stream_generation) {
+        written += i2s_out_write_stereo16(block->samples + written * AUDIO_CHANNELS, block->frames - written);
+        if (written < block->frames) tight_loop_contents();
+      }
+    }
+    queue_add_blocking(&s_free_audio_blocks, &block);
+  }
 }
 
 // Main audio processing task — called every iteration of the main loop.
 //
 // Drains received USB audio data from the TinyUSB software receive buffer,
-// applies peak-level metering to drive the blue LED, attenuates the signal
-// by -3 dB, then forwards the samples to the I2S ring buffer.
+// applies peak-level metering to drive the blue LED, then queues samples for
+// EQ processing on core 1 and forwarding to the I2S ring buffer.
 //
-// The function processes at most one buffer's worth of data per call, limited
-// by s_rx_size (set by the USB receive callback) and the space available in
-// the I2S ring buffer.
+// Backpressure is retained in TinyUSB's software buffer when all audio blocks
+// are in flight.
 static void audio_task(void) {
-  int16_t sample_buf[CFG_TUD_AUDIO_FUNC_1_EP_OUT_SZ_MAX / sizeof(int16_t)];
+  static bool backpressure_latched = false;
+  while (tud_audio_available() >= AUDIO_FRAME_BYTES) {
+    audio_block_t *block;
+    if (!queue_try_remove(&s_free_audio_blocks, &block)) {
+      if (!backpressure_latched) {
+        s_dropped_blocks++;
+        backpressure_latched = true;
+      }
+      break;
+    }
+    backpressure_latched = false;
 
-  while (s_rx_size >= AUDIO_FRAME_BYTES) {
-    size_t free_frames = i2s_out_free_frames();
-    if (free_frames == 0) break;
-
-    uint16_t to_read = s_rx_size;
-    if (to_read > sizeof(sample_buf)) to_read = sizeof(sample_buf);
+    uint16_t to_read = tud_audio_available();
+    if (to_read > sizeof(block->samples)) to_read = sizeof(block->samples);
     to_read = (uint16_t) (to_read & ~(AUDIO_FRAME_BYTES - 1u));
-    if (to_read == 0) break;
+    if (to_read == 0) {
+      queue_add_blocking(&s_free_audio_blocks, &block);
+      break;
+    }
 
-    uint16_t got = tud_audio_read(sample_buf, to_read);
+    uint16_t got = tud_audio_read(block->samples, to_read);
     uint16_t frames = (uint16_t) (got / AUDIO_FRAME_BYTES);
 
     if (got != 0) {
@@ -139,24 +316,22 @@ static void audio_task(void) {
       uint32_t peak = 0;
       uint16_t num_samples = got / sizeof(int16_t);
       for (uint16_t i = 0; i < num_samples; i++) {
-        uint32_t abs_sample = (sample_buf[i] < 0) ? (uint32_t)(-sample_buf[i]) : (uint32_t)sample_buf[i];
+        uint32_t abs_sample = (block->samples[i] < 0) ? (uint32_t)(-block->samples[i]) : (uint32_t)block->samples[i];
         if (abs_sample > peak) peak = abs_sample;
       }
       
-      // Map peak (0-32768) to LED brightness capped at full PWM range.
-      uint16_t led_level = (uint16_t) ((peak * LED_PWM_WRAP * LED_BLUE_MAX_PCT) / (32768u * 100u));
+      // Map a full-scale sample to the same maximum used by led_set().
+      uint16_t led_level = (uint16_t)((peak * LED_PWM_ON_LEVEL) / 32768u);
       led_set_level(LED_BLUE_PIN, led_level);
-      
-      // Apply -3dB attenuation to samples for I2S output: multiply by ~0.707 (181/256)
-      for (uint16_t i = 0; i < num_samples; i++) {
-        sample_buf[i] = (int16_t)((sample_buf[i] * 181) / 256);
-      }
     }
 
-    size_t accepted = i2s_out_write_stereo16(sample_buf, frames);
-
-    if (accepted < frames) break;
-    s_rx_size = 0;
+    if (frames == 0u || !s_streaming_active) {
+      queue_add_blocking(&s_free_audio_blocks, &block);
+      continue;
+    }
+    block->frames = frames;
+    block->stream_generation = s_stream_generation;
+    queue_add_blocking(&s_pending_audio_blocks, &block);
   }
 }
 
@@ -273,12 +448,10 @@ bool tud_audio_set_req_entity_cb(uint8_t rhport, tusb_control_request_t const *p
     uint16_t const w_length = tu_le16toh(p_request->wLength);
     if (w_length == 3) {
       uint32_t rate = (uint32_t) buf[0] | ((uint32_t) buf[1] << 8u) | ((uint32_t) buf[2] << 16u);
-      handle_sample_rate_change(rate);
-      return true;
+      return handle_sample_rate_change(rate);
     }
     if (w_length == sizeof(audio_control_cur_4_t)) {
-      handle_sample_rate_change((uint32_t) ((audio_control_cur_4_t const *) buf)->bCur);
-      return true;
+      return handle_sample_rate_change((uint32_t) ((audio_control_cur_4_t const *) buf)->bCur);
     }
   }
 
@@ -292,32 +465,41 @@ bool tud_audio_set_itf_close_EP_cb(uint8_t rhport, tusb_control_request_t const 
   (void) rhport;
   uint8_t const itf = tu_u16_low(tu_le16toh(p_request->wIndex));
   uint8_t const alt = tu_u16_low(tu_le16toh(p_request->wValue));
-  if (itf == ITF_NUM_AUDIO_STREAMING && alt == 0) led_set(LED_RED_PIN, false);
+  if (itf == ITF_NUM_AUDIO_STREAMING && alt == 0) {
+    s_stream_generation++;
+    s_streaming_active = false;
+    i2s_out_set_streaming(false);
+    led_set(LED_RED_PIN, false);
+    led_set_level(LED_BLUE_PIN, 0u);
+  }
   return true;
 }
 
 // TinyUSB callback: called when the host selects an alternate setting on the
 // audio streaming interface.  Alternate 0 = idle (no bandwidth), alternate 1 =
-// active streaming.  Turn the red LED on/off accordingly and reset rx counter.
+// active streaming. Turn the red LED on/off accordingly.
 bool tud_audio_set_itf_cb(uint8_t rhport, tusb_control_request_t const *p_request) {
   (void) rhport;
   uint8_t const itf = tu_u16_low(tu_le16toh(p_request->wIndex));
   uint8_t const alt = tu_u16_low(tu_le16toh(p_request->wValue));
   if (itf == ITF_NUM_AUDIO_STREAMING) {
-    led_set(LED_RED_PIN, alt != 0);
-    s_rx_size = 0;
+    s_stream_generation++;
+    s_streaming_active = alt != 0;
+    i2s_out_set_streaming(s_streaming_active);
+    led_set(LED_RED_PIN, s_streaming_active);
+    if (!s_streaming_active) led_set_level(LED_BLUE_PIN, 0u);
   }
   return true;
 }
 
 // TinyUSB callback: called just before audio data is read from the USB buffer.
-// Records the number of bytes received so audio_task() knows how much to drain.
+// Packet draining is handled by audio_task() using tud_audio_available().
 bool tud_audio_rx_done_pre_read_cb(uint8_t rhport, uint16_t n_bytes_received, uint8_t func_id, uint8_t ep_out, uint8_t cur_alt_setting) {
   (void) rhport;
   (void) func_id;
   (void) ep_out;
   (void) cur_alt_setting;
-  s_rx_size = n_bytes_received;
+  (void) n_bytes_received;
   return true;
 }
 
@@ -330,12 +512,10 @@ bool tud_audio_set_req_ep_cb(uint8_t rhport, tusb_control_request_t const *p_req
   if (p_request->bRequest == AUDIO_CS_REQ_CUR) {
     if (p_request->wLength == 3) {
       uint32_t rate = (uint32_t) pBuff[0] | ((uint32_t) pBuff[1] << 8u) | ((uint32_t) pBuff[2] << 16u);
-      handle_sample_rate_change(rate);
-      return true;
+      return handle_sample_rate_change(rate);
     }
     if (p_request->wLength == 4) {
-      handle_sample_rate_change((uint32_t) ((audio_control_cur_4_t const *) pBuff)->bCur);
-      return true;
+      return handle_sample_rate_change((uint32_t) ((audio_control_cur_4_t const *) pBuff)->bCur);
     }
   }
   return false;
@@ -373,9 +553,399 @@ bool tud_audio_get_req_ep_cb(uint8_t rhport, tusb_control_request_t const *p_req
   return send_zero_control(rhport, p_request);
 }
 
-// TinyUSB callback: provide SOF feedback parameters for asynchronous rate adaptation.
-// FREQUENCY_FIXED tells TinyUSB to send a fixed-frequency feedback value derived
-// from the nominal sample rate rather than measuring the actual I2S clock.
+static void hid_response_prepare(uint8_t opcode, uint16_t request_id, eq_protocol_status_t status,
+                                 uint8_t payload_length) {
+  eq_protocol_response_init(s_hid_response, opcode, request_id, status, payload_length);
+  s_hid_response_pending = true;
+}
+
+static void hid_response_status(uint8_t opcode, uint16_t request_id) {
+  eq_config_t config = config_snapshot(NULL);
+  hid_response_prepare(opcode, request_id, EQ_STATUS_OK, 28u);
+  uint8_t *payload = &s_hid_response[EQ_PROTOCOL_HEADER_SIZE];
+  payload[0] = 1u;  // Firmware major version.
+  payload[1] = 5u;  // Firmware minor version.
+  payload[2] = EQ_NUM_FILTERS;
+  payload[3] = (s_streaming_active ? 0x01u : 0u) | (config_is_dirty() ? 0x02u : 0u) |
+               (config.enabled ? 0x04u : 0u);
+  eq_protocol_write_u32(payload + 4u, s_sample_rate_hz);
+  eq_protocol_write_u32(payload + 8u, s_config_generation);
+  eq_protocol_write_u32(payload + 12u, s_saved_generation);
+  eq_protocol_write_u32(payload + 16u, s_applied_generation);
+  eq_protocol_write_u32(payload + 20u, i2s_out_underrun_frames());
+  eq_protocol_write_u32(payload + 24u, s_dropped_blocks);
+}
+
+static void hid_process_command(eq_protocol_packet_t const *packet) {
+  if ((packet->opcode & EQ_OPCODE_RESPONSE) != 0u || packet->status != 0u) {
+    hid_response_prepare(packet->opcode, packet->request_id, EQ_STATUS_INVALID_PACKET, 0u);
+    return;
+  }
+
+  switch (packet->opcode) {
+    case EQ_OPCODE_HELLO:
+    case EQ_OPCODE_GET_STATUS:
+      if (packet->payload_length != 0u) {
+        hid_response_prepare(packet->opcode, packet->request_id, EQ_STATUS_INVALID_LENGTH, 0u);
+      } else {
+        hid_response_status(packet->opcode, packet->request_id);
+      }
+      break;
+
+    case EQ_OPCODE_GET_GLOBAL: {
+      if (packet->payload_length != 0u) {
+        hid_response_prepare(packet->opcode, packet->request_id, EQ_STATUS_INVALID_LENGTH, 0u);
+        break;
+      }
+      eq_config_t config = config_snapshot(NULL);
+      hid_response_prepare(packet->opcode, packet->request_id, EQ_STATUS_OK, EQ_PROTOCOL_GLOBAL_PAYLOAD_SIZE);
+      eq_protocol_encode_global(&s_hid_response[EQ_PROTOCOL_HEADER_SIZE], &config);
+      break;
+    }
+
+    case EQ_OPCODE_GET_BAND: {
+      if (packet->payload_length != 1u) {
+        hid_response_prepare(packet->opcode, packet->request_id, EQ_STATUS_INVALID_LENGTH, 0u);
+        break;
+      }
+      uint8_t index = packet->payload[0];
+      if (index >= EQ_NUM_FILTERS) {
+        hid_response_prepare(packet->opcode, packet->request_id, EQ_STATUS_INVALID_INDEX, 0u);
+        break;
+      }
+      eq_config_t config = config_snapshot(NULL);
+      hid_response_prepare(packet->opcode, packet->request_id, EQ_STATUS_OK, EQ_PROTOCOL_BAND_PAYLOAD_SIZE);
+      eq_protocol_encode_band(&s_hid_response[EQ_PROTOCOL_HEADER_SIZE], index, &config.filters[index]);
+      break;
+    }
+
+    case EQ_OPCODE_GET_PROFILES: {
+      if (packet->payload_length != 0u) {
+        hid_response_prepare(packet->opcode, packet->request_id, EQ_STATUS_INVALID_LENGTH, 0u);
+        break;
+      }
+      eq_profile_state_t state;
+      eq_settings_get_profile_state(&state);
+      hid_response_prepare(packet->opcode, packet->request_id, EQ_STATUS_OK,
+                           EQ_PROTOCOL_PROFILE_STATE_PAYLOAD_SIZE);
+      uint8_t *payload = &s_hid_response[EQ_PROTOCOL_HEADER_SIZE];
+      payload[0] = EQ_PROFILE_COUNT;
+      payload[1] = s_active_profile;
+      payload[2] = s_persisted_profile;
+      eq_protocol_write_u16(payload + 4u, state.present_mask);
+      eq_protocol_write_u32(payload + 8u, state.bank_generation);
+      break;
+    }
+
+    case EQ_OPCODE_SET_GLOBAL: {
+      if (packet->payload_length != EQ_PROTOCOL_GLOBAL_PAYLOAD_SIZE) {
+        hid_response_prepare(packet->opcode, packet->request_id, EQ_STATUS_INVALID_LENGTH, 0u);
+        break;
+      }
+      eq_config_t config = config_snapshot(NULL);
+      if (!eq_protocol_decode_global(packet->payload, packet->payload_length, &config)) {
+        hid_response_prepare(packet->opcode, packet->request_id, EQ_STATUS_OUT_OF_RANGE, 0u);
+        break;
+      }
+      publish_config(&config);
+      hid_response_prepare(packet->opcode, packet->request_id, EQ_STATUS_OK, EQ_PROTOCOL_GLOBAL_PAYLOAD_SIZE);
+      eq_protocol_encode_global(&s_hid_response[EQ_PROTOCOL_HEADER_SIZE], &config);
+      break;
+    }
+
+    case EQ_OPCODE_SET_BAND: {
+      if (packet->payload_length != EQ_PROTOCOL_BAND_PAYLOAD_SIZE) {
+        hid_response_prepare(packet->opcode, packet->request_id, EQ_STATUS_INVALID_LENGTH, 0u);
+        break;
+      }
+      uint8_t index;
+      eq_filter_config_t filter;
+      if (!eq_protocol_decode_band(packet->payload, packet->payload_length, &index, &filter)) {
+        hid_response_prepare(packet->opcode, packet->request_id, EQ_STATUS_OUT_OF_RANGE, 0u);
+        break;
+      }
+      if (index >= EQ_NUM_FILTERS) {
+        hid_response_prepare(packet->opcode, packet->request_id, EQ_STATUS_INVALID_INDEX, 0u);
+        break;
+      }
+      eq_config_t config = config_snapshot(NULL);
+      config.filters[index] = filter;
+      if (!eq_config_validate(&config)) {
+        hid_response_prepare(packet->opcode, packet->request_id, EQ_STATUS_OUT_OF_RANGE, 0u);
+        break;
+      }
+      publish_config(&config);
+      hid_response_prepare(packet->opcode, packet->request_id, EQ_STATUS_OK, EQ_PROTOCOL_BAND_PAYLOAD_SIZE);
+      eq_protocol_encode_band(&s_hid_response[EQ_PROTOCOL_HEADER_SIZE], index, &filter);
+      break;
+    }
+
+    case EQ_OPCODE_RESTORE_DEFAULTS:
+      if (packet->payload_length != 0u) {
+        hid_response_prepare(packet->opcode, packet->request_id, EQ_STATUS_INVALID_LENGTH, 0u);
+      } else {
+        eq_config_t defaults = k_eq_default_config;
+        publish_config(&defaults);
+        hid_response_prepare(packet->opcode, packet->request_id, EQ_STATUS_OK, 0u);
+      }
+      break;
+
+    case EQ_OPCODE_LOAD_PROFILE: {
+      if (packet->payload_length != 1u) {
+        hid_response_prepare(packet->opcode, packet->request_id, EQ_STATUS_INVALID_LENGTH, 0u);
+        break;
+      }
+      uint8_t index = packet->payload[0];
+      eq_config_t config;
+      uint32_t stored_generation;
+      if (!eq_settings_load_profile(index, &config, &stored_generation)) {
+        hid_response_prepare(packet->opcode, packet->request_id, EQ_STATUS_INVALID_INDEX, 0u);
+        break;
+      }
+      (void)stored_generation;
+      publish_config(&config);
+      s_saved_config = config;
+      s_saved_generation = s_config_generation;
+      s_active_profile = index;
+      hid_response_prepare(packet->opcode, packet->request_id, EQ_STATUS_OK,
+                           EQ_PROTOCOL_PROFILE_RESULT_PAYLOAD_SIZE);
+      uint8_t *payload = &s_hid_response[EQ_PROTOCOL_HEADER_SIZE];
+      payload[0] = index;
+      eq_protocol_write_u32(payload + 4u, s_config_generation);
+      break;
+    }
+
+    case EQ_OPCODE_WRITE_FLASH:
+      if (packet->payload_length != 0u) {
+        hid_response_prepare(packet->opcode, packet->request_id, EQ_STATUS_INVALID_LENGTH, 0u);
+      } else if (s_flash_write_pending) {
+        hid_response_prepare(packet->opcode, packet->request_id, EQ_STATUS_BUSY, 0u);
+      } else {
+        s_flash_write_pending = true;
+        s_flash_request_opcode = packet->opcode;
+        s_flash_request_id = packet->request_id;
+        s_flash_profile_index = s_active_profile;
+        s_flash_action = FLASH_ACTION_SAVE_PROFILE;
+      }
+      break;
+
+    case EQ_OPCODE_SAVE_PROFILE:
+      if (packet->payload_length != 1u) {
+        hid_response_prepare(packet->opcode, packet->request_id, EQ_STATUS_INVALID_LENGTH, 0u);
+      } else if (packet->payload[0] >= EQ_PROFILE_COUNT) {
+        hid_response_prepare(packet->opcode, packet->request_id, EQ_STATUS_INVALID_INDEX, 0u);
+      } else if (s_flash_write_pending) {
+        hid_response_prepare(packet->opcode, packet->request_id, EQ_STATUS_BUSY, 0u);
+      } else {
+        s_flash_write_pending = true;
+        s_flash_request_opcode = packet->opcode;
+        s_flash_request_id = packet->request_id;
+        s_flash_profile_index = packet->payload[0];
+        s_flash_action = FLASH_ACTION_SAVE_PROFILE;
+      }
+      break;
+
+    case EQ_OPCODE_SET_DEFAULT_PROFILE: {
+      if (packet->payload_length != 1u) {
+        hid_response_prepare(packet->opcode, packet->request_id, EQ_STATUS_INVALID_LENGTH, 0u);
+        break;
+      }
+      uint8_t index = packet->payload[0];
+      eq_profile_state_t state;
+      eq_settings_get_profile_state(&state);
+      if (index >= EQ_PROFILE_COUNT || (state.present_mask & (1u << index)) == 0u) {
+        hid_response_prepare(packet->opcode, packet->request_id, EQ_STATUS_INVALID_INDEX, 0u);
+      } else if (s_flash_write_pending) {
+        hid_response_prepare(packet->opcode, packet->request_id, EQ_STATUS_BUSY, 0u);
+      } else {
+        s_flash_write_pending = true;
+        s_flash_request_opcode = packet->opcode;
+        s_flash_request_id = packet->request_id;
+        s_flash_profile_index = index;
+        s_flash_action = FLASH_ACTION_SET_DEFAULT_PROFILE;
+      }
+      break;
+    }
+
+    case EQ_OPCODE_DELETE_PROFILE: {
+      if (packet->payload_length != 1u) {
+        hid_response_prepare(packet->opcode, packet->request_id, EQ_STATUS_INVALID_LENGTH, 0u);
+        break;
+      }
+      uint8_t index = packet->payload[0];
+      eq_profile_state_t state;
+      eq_settings_get_profile_state(&state);
+      if (index >= EQ_PROFILE_COUNT || (state.present_mask & (1u << index)) == 0u) {
+        hid_response_prepare(packet->opcode, packet->request_id, EQ_STATUS_INVALID_INDEX, 0u);
+      } else if (s_flash_write_pending) {
+        hid_response_prepare(packet->opcode, packet->request_id, EQ_STATUS_BUSY, 0u);
+      } else {
+        s_flash_write_pending = true;
+        s_flash_request_opcode = packet->opcode;
+        s_flash_request_id = packet->request_id;
+        s_flash_profile_index = index;
+        s_flash_action = FLASH_ACTION_DELETE_PROFILE;
+      }
+      break;
+    }
+
+    case EQ_OPCODE_METER_START: {
+      if (packet->payload_length != EQ_PROTOCOL_METER_CONFIG_PAYLOAD_SIZE) {
+        hid_response_prepare(packet->opcode, packet->request_id, EQ_STATUS_INVALID_LENGTH, 0u);
+        break;
+      }
+      uint16_t report_interval_ms = eq_protocol_read_u16(packet->payload);
+      uint16_t timeout_ms = eq_protocol_read_u16(packet->payload + 2u);
+      if (report_interval_ms < METER_REPORT_INTERVAL_MIN_MS ||
+          report_interval_ms > METER_REPORT_INTERVAL_MAX_MS || timeout_ms < METER_TIMEOUT_MIN_MS ||
+          timeout_ms > METER_TIMEOUT_MAX_MS || timeout_ms <= report_interval_ms) {
+        hid_response_prepare(packet->opcode, packet->request_id, EQ_STATUS_OUT_OF_RANGE, 0u);
+        break;
+      }
+      s_meter_report_interval_ms = report_interval_ms;
+      s_meter_timeout_ms = timeout_ms;
+      s_meter_configured = true;
+      s_meter_sequence = 0u;
+      s_meter_next_report_us = 0u;
+      meter_reset();
+      meter_keepalive();
+      hid_response_prepare(packet->opcode, packet->request_id, EQ_STATUS_OK,
+                           EQ_PROTOCOL_METER_CONFIG_PAYLOAD_SIZE);
+      eq_protocol_write_u16(&s_hid_response[EQ_PROTOCOL_HEADER_SIZE], s_meter_report_interval_ms);
+      eq_protocol_write_u16(&s_hid_response[EQ_PROTOCOL_HEADER_SIZE + 2u], s_meter_timeout_ms);
+      break;
+    }
+
+    case EQ_OPCODE_METER_KEEPALIVE:
+      if (packet->payload_length != 0u) {
+        hid_response_prepare(packet->opcode, packet->request_id, EQ_STATUS_INVALID_LENGTH, 0u);
+      } else if (!s_meter_configured) {
+        hid_response_prepare(packet->opcode, packet->request_id, EQ_STATUS_INVALID_PACKET, 0u);
+      } else {
+        meter_keepalive();
+        hid_response_prepare(packet->opcode, packet->request_id, EQ_STATUS_OK, 0u);
+      }
+      break;
+
+    case EQ_OPCODE_METER_STOP:
+      if (packet->payload_length != 0u) {
+        hid_response_prepare(packet->opcode, packet->request_id, EQ_STATUS_INVALID_LENGTH, 0u);
+      } else {
+        s_meter_active = false;
+        s_meter_configured = false;
+        s_meter_next_report_us = 0u;
+        meter_reset();
+        hid_response_prepare(packet->opcode, packet->request_id, EQ_STATUS_OK, 0u);
+      }
+      break;
+
+    default:
+      hid_response_prepare(packet->opcode, packet->request_id, EQ_STATUS_INVALID_COMMAND, 0u);
+      break;
+  }
+}
+
+uint16_t tud_hid_get_report_cb(uint8_t instance, uint8_t report_id, hid_report_type_t report_type, uint8_t *buffer,
+                               uint16_t reqlen) {
+  (void)instance;
+  (void)report_id;
+  (void)report_type;
+  (void)buffer;
+  (void)reqlen;
+  return 0u;
+}
+
+void tud_hid_set_report_cb(uint8_t instance, uint8_t report_id, hid_report_type_t report_type,
+                           uint8_t const *buffer, uint16_t bufsize) {
+  (void)instance;
+  (void)report_id;
+  if (report_type != HID_REPORT_TYPE_OUTPUT || s_hid_response_pending || s_flash_write_pending) return;
+  eq_protocol_packet_t packet;
+  if (eq_protocol_decode(buffer, bufsize, &packet)) hid_process_command(&packet);
+}
+
+static void hid_control_task(void) {
+  if (s_flash_write_pending && !s_hid_response_pending) {
+    uint32_t generation;
+    eq_config_t config = config_snapshot(&generation);
+    bool succeeded;
+    if (s_flash_action == FLASH_ACTION_SAVE_PROFILE) {
+      succeeded = eq_settings_save_profile(s_flash_profile_index, &config, generation);
+    } else if (s_flash_action == FLASH_ACTION_SET_DEFAULT_PROFILE) {
+      succeeded = eq_settings_set_default_profile(s_flash_profile_index);
+    } else {
+      succeeded = eq_settings_delete_profile(s_flash_profile_index);
+    }
+    if (succeeded) {
+      eq_profile_state_t state;
+      eq_settings_get_profile_state(&state);
+      s_persisted_profile = state.default_profile;
+      if (s_flash_action == FLASH_ACTION_SAVE_PROFILE) {
+        s_saved_config = config;
+        s_saved_generation = generation;
+        s_active_profile = s_flash_profile_index;
+      }
+    }
+    hid_response_prepare(s_flash_request_opcode, s_flash_request_id,
+                         succeeded ? EQ_STATUS_OK : EQ_STATUS_STORAGE_ERROR,
+                         succeeded ? EQ_PROTOCOL_PROFILE_RESULT_PAYLOAD_SIZE : 0u);
+    if (succeeded) {
+      eq_profile_state_t state;
+      eq_settings_get_profile_state(&state);
+      uint8_t *payload = &s_hid_response[EQ_PROTOCOL_HEADER_SIZE];
+      payload[0] = s_flash_profile_index;
+      eq_protocol_write_u32(payload + 4u, s_flash_action == FLASH_ACTION_SAVE_PROFILE
+                                              ? generation
+                                              : state.bank_generation);
+    }
+    s_flash_write_pending = false;
+  }
+
+  if (s_hid_response_pending && tud_hid_ready() && tud_hid_report(0u, s_hid_response, sizeof(s_hid_response))) {
+    s_hid_response_pending = false;
+  }
+}
+
+static void meter_stream_task(void) {
+  if (!s_meter_active) return;
+
+  uint64_t now = time_us_64();
+  if (now >= s_meter_deadline_us) {
+    s_meter_active = false;
+    s_meter_next_report_us = 0u;
+    meter_reset();
+    return;
+  }
+  if (now < s_meter_next_report_us || s_hid_response_pending || !tud_hid_ready()) return;
+
+  meter_accumulator_t meter;
+  critical_section_enter_blocking(&s_meter_lock);
+  meter = s_meter_accumulator;
+  memset(&s_meter_accumulator, 0, sizeof(s_meter_accumulator));
+  critical_section_exit(&s_meter_lock);
+
+  uint32_t left_mean_square = 0u;
+  uint32_t right_mean_square = 0u;
+  if (meter.frame_count != 0u) {
+    left_mean_square = (uint32_t)(meter.left_square_sum / meter.frame_count);
+    right_mean_square = (uint32_t)(meter.right_square_sum / meter.frame_count);
+  }
+
+  uint8_t report[EQ_PROTOCOL_REPORT_SIZE];
+  eq_protocol_response_init(report, EQ_OPCODE_METER_LEVEL, 0u, EQ_STATUS_OK,
+                            EQ_PROTOCOL_METER_LEVEL_PAYLOAD_SIZE);
+  uint8_t *payload = &report[EQ_PROTOCOL_HEADER_SIZE];
+  eq_protocol_write_u32(payload, ++s_meter_sequence);
+  eq_protocol_write_u16(payload + 4u, meter.left_peak);
+  eq_protocol_write_u16(payload + 6u, meter.right_peak);
+  eq_protocol_write_u32(payload + 8u, left_mean_square);
+  eq_protocol_write_u32(payload + 12u, right_mean_square);
+
+  s_meter_next_report_us = now + (uint64_t)s_meter_report_interval_ms * 1000u;
+  (void)tud_hid_report(0u, report, sizeof(report));
+}
+
+// Provide a fixed nominal feedback value, matching the original audio path.
 void tud_audio_feedback_params_cb(uint8_t func_id, uint8_t alt_itf, audio_feedback_params_t *feedback_param) {
   (void) func_id;
   (void) alt_itf;
@@ -385,6 +955,32 @@ void tud_audio_feedback_params_cb(uint8_t func_id, uint8_t alt_itf, audio_feedba
 
 int main(void) {
   board_init();
+
+  critical_section_init(&s_config_lock);
+  critical_section_init(&s_meter_lock);
+  queue_init(&s_free_audio_blocks, sizeof(audio_block_t *), AUDIO_BLOCK_COUNT);
+  queue_init(&s_pending_audio_blocks, sizeof(audio_block_t *), AUDIO_BLOCK_COUNT);
+  for (uint32_t i = 0; i < AUDIO_BLOCK_COUNT; i++) {
+    audio_block_t *block = &s_audio_blocks[i];
+    queue_add_blocking(&s_free_audio_blocks, &block);
+  }
+
+  eq_settings_core_init();
+  uint32_t loaded_generation = 1u;
+  if (!eq_settings_load(&s_desired_config, &loaded_generation)) {
+    eq_config_set_defaults(&s_desired_config);
+    loaded_generation = 1u;
+  }
+  s_saved_config = s_desired_config;
+  s_config_generation = loaded_generation;
+  s_saved_generation = loaded_generation;
+  eq_profile_state_t profile_state;
+  eq_settings_get_profile_state(&profile_state);
+  s_active_profile = profile_state.default_profile;
+  s_persisted_profile = profile_state.default_profile;
+
+  multicore_launch_core1(dsp_core_main);
+  while (!s_dsp_core_ready) tight_loop_contents();
 
   // Initialise both status LEDs and ensure they start off.
   led_pwm_init(LED_RED_PIN);
@@ -406,6 +1002,8 @@ int main(void) {
   // Main loop: process USB events then forward any received audio to I2S.
   while (true) {
     tud_task();    // TinyUSB internal event pump (must be called regularly)
+    hid_control_task();
+    meter_stream_task();
     audio_task();  // Drain USB receive buffer → I2S ring buffer
   }
 }

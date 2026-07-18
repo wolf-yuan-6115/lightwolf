@@ -16,11 +16,13 @@
 // are disabled (save_and_disable_interrupts / restore_interrupts), so the ISR
 // and the main task can share the ring safely.
 
+#include "hardware/clocks.h"
 #include "hardware/dma.h"
 #include "hardware/irq.h"
 #include "hardware/clocks.h"
 #include "hardware/pio.h"
 #include "hardware/sync.h"
+#include "pico/critical_section.h"
 #include "pico/stdlib.h"
 
 #include "audio_i2s.pio.h"
@@ -43,14 +45,18 @@ static PIO s_pio = pio0;    // PIO instance used for I2S
 static uint s_sm = 0;       // State machine index within s_pio
 static int s_dma_chan = -1; // DMA channel claimed for I2S output
 
-// Lock-free power-of-two ring buffer shared between the main task (writer) and
-// the DMA IRQ handler (reader).  Each entry holds one stereo frame packed as:
+// Power-of-two ring buffer shared between core 1 (writer) and the core 0 DMA
+// IRQ handler (reader). A cross-core critical section protects both indices.
+// Each entry holds one stereo frame packed as:
 //   bits 31:16 = right sample (uint16)
 //   bits 15:0  = left  sample (uint16)
 static volatile uint32_t s_ring[I2S_RING_FRAMES];
 static volatile uint32_t s_head = 0;  // Write index (advanced by main task)
 static volatile uint32_t s_tail = 0;  // Read  index (advanced by DMA ISR)
 static volatile uint32_t s_rate_hz = 48000; // Current sample rate in Hz
+static volatile bool s_streaming = false;
+static volatile uint32_t s_underrun_frames = 0;
+static critical_section_t s_ring_lock;
 
 // Flat buffer that DMA reads from; refreshed from the ring buffer by the ISR.
 static uint32_t s_dma_chunk[I2S_DMA_CHUNK_FRAMES];
@@ -68,8 +74,9 @@ static inline uint32_t ring_free(void) {
 
 // Copies up to I2S_DMA_CHUNK_FRAMES frames from the ring buffer into
 // s_dma_chunk, padding with silence (0) when the ring buffer is empty.
-// Called only from the DMA IRQ handler so no additional locking is needed.
+// The cross-core ring lock prevents concurrent writes while this copy runs.
 static void i2s_refill_dma_chunk(void) {
+  critical_section_enter_blocking(&s_ring_lock);
   for (uint32_t i = 0; i < I2S_DMA_CHUNK_FRAMES; i++) {
     if (s_tail != s_head) {
       s_dma_chunk[i] = s_ring[s_tail];
@@ -77,8 +84,10 @@ static void i2s_refill_dma_chunk(void) {
     } else {
       // Ring buffer underrun: output silence instead of stale data.
       s_dma_chunk[i] = 0;
+      if (s_streaming) s_underrun_frames++;
     }
   }
+  critical_section_exit(&s_ring_lock);
 }
 
 // Refills s_dma_chunk and kicks off the next DMA transfer to the PIO TX FIFO.
@@ -129,6 +138,7 @@ void i2s_out_set_sample_rate(uint32_t sample_rate_hz) {
 // the DMA completion interrupt, and starts continuous playback (initially
 // silence until audio data is written into the ring buffer).
 void i2s_out_init(uint32_t sample_rate_hz) {
+  critical_section_init(&s_ring_lock);
   // Route the three I2S GPIO pins to PIO0.
   gpio_set_function(I2S_DIN_PIN, GPIO_FUNC_PIO0);
   gpio_set_function(I2S_LRCK_PIN, GPIO_FUNC_PIO0);
@@ -176,7 +186,7 @@ void i2s_out_init(uint32_t sample_rate_hz) {
 // Each stereo frame is packed into a single uint32_t word before storing:
 //   bits 31:16 = right sample, bits 15:0 = left sample
 size_t i2s_out_write_stereo16(const int16_t *interleaved, size_t frame_count) {
-  uint32_t save = save_and_disable_interrupts();
+  critical_section_enter_blocking(&s_ring_lock);
   size_t can_write = ring_free();
   if (can_write > frame_count) {
     can_write = frame_count;
@@ -188,15 +198,32 @@ size_t i2s_out_write_stereo16(const int16_t *interleaved, size_t frame_count) {
     s_ring[s_head] = ((uint32_t)(uint16_t)right << 16u) | (uint16_t)left;
     s_head = (s_head + 1u) & (I2S_RING_FRAMES - 1u);
   }
-  restore_interrupts(save);
+  critical_section_exit(&s_ring_lock);
   return can_write;
 }
 
 // Returns the number of stereo frames that can be written without blocking.
 // Interrupts are briefly disabled to get a consistent snapshot of head/tail.
 size_t i2s_out_free_frames(void) {
-  uint32_t save = save_and_disable_interrupts();
+  critical_section_enter_blocking(&s_ring_lock);
   size_t free_frames = ring_free();
-  restore_interrupts(save);
+  critical_section_exit(&s_ring_lock);
   return free_frames;
+}
+
+void i2s_out_set_streaming(bool streaming) {
+  critical_section_enter_blocking(&s_ring_lock);
+  s_streaming = streaming;
+  if (!streaming) {
+    s_head = 0;
+    s_tail = 0;
+  }
+  critical_section_exit(&s_ring_lock);
+}
+
+uint32_t i2s_out_underrun_frames(void) {
+  critical_section_enter_blocking(&s_ring_lock);
+  uint32_t count = s_underrun_frames;
+  critical_section_exit(&s_ring_lock);
+  return count;
 }
