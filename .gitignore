@@ -1,1 +1,5 @@
 pumper/firmware/build/
+pumper/firmware/tests/build/
+pumper/web/node_modules/
+pumper/web/dist/
+pumper/web/*.tsbuildinfo
