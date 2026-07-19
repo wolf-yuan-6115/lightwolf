@@ -57,19 +57,15 @@ function ChannelMeter({ channel, peak, meanSquare, source, tone }: ChannelMeterP
 
 interface MeterRowProps {
   title: string;
-  stage: string;
   source: "input" | "output";
   tone: "indigo" | "emerald";
   level: StereoMeterLevel | null;
 }
 
-function MeterRow({ title, stage, source, tone, level }: MeterRowProps) {
+function MeterRow({ title, source, tone, level }: MeterRowProps) {
   return (
     <div className="grid min-w-0 gap-3 p-4 sm:p-5">
-      <div className="flex items-center justify-between gap-3">
-        <strong className="text-xs font-semibold">{title}</strong>
-        <span className="badge badge-ghost badge-sm">{stage}</span>
-      </div>
+      <strong className="text-xs font-semibold">{title}</strong>
       <div className="grid min-w-0 gap-1.5">
         <ChannelMeter channel="L" peak={level?.leftPeak ?? 0} meanSquare={level?.leftMeanSquare ?? 0} source={source} tone={tone} />
         <ChannelMeter channel="R" peak={level?.rightPeak ?? 0} meanSquare={level?.rightMeanSquare ?? 0} source={source} tone={tone} />
@@ -80,13 +76,13 @@ function MeterRow({ title, stage, source, tone, level }: MeterRowProps) {
 
 export function LevelMeter({ level }: { level: MeterLevel | null }) {
   return (
-    <section className="card card-border min-w-0 overflow-hidden bg-base-100 text-base-content" aria-label="Realtime stereo input and output levels">
+    <section className="card card-border min-w-0 overflow-hidden bg-base-100 text-base-content" aria-label="Realtime input and output levels">
       <div className="border-b border-base-200 px-4 py-3 sm:px-5">
-        <h2 className="card-title text-base">Stereo levels</h2>
+        <h2 className="card-title text-base">Signal levels</h2>
       </div>
       <div className="grid min-w-0 divide-y divide-base-200 md:grid-cols-2 md:divide-x md:divide-y-0">
-        <MeterRow title="INPUT LEVEL" stage="Pre-EQ" source="input" tone="indigo" level={level?.preEq ?? null} />
-        <MeterRow title="OUTPUT LEVEL" stage="Post-EQ" source="output" tone="emerald" level={level?.postEq ?? null} />
+        <MeterRow title="INPUT" source="input" tone="indigo" level={level?.preEq ?? null} />
+        <MeterRow title="OUTPUT" source="output" tone="emerald" level={level?.postEq ?? null} />
       </div>
     </section>
   );

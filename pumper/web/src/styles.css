@@ -4,6 +4,12 @@
   logs: false;
 }
 
+/* daisyUI disables pointer events on disabled buttons, which hides their cursor state. */
+button:disabled {
+  pointer-events: auto;
+  cursor: not-allowed;
+}
+
 @theme {
   --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
 }

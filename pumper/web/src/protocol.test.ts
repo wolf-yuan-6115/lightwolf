@@ -6,6 +6,7 @@ import {
   decodeGlobal,
   decodeMeterLevel,
   decodeProfileState,
+  decodeStatus,
   encodeBand,
   encodeGlobal,
   encodeMeterConfig,
@@ -64,6 +65,21 @@ describe("Pumper HID protocol", () => {
       requestId: 9,
       status: ProtocolStatus.StorageError,
     });
+  });
+
+  it("decodes chip temperature while accepting older status payloads", () => {
+    const payload = new Uint8Array(32);
+    const view = new DataView(payload.buffer);
+    payload.set([1, 8, 10, 0x04]);
+    view.setUint32(4, 48000, true);
+    view.setInt32(28, 42375, true);
+
+    expect(decodeStatus(payload)).toMatchObject({
+      firmwareVersion: "1.8",
+      temperatureC: 42.375,
+    });
+    expect(decodeStatus(payload.slice(0, 28)).temperatureC).toBeNull();
+    expect(() => decodeStatus(new Uint8Array(30))).toThrow("Invalid status response");
   });
 
   it("encodes meter timing and decodes pre- and post-EQ stereo levels", () => {

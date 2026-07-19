@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { AlertTriangle, Check, Moon, Power, RotateCcw, Save, Sun, Trash2, Upload, Usb, X } from "lucide-react";
+import { AlertTriangle, Check, Info, Moon, Power, RotateCcw, Save, Sun, Trash2, Upload, Usb, X } from "lucide-react";
 import { bandColors, EqGraph } from "./EqGraph";
 import { calculateAutoPreamp } from "./eqMath";
 import { METER_REPORT_EVENT, PumperHidTransport } from "./hidTransport";
 import { LevelMeter } from "./LevelMeter";
+import { NumericInput } from "./NumericInput";
+import { SelectMenu, type SelectMenuOption } from "./SelectMenu";
 import {
   decodeBand,
   decodeGlobal,
@@ -28,17 +30,41 @@ import {
   WidthMode,
 } from "./protocol";
 
-type Dialog = "delete" | "flash" | "defaults" | "set-default" | "switch" | null;
+type Dialog = "clear" | "flash" | "defaults" | "set-default" | "switch" | null;
 type DeviceDialog = "info" | "restart" | "bootsel" | "bootsel-ready" | null;
 type Theme = "light" | "dark";
 
 const buttonBase = "btn btn-sm";
 const primaryButton = "btn btn-primary btn-sm";
 const secondaryButton = "btn btn-sm";
-const deleteButton = "btn btn-square btn-error btn-soft btn-sm shrink-0";
-const selectClass = "select select-sm";
+const clearButton = "btn btn-square btn-error btn-soft btn-sm shrink-0";
 const rangeClass = "range range-xs min-w-18";
 const themeStorageKey = "pumper-theme";
+const filterOptions: readonly SelectMenuOption<FilterType>[] = [
+  { value: FilterType.LowShelf, label: "Low shelf" },
+  { value: FilterType.Peaking, label: "Peaking" },
+  { value: FilterType.HighShelf, label: "High shelf" },
+];
+const widthOptions: readonly SelectMenuOption<WidthMode>[] = [
+  { value: WidthMode.Bandwidth, label: "Bandwidth" },
+  { value: WidthMode.Q, label: "Q" },
+];
+
+function DiagnosticLabel({ label, help }: { label: string; help: string }) {
+  return (
+    <span className="flex items-center gap-1.5 text-sm text-base-content/65">
+      {label}
+      <span
+        className="tooltip tooltip-top inline-flex size-5 cursor-help items-center justify-center rounded-full text-base-content/50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-base-content"
+        tabIndex={0}
+        aria-label={`About ${label}: ${help}`}
+      >
+        <span className="tooltip-content z-10 w-64 max-w-[calc(100vw-2rem)] whitespace-normal text-left text-xs leading-relaxed">{help}</span>
+        <Info size={14} aria-hidden="true" />
+      </span>
+    </span>
+  );
+}
 
 function initialTheme(): Theme {
   if (typeof window === "undefined") return "light";
@@ -55,6 +81,76 @@ function cloneConfig(config: EqConfig): EqConfig {
   return { ...config, bands: config.bands.map((band) => ({ ...band })) };
 }
 
+function configsEqual(left: EqConfig, right: EqConfig): boolean {
+  if (left.enabled !== right.enabled || left.preampDb !== right.preampDb || left.bands.length !== right.bands.length) return false;
+  return left.bands.every((band, index) => {
+    const other = right.bands[index];
+    return band.enabled === other.enabled &&
+      band.type === other.type &&
+      band.widthMode === other.widthMode &&
+      band.frequencyHz === other.frequencyHz &&
+      band.gainDb === other.gainDb &&
+      band.q === other.q &&
+      band.bandwidthOctaves === other.bandwidthOctaves;
+  });
+}
+
+function rangeMessage(label: string, minimum: number, maximum: number, unit = ""): string {
+  const format = (value: number) => Math.abs(value) >= 1000 ? value.toLocaleString("en-US") : String(value);
+  return `${label} must be between ${format(minimum)} and ${format(maximum)}${unit ? ` ${unit}` : ""}.`;
+}
+
+function inRange(value: number, minimum: number, maximum: number): boolean {
+  return Number.isFinite(value) && value >= minimum && value <= maximum;
+}
+
+function validateBand(band: EqBand, index: number): string | null {
+  const label = `Band ${index + 1}`;
+  if (band.type !== FilterType.LowShelf && band.type !== FilterType.Peaking && band.type !== FilterType.HighShelf) {
+    return `${label} filter type is not supported.`;
+  }
+  if (band.widthMode !== WidthMode.Q && band.widthMode !== WidthMode.Bandwidth) {
+    return `${label} width mode is not supported.`;
+  }
+  if (!inRange(band.frequencyHz, 20, 20000)) return rangeMessage(`${label} frequency`, 20, 20000, "Hz");
+  if (!inRange(band.gainDb, -24, 24)) return rangeMessage(`${label} gain`, -24, 24, "dB");
+  if (!inRange(band.bandwidthOctaves, 0.1, 4)) return rangeMessage(`${label} bandwidth`, 0.1, 4, "octaves");
+  const qMaximum = band.type === FilterType.Peaking ? 20 : 1;
+  const qLabel = band.type === FilterType.Peaking ? "Q" : "slope";
+  if (!inRange(band.q, 0.1, qMaximum)) return rangeMessage(`${label} ${qLabel}`, 0.1, qMaximum);
+  return null;
+}
+
+function validateConfig(config: EqConfig): string | null {
+  if (!inRange(config.preampDb, -241, 12)) return rangeMessage("Preamp gain", -241, 12, "dB");
+  for (let index = 0; index < config.bands.length; index++) {
+    const error = validateBand(config.bands[index], index);
+    if (error) return error;
+  }
+  return null;
+}
+
+function describeBandUpdate(index: number, previous: EqBand, next: EqBand): string {
+  const changed = (Object.keys(next) as Array<keyof EqBand>).filter((key) => previous[key] !== next[key]);
+  if (changed.length !== 1) return `Band ${index + 1} settings`;
+  const field = changed[0];
+  const names: Partial<Record<keyof EqBand, string>> = {
+    enabled: "enabled state",
+    type: "filter type",
+    widthMode: "width mode",
+    frequencyHz: "frequency",
+    gainDb: "gain",
+    bandwidthOctaves: "bandwidth",
+    q: next.type === FilterType.Peaking ? "Q" : "slope",
+  };
+  return `Band ${index + 1} ${names[field] ?? "settings"}`;
+}
+
+function deviceError(context: string, reason: unknown): string {
+  const detail = reason instanceof Error ? reason.message : "The DAC rejected the update";
+  return `${context}: ${detail}`;
+}
+
 function filterName(type: FilterType): string {
   if (type === FilterType.LowShelf) return "Low shelf";
   if (type === FilterType.HighShelf) return "High shelf";
@@ -64,6 +160,7 @@ function filterName(type: FilterType): string {
 export default function App() {
   const transport = useRef(new PumperHidTransport());
   const configRef = useRef<EqConfig>(cloneConfig(defaultConfig));
+  const savedConfigRef = useRef<EqConfig | null>(null);
   const autoRef = useRef(false);
   const bandTimers = useRef(new Map<number, number>());
   const globalTimer = useRef<number | null>(null);
@@ -133,18 +230,27 @@ export default function App() {
     globalTimer.current = null;
   };
 
-  const sendGlobalSoon = (next: EqConfig) => {
+  const sendGlobalSoon = (next: EqConfig, context: string) => {
     if (!connected) return;
+    if (!inRange(next.preampDb, -241, 12)) {
+      setError(rangeMessage("Preamp gain", -241, 12, "dB"));
+      return;
+    }
     if (globalTimer.current !== null) window.clearTimeout(globalTimer.current);
     globalTimer.current = window.setTimeout(() => {
       transport.current.request(Opcode.SetGlobal, encodeGlobal(next)).catch((reason: unknown) => {
-        setError(reason instanceof Error ? reason.message : "Unable to update preamp");
+        setError(deviceError(context, reason));
       });
     }, 55);
   };
 
-  const sendBandSoon = (index: number, band: EqBand) => {
+  const sendBandSoon = (index: number, band: EqBand, context: string) => {
     if (!connected) return;
+    const validationError = validateBand(band, index);
+    if (validationError) {
+      setError(validationError);
+      return;
+    }
     const previous = bandTimers.current.get(index);
     if (previous !== undefined) window.clearTimeout(previous);
     bandTimers.current.set(
@@ -152,29 +258,43 @@ export default function App() {
       window.setTimeout(() => {
         bandTimers.current.delete(index);
         transport.current.request(Opcode.SetBand, encodeBand(index, band)).catch((reason: unknown) => {
-          setError(reason instanceof Error ? reason.message : `Unable to update band ${index + 1}`);
+          setError(deviceError(context, reason));
         });
       }, 55),
     );
   };
 
+  const updateDirtyState = (next: EqConfig) => {
+    setLocalDirty(savedConfigRef.current === null || !configsEqual(next, savedConfigRef.current));
+  };
+
   const commitConfig = (next: EqConfig, bandIndex?: number, globalChanged = false) => {
+    const previous = configRef.current;
     if (autoRef.current) {
       next.preampDb = calculateAutoPreamp(next, sampleRateHz).preampDb;
       globalChanged = true;
     }
+    const bandContext = bandIndex === undefined ? "" : describeBandUpdate(bandIndex, previous.bands[bandIndex], next.bands[bandIndex]);
+    const globalContext = previous.preampDb !== next.preampDb && previous.enabled === next.enabled ? "Preamp gain" : "Global EQ";
     configRef.current = next;
     setConfig(next);
-    setLocalDirty(true);
+    updateDirtyState(next);
     setNotice(null);
-    if (bandIndex !== undefined) sendBandSoon(bandIndex, next.bands[bandIndex]);
-    if (globalChanged) sendGlobalSoon(next);
+    setError(null);
+    if (bandIndex !== undefined) sendBandSoon(bandIndex, next.bands[bandIndex], bandContext);
+    if (globalChanged) sendGlobalSoon(next, globalContext);
   };
 
   const updateBand = (index: number, patch: Partial<EqBand>) => {
     const next = cloneConfig(configRef.current);
     next.bands[index] = { ...next.bands[index], ...patch };
     commitConfig(next, index);
+  };
+
+  const updateBandType = (index: number, type: FilterType) => {
+    const current = configRef.current.bands[index];
+    const q = type === FilterType.Peaking ? current.q : Math.min(1, Math.max(0.1, current.q));
+    updateBand(index, { type, q });
   };
 
   const updateGlobal = (patch: Partial<Pick<EqConfig, "enabled" | "preampDb">>) => {
@@ -192,7 +312,8 @@ export default function App() {
       const response = await transport.current.request(Opcode.GetBand, new Uint8Array([index]));
       bands.push(decodeBand(response.payload).band);
     }
-    let next: EqConfig = { ...global, bands };
+    const deviceConfig: EqConfig = { ...global, bands };
+    let next = cloneConfig(deviceConfig);
     let autoChanged = false;
     if (autoRef.current) {
       const preampDb = calculateAutoPreamp(next, nextStatus.sampleRateHz).preampDb;
@@ -201,11 +322,14 @@ export default function App() {
       if (autoChanged) await transport.current.request(Opcode.SetGlobal, encodeGlobal(next));
     }
     configRef.current = next;
+    if (knownStoredProfile || !nextStatus.dirty) savedConfigRef.current = cloneConfig(deviceConfig);
     setConfig(next);
     setStatus(nextStatus);
     setProfileState(nextProfiles);
     setSelectedProfile(nextProfiles.activeProfile);
-    setLocalDirty((!knownStoredProfile && nextStatus.dirty) || autoChanged);
+    updateDirtyState(next);
+    const validationError = validateConfig(next);
+    if (validationError) setError(`The DAC returned an invalid configuration. ${validationError}`);
   }, []);
 
   const openDevice = useCallback(
@@ -214,6 +338,8 @@ export default function App() {
       setError(null);
       setConnectionIssue(null);
       try {
+        savedConfigRef.current = null;
+        setLocalDirty(false);
         await transport.current.open(device);
         transport.current.addEventListener("disconnect", () => {
           if (!mounted.current) return;
@@ -223,6 +349,8 @@ export default function App() {
           setConnected(false);
           setStatus(null);
           setMeterLevel(null);
+          savedConfigRef.current = null;
+          setLocalDirty(false);
           setProfileState((current) => ({ ...current, presentMask: 0, activeProfile: 0, persistedProfile: 0 }));
           setSelectedProfile(0);
           if (!intentional) setError("Pumper disconnected");
@@ -303,8 +431,8 @@ export default function App() {
       next.preampDb = calculated;
       configRef.current = next;
       setConfig(next);
-      setLocalDirty(true);
-      sendGlobalSoon(next);
+      updateDirtyState(next);
+      sendGlobalSoon(next, "Preamp gain");
     }
   }, [sampleRateHz]);
 
@@ -373,32 +501,41 @@ export default function App() {
     setError(null);
     try {
       if (action === "flash") {
-        clearTimers();
         const current = cloneConfig(configRef.current);
-        await transport.current.request(Opcode.SetGlobal, encodeGlobal(current));
+        const validationError = validateConfig(current);
+        if (validationError) throw new Error(validationError);
+        clearTimers();
+        try {
+          await transport.current.request(Opcode.SetGlobal, encodeGlobal(current));
+        } catch (reason) {
+          throw new Error(deviceError("Preamp gain", reason));
+        }
         for (let index = 0; index < current.bands.length; index++) {
-          await transport.current.request(Opcode.SetBand, encodeBand(index, current.bands[index]));
+          try {
+            await transport.current.request(Opcode.SetBand, encodeBand(index, current.bands[index]));
+          } catch (reason) {
+            throw new Error(deviceError(`Band ${index + 1}`, reason));
+          }
         }
         await transport.current.request(Opcode.SaveProfile, new Uint8Array([selectedProfile]), 8000);
         await readDevice(true);
-        setLocalDirty(false);
         setNotice(`Profile ${selectedProfile + 1} saved to flash`);
       } else if (action === "set-default") {
         await transport.current.request(Opcode.SetDefaultProfile, new Uint8Array([selectedProfile]), 8000);
         const nextProfiles = decodeProfileState((await transport.current.request(Opcode.GetProfiles)).payload);
         setProfileState(nextProfiles);
         setNotice(`Profile ${selectedProfile + 1} will load at power-on`);
-      } else if (action === "delete") {
+      } else if (action === "clear") {
         await transport.current.request(Opcode.DeleteProfile, new Uint8Array([selectedProfile]), 8000);
         const nextProfiles = decodeProfileState((await transport.current.request(Opcode.GetProfiles)).payload);
         setProfileState(nextProfiles);
+        savedConfigRef.current = cloneConfig(configRef.current);
         setLocalDirty(false);
-        setNotice(`Profile ${selectedProfile + 1} deleted`);
+        setNotice(`Profile ${selectedProfile + 1} cleared`);
       } else if (action === "defaults") {
         clearTimers();
         await transport.current.request(Opcode.RestoreDefaults);
         await readDevice();
-        setLocalDirty(true);
         setNotice("Factory EQ loaded into live preview");
       } else if (action === "switch" && pendingProfile !== null) {
         await loadProfile(pendingProfile);
@@ -445,7 +582,7 @@ export default function App() {
   };
 
   const selected = config.bands[selectedBand] ?? config.bands[0];
-  const deletingOnlyProfile = profileState.presentMask === (1 << selectedProfile);
+  const clearingOnlyProfile = profileState.presentMask === (1 << selectedProfile);
   return (
     <main className="min-h-screen min-w-0 overflow-x-clip bg-base-200 text-base-content">
       <header className="sticky top-0 z-30 min-w-0 border-b border-base-300 bg-base-100/80 shadow-sm backdrop-blur-xl">
@@ -459,14 +596,13 @@ export default function App() {
           <div className="navbar-end w-auto gap-2">
             {connected && (
               <button
-                className="btn btn-success btn-soft btn-sm max-w-56 gap-2"
+                className="btn btn-sm"
                 type="button"
                 onClick={() => setDeviceDialog("info")}
                 aria-haspopup="dialog"
                 title="Device information"
               >
-                <span className="status status-success status-sm" aria-hidden="true" />
-                <span className="max-w-44 truncate max-sm:sr-only">{transport.current.productName}</span>
+                DAC info
               </button>
             )}
             {!connected && supported && (
@@ -487,17 +623,23 @@ export default function App() {
 
         <nav className="border-t border-base-200" aria-label="Profile and device actions">
           <div className="mx-auto flex max-w-[1600px] flex-wrap items-center gap-2 px-4 py-2.5 lg:px-6">
-            <label className="flex w-full min-w-0 items-center gap-2 sm:w-auto">
+            <div className="flex w-full min-w-0 items-center gap-2 sm:w-auto">
               <span className="text-sm font-medium max-sm:sr-only">Profile</span>
-              <select className="select select-sm w-full sm:w-48" aria-label="Profile" value={selectedProfile} onChange={(event) => void selectProfile(Number(event.target.value))} disabled={!connected || writing}>
-                {Array.from({ length: profileState.count }, (_, index) => (
-                  <option value={index} key={index}>Profile {index + 1}{(profileState.presentMask & (1 << index)) === 0 ? " (empty)" : index === profileState.persistedProfile ? " (default)" : ""}</option>
-                ))}
-              </select>
-            </label>
+              <SelectMenu
+                className="w-full sm:w-48"
+                label="Profile"
+                value={selectedProfile}
+                options={Array.from({ length: profileState.count }, (_, index) => ({
+                  value: index,
+                  label: `Profile ${index + 1}${(profileState.presentMask & (1 << index)) === 0 ? " (empty)" : index === profileState.persistedProfile ? " (default)" : ""}`,
+                }))}
+                onChange={(value) => { void selectProfile(value); }}
+                disabled={!connected || writing}
+              />
+            </div>
             <div className="flex w-full items-center justify-between gap-2 sm:ml-auto sm:w-auto sm:justify-end">
-              <div className="tooltip tooltip-bottom" data-tip={`Delete Profile ${selectedProfile + 1}`}>
-                <button className={deleteButton} onClick={() => setDialog("delete")} disabled={!connected || writing || hasUnsavedEdits || selectedProfileEmpty} aria-label={`Delete Profile ${selectedProfile + 1}`}>
+              <div className="tooltip tooltip-bottom" data-tip="Clear profile">
+                <button className={clearButton} onClick={() => setDialog("clear")} disabled={!connected || writing || hasUnsavedEdits || selectedProfileEmpty} aria-label={`Clear Profile ${selectedProfile + 1}`}>
                   <Trash2 size={17} />
                 </button>
               </div>
@@ -558,10 +700,10 @@ export default function App() {
                     <button type="button" className={`btn btn-xs join-item min-w-14 ${autoPreamp ? "btn-active" : "btn-ghost"}`} onClick={() => toggleAuto(true)} disabled={!connected}>Auto</button>
                   </div>
                 </div>
-                <div className="mt-3 grid gap-3">
-                  <input className={`${rangeClass} w-full`} id="preamp" type="range" min="-24" max="12" step="0.1" value={Math.max(-24, config.preampDb)} onChange={(event) => updateGlobal({ preampDb: Number(event.target.value) })} disabled={!connected || autoPreamp} />
-                  <label className="input input-sm flex w-full items-center gap-2">
-                    <input className="min-w-0 grow" aria-label="Preamp gain" type="number" min="-241" max="12" step="0.1" value={config.preampDb} onChange={(event) => updateGlobal({ preampDb: Number(event.target.value) })} readOnly={!connected || autoPreamp} />
+                <div className="mt-3 flex items-center gap-3">
+                  <input className={`${rangeClass} min-w-0 flex-1`} aria-label="Preamp gain slider" type="range" min="-24" max="12" step="0.1" value={Math.max(-24, config.preampDb)} onChange={(event) => updateGlobal({ preampDb: Number(event.target.value) })} disabled={!connected || autoPreamp} />
+                  <label className="input input-sm flex w-24 shrink-0 items-center gap-1.5 has-[input[aria-invalid=true]]:input-error">
+                    <NumericInput className="min-w-0 grow" label="Preamp gain" min={-241} max={12} step={0.1} value={config.preampDb} onChange={(preampDb) => updateGlobal({ preampDb })} onInvalid={() => setError(rangeMessage("Preamp gain", -241, 12, "dB"))} readOnly={!connected || autoPreamp} />
                     <span className="text-xs text-base-content/55">dB</span>
                   </label>
                 </div>
@@ -597,14 +739,16 @@ export default function App() {
                 {config.bands.map((band, index) => {
                   const widthLabel = band.type === FilterType.Peaking ? (band.widthMode === WidthMode.Q ? "Q" : "Bandwidth") : "Slope";
                   const widthValue = band.type === FilterType.Peaking && band.widthMode === WidthMode.Bandwidth ? band.bandwidthOctaves : band.q;
+                  const widthMaximum = band.type === FilterType.Peaking && band.widthMode === WidthMode.Q ? 20 : band.type === FilterType.Peaking ? 4 : 1;
+                  const widthUnit = band.type === FilterType.Peaking && band.widthMode === WidthMode.Bandwidth ? "octaves" : "";
                   return (
                     <tr className={`transition-colors ${selectedBand === index ? "bg-base-200" : "hover:bg-base-200/60"} ${band.enabled ? "" : "text-base-content/40"}`} key={index} onClick={() => setSelectedBand(index)} onFocus={() => setSelectedBand(index)}>
                       <th className="pl-4 sm:pl-5" scope="row"><div className="flex items-center gap-3"><input className="toggle toggle-sm" type="checkbox" checked={band.enabled} onChange={(event) => updateBand(index, { enabled: event.target.checked })} aria-label={`Enable band ${index + 1}`} /><span className="grid size-6 place-items-center rounded-full text-[11px] font-bold text-black" style={{ backgroundColor: bandColors[index] }}>{index + 1}</span></div></th>
-                      <td><select className={`${selectClass} w-full`} value={band.type} onChange={(event) => updateBand(index, { type: Number(event.target.value) as FilterType })} aria-label={`Band ${index + 1} filter type`}><option value={FilterType.LowShelf}>Low shelf</option><option value={FilterType.Peaking}>Peaking</option><option value={FilterType.HighShelf}>High shelf</option></select></td>
-                      <td><label className="input input-sm flex w-full items-center gap-2"><input className="min-w-0 grow" aria-label={`Frequency for band ${index + 1}`} type="number" min="20" max="20000" step="1" value={band.frequencyHz} onChange={(event) => updateBand(index, { frequencyHz: Number(event.target.value) })} /><span className="text-xs text-base-content/55">Hz</span></label></td>
-                      <td><div className="flex items-center gap-3"><input className={`${rangeClass} flex-1`} aria-label={`Gain slider for band ${index + 1}`} type="range" min="-24" max="24" step="0.1" value={band.gainDb} onChange={(event) => updateBand(index, { gainDb: Number(event.target.value) })} /><label className="input input-sm flex w-24 items-center gap-1"><input className="min-w-0 grow" aria-label={`Gain for band ${index + 1}`} type="number" min="-24" max="24" step="0.1" value={band.gainDb} onChange={(event) => updateBand(index, { gainDb: Number(event.target.value) })} /><span className="text-xs text-base-content/55">dB</span></label></div></td>
-                      <td>{band.type === FilterType.Peaking ? <select className={`${selectClass} w-full`} value={band.widthMode} aria-label={`Width mode for band ${index + 1}`} onChange={(event) => updateBand(index, { widthMode: Number(event.target.value) as WidthMode })}><option value={WidthMode.Bandwidth}>Bandwidth</option><option value={WidthMode.Q}>Q</option></select> : <span className="text-sm text-base-content/55">Slope</span>}</td>
-                      <td className="pr-4 sm:pr-5"><label className="input input-sm flex w-full items-center gap-1"><input className="min-w-0 grow" type="number" min="0.1" max={band.type === FilterType.Peaking && band.widthMode === WidthMode.Q ? 20 : band.type === FilterType.Peaking ? 4 : 1} step="0.01" value={widthValue} aria-label={`${widthLabel} for band ${index + 1}`} onChange={(event) => updateBand(index, band.type === FilterType.Peaking && band.widthMode === WidthMode.Bandwidth ? { bandwidthOctaves: Number(event.target.value) } : { q: Number(event.target.value) })} /><span className="text-xs text-base-content/55">{band.type === FilterType.Peaking && band.widthMode === WidthMode.Bandwidth ? "oct" : widthLabel}</span></label></td>
+                      <td><SelectMenu className="w-full" value={band.type} options={filterOptions} onChange={(value) => updateBandType(index, value)} label={`Band ${index + 1} filter type`} /></td>
+                      <td><label className="input input-sm flex w-full items-center gap-2 has-[input[aria-invalid=true]]:input-error"><NumericInput className="min-w-0 grow" label={`Frequency for band ${index + 1}`} min={20} max={20000} step={1} value={band.frequencyHz} onChange={(frequencyHz) => updateBand(index, { frequencyHz })} onInvalid={() => setError(rangeMessage(`Band ${index + 1} frequency`, 20, 20000, "Hz"))} /><span className="text-xs text-base-content/55">Hz</span></label></td>
+                      <td><div className="flex items-center gap-3"><input className={`${rangeClass} flex-1`} aria-label={`Gain slider for band ${index + 1}`} type="range" min="-24" max="24" step="0.1" value={band.gainDb} onChange={(event) => updateBand(index, { gainDb: Number(event.target.value) })} /><label className="input input-sm flex w-24 items-center gap-1 has-[input[aria-invalid=true]]:input-error"><NumericInput className="min-w-0 grow" label={`Gain for band ${index + 1}`} min={-24} max={24} step={0.1} value={band.gainDb} onChange={(gainDb) => updateBand(index, { gainDb })} onInvalid={() => setError(rangeMessage(`Band ${index + 1} gain`, -24, 24, "dB"))} /><span className="text-xs text-base-content/55">dB</span></label></div></td>
+                      <td>{band.type === FilterType.Peaking ? <SelectMenu className="w-full" value={band.widthMode} options={widthOptions} onChange={(value) => updateBand(index, { widthMode: value })} label={`Width mode for band ${index + 1}`} /> : <span className="text-sm text-base-content/55">Slope</span>}</td>
+                      <td className="pr-4 sm:pr-5"><label className="input input-sm flex w-full items-center gap-1 has-[input[aria-invalid=true]]:input-error"><NumericInput className="min-w-0 grow" label={`${widthLabel} for band ${index + 1}`} min={0.1} max={widthMaximum} step={0.01} value={widthValue} onChange={(value) => updateBand(index, band.type === FilterType.Peaking && band.widthMode === WidthMode.Bandwidth ? { bandwidthOctaves: value } : { q: value })} onInvalid={() => setError(rangeMessage(`Band ${index + 1} ${widthLabel.toLowerCase()}`, 0.1, widthMaximum, widthUnit))} /><span className="text-xs text-base-content/55">{band.type === FilterType.Peaking && band.widthMode === WidthMode.Bandwidth ? "oct" : widthLabel}</span></label></td>
                     </tr>
                   );
                 })}
@@ -644,8 +788,7 @@ export default function App() {
             {deviceDialog === "info" ? (
               <>
                 <div className="flex items-start justify-between gap-4">
-                  <div className="flex min-w-0 items-center gap-2">
-                    <span className="status status-success status-sm shrink-0" aria-hidden="true" />
+                  <div className="min-w-0">
                     <h2 className="truncate text-lg font-semibold" id="device-dialog-title">{transport.current.productName}</h2>
                   </div>
                   <button className="btn btn-ghost btn-square btn-sm shrink-0" type="button" onClick={() => setDeviceDialog(null)} aria-label="Close device information">
@@ -655,23 +798,24 @@ export default function App() {
 
                 <ul className="list mt-5 divide-y divide-base-300 rounded-box bg-base-200">
                   <li className="list-row items-center px-4 py-3"><span className="text-sm text-base-content/65">Firmware</span><strong className="text-right text-sm font-semibold">{status?.firmwareVersion ?? "-"}</strong></li>
-                  <li className="list-row items-center px-4 py-3"><span className="text-sm text-base-content/65">EQ revision</span><strong className="text-right text-sm font-semibold">{status?.appliedGeneration ?? "-"}</strong></li>
-                  <li className="list-row items-center px-4 py-3"><span className="text-sm text-base-content/65">Audio underruns</span><strong className="text-right text-sm font-semibold">{status?.underrunFrames.toLocaleString() ?? "-"}</strong></li>
-                  <li className="list-row items-center px-4 py-3"><span className="text-sm text-base-content/65">Backpressure events</span><strong className="text-right text-sm font-semibold">{status?.backpressureEvents.toLocaleString() ?? "-"}</strong></li>
+                  <li className="list-row items-center px-4 py-3"><DiagnosticLabel label="Chip temperature" help="Approximate RP2350 junction temperature reported by its internal sensor; this is not the ambient temperature." /><strong className="text-right text-sm font-semibold">{status?.temperatureC == null ? "-" : `${status.temperatureC.toFixed(1)} °C`}</strong></li>
+                  <li className="list-row items-center px-4 py-3"><DiagnosticLabel label="Active configuration version" help="The EQ settings revision currently running on the audio processor." /><strong className="text-right text-sm font-semibold">{status?.appliedGeneration ?? "-"}</strong></li>
+                  <li className="list-row items-center px-4 py-3"><DiagnosticLabel label="Audio underruns" help="Audio frames replaced with silence because the output buffer ran empty." /><strong className="text-right text-sm font-semibold">{status?.underrunFrames.toLocaleString() ?? "-"}</strong></li>
+                  <li className="list-row items-center px-4 py-3"><DiagnosticLabel label="Backpressure events" help="Times USB audio had to wait because every processing buffer was busy." /><strong className="text-right text-sm font-semibold">{status?.backpressureEvents.toLocaleString() ?? "-"}</strong></li>
                 </ul>
 
                 <div className="modal-action flex-col sm:flex-row">
-                  <button className="btn w-full sm:w-auto" type="button" onClick={() => setDeviceDialog("restart")}>
+                  <button className="btn btn-error btn-soft w-full sm:w-auto" type="button" onClick={() => setDeviceDialog("restart")}>
                     <Power size={17} /> Restart
                   </button>
-                  <button className="btn w-full sm:w-auto" type="button" onClick={() => setDeviceDialog("bootsel")}>
+                  <button className="btn btn-error btn-soft w-full sm:w-auto" type="button" onClick={() => setDeviceDialog("bootsel")}>
                     <Upload size={17} /> Firmware update
                   </button>
                 </div>
               </>
             ) : (
               <>
-                <div className={`mb-4 grid size-10 place-items-center rounded-full ${deviceDialog === "bootsel-ready" ? "bg-info/15 text-info" : "bg-warning/15 text-warning"}`}>
+                <div className={`mb-4 grid size-10 place-items-center rounded-full ${deviceDialog === "bootsel-ready" ? "bg-info/15 text-info" : "bg-error/15 text-error"}`}>
                   {deviceDialog === "bootsel-ready" ? <Upload size={22} /> : <AlertTriangle size={22} />}
                 </div>
                 <h2 className="text-lg font-semibold" id="device-dialog-title">
@@ -690,7 +834,7 @@ export default function App() {
                   ) : (
                     <>
                       <button className={secondaryButton} onClick={() => setDeviceDialog("info")} disabled={deviceActionPending}>Back</button>
-                      <button className={`${buttonBase} btn-warning`} onClick={confirmDeviceAction} disabled={deviceActionPending}>
+                      <button className={`${buttonBase} btn-error`} onClick={confirmDeviceAction} disabled={deviceActionPending}>
                         {deviceActionPending && <span className="loading loading-spinner loading-xs" aria-hidden="true" />}
                         {deviceDialog === "restart" ? "Restart" : "Enter BOOTSEL"}
                       </button>
@@ -708,9 +852,9 @@ export default function App() {
         <div className="modal modal-open" role="dialog" aria-modal="true" aria-labelledby="dialog-title">
           <div className="modal-box max-w-md">
             <div className="mb-4 grid size-10 place-items-center rounded-full bg-warning/15 text-warning"><AlertTriangle size={22} /></div>
-            <h2 className="text-lg font-semibold" id="dialog-title">{dialog === "flash" ? `Save Profile ${selectedProfile + 1}?` : dialog === "delete" ? `Delete Profile ${selectedProfile + 1}?` : dialog === "set-default" ? `Make Profile ${selectedProfile + 1} default?` : dialog === "switch" ? "Discard unsaved changes?" : "Restore factory EQ?"}</h2>
-            <p className="mt-2 text-sm leading-relaxed text-base-content/65">{dialog === "flash" ? "Audio may briefly pause while the DAC writes and verifies the profile bank." : dialog === "delete" ? deletingOnlyProfile ? "This is the last stored profile. All slots will be empty and the flat factory EQ will load at the next power-on." : selectedProfileIsDefault ? "This is the power-on default. The lowest-numbered remaining profile will become the new default." : "This stored profile will become empty. The current live EQ will keep playing until another profile is loaded." : dialog === "set-default" ? "Audio may briefly pause while the DAC updates flash. This profile will load automatically at power-on." : dialog === "switch" ? `The live edits will be replaced by Profile ${(pendingProfile ?? 0) + 1}.` : "The flat factory EQ will replace the live preview. It will remain unsaved until you save the profile."}</p>
-            <div className="modal-action"><button className={secondaryButton} onClick={closeDialog}>Cancel</button><button className={dialog === "delete" ? `${buttonBase} btn-error` : primaryButton} onClick={confirmDialog}>{dialog === "flash" ? "Save profile" : dialog === "delete" ? "Delete profile" : dialog === "set-default" ? "Make default" : dialog === "switch" ? "Load profile" : "Restore defaults"}</button></div>
+            <h2 className="text-lg font-semibold" id="dialog-title">{dialog === "flash" ? `Save Profile ${selectedProfile + 1}?` : dialog === "clear" ? `Clear Profile ${selectedProfile + 1}?` : dialog === "set-default" ? `Make Profile ${selectedProfile + 1} default?` : dialog === "switch" ? "Discard unsaved changes?" : "Restore factory EQ?"}</h2>
+            <p className="mt-2 text-sm leading-relaxed text-base-content/65">{dialog === "flash" ? "Audio may briefly pause while the DAC writes and verifies the profile bank." : dialog === "clear" ? clearingOnlyProfile ? "This is the last stored profile. All slots will be empty and the flat factory EQ will load at the next power-on." : selectedProfileIsDefault ? "This is the power-on default. The lowest-numbered remaining profile will become the new default." : "This stored profile will become empty. The current live EQ will keep playing until another profile is loaded." : dialog === "set-default" ? "Audio may briefly pause while the DAC updates flash. This profile will load automatically at power-on." : dialog === "switch" ? `The live edits will be replaced by Profile ${(pendingProfile ?? 0) + 1}.` : "The flat factory EQ will replace the live preview. It will remain unsaved until you save the profile."}</p>
+            <div className="modal-action"><button className={secondaryButton} onClick={closeDialog}>Cancel</button><button className={dialog === "clear" ? `${buttonBase} btn-error` : primaryButton} onClick={confirmDialog}>{dialog === "flash" ? "Save profile" : dialog === "clear" ? "Clear profile" : dialog === "set-default" ? "Make default" : dialog === "switch" ? "Load profile" : "Restore defaults"}</button></div>
           </div>
           <button className="modal-backdrop" onClick={closeDialog} aria-label="Close dialog">close</button>
         </div>

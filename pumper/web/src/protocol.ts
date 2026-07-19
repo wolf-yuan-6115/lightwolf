@@ -82,6 +82,7 @@ export interface DeviceStatus {
   appliedGeneration: number;
   underrunFrames: number;
   backpressureEvents: number;
+  temperatureC: number | null;
 }
 
 export interface ResponsePacket {
@@ -217,7 +218,7 @@ export function decodeBand(payload: Uint8Array): { index: number; band: EqBand }
 }
 
 export function decodeStatus(payload: Uint8Array): DeviceStatus {
-  if (payload.length !== 28) throw new Error("Invalid status response");
+  if (payload.length !== 28 && payload.length !== 32) throw new Error("Invalid status response");
   const view = viewFor(payload);
   const flags = payload[3];
   return {
@@ -232,6 +233,7 @@ export function decodeStatus(payload: Uint8Array): DeviceStatus {
     appliedGeneration: view.getUint32(16, true),
     underrunFrames: view.getUint32(20, true),
     backpressureEvents: view.getUint32(24, true),
+    temperatureC: payload.length >= 32 ? view.getInt32(28, true) / 1000 : null,
   };
 }
 

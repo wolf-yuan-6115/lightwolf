@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { LevelMeter } from "./LevelMeter";
 
 describe("LevelMeter", () => {
-  it("shows distinct pre- and post-EQ levels with shared warning colors", () => {
+  it("shows distinct input and output levels with shared warning colors", () => {
     const { container } = render(
       <LevelMeter
         level={{
