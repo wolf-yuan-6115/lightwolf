@@ -5,31 +5,29 @@ const thresholdsDb = [
   -14, -12, -10, -8, -6, -5, -4, -3, -2, -1.5, -1, 0,
 ];
 
-const fullScaleSquared = 32768 * 32768;
-
 function peakDb(sample: number): number {
   return sample > 0 ? 20 * Math.log10(sample / 32768) : -Infinity;
 }
 
-function rmsDb(meanSquare: number): number {
-  return meanSquare > 0 ? 10 * Math.log10(meanSquare / fullScaleSquared) : -Infinity;
+function roundDb(value: number): number {
+  const rounded = Math.round(value * 10) / 10;
+  return Object.is(rounded, -0) ? 0 : rounded;
 }
 
 function displayDb(value: number): string {
-  return Number.isFinite(value) ? `${value.toFixed(1)} dBFS` : "-inf dBFS";
+  return Number.isFinite(value) ? `${roundDb(value).toFixed(1)} dBFS` : "-inf dBFS";
 }
 
 interface ChannelMeterProps {
   channel: "L" | "R";
   peak: number;
-  meanSquare: number;
   source: "input" | "output";
   tone: "indigo" | "emerald";
 }
 
-function ChannelMeter({ channel, peak, meanSquare, source, tone }: ChannelMeterProps) {
+function ChannelMeter({ channel, peak, source, tone }: ChannelMeterProps) {
   const currentPeakDb = peakDb(peak);
-  const currentRmsDb = rmsDb(meanSquare);
+  const displayedPeakDb = roundDb(currentPeakDb);
   const nominalColor = tone === "indigo"
     ? "bg-indigo-500 shadow-[0_0_5px_rgba(99,102,241,0.42)]"
     : "bg-emerald-500 shadow-[0_0_5px_rgba(16,185,129,0.38)]";
@@ -39,7 +37,7 @@ function ChannelMeter({ channel, peak, meanSquare, source, tone }: ChannelMeterP
       <strong className="text-[11px] text-base-content/60">{channel}</strong>
       <div className="grid h-3.5 min-w-0 grid-cols-24 gap-[3px] max-sm:gap-0.5" aria-hidden="true">
         {thresholdsDb.map((threshold) => {
-          const lit = currentRmsDb >= threshold;
+          const lit = displayedPeakDb >= threshold;
           const color = !lit
             ? "bg-base-300"
             : threshold >= -1
@@ -67,8 +65,8 @@ function MeterRow({ title, source, tone, level }: MeterRowProps) {
     <div className="grid min-w-0 gap-3 p-4 sm:p-5">
       <strong className="text-xs font-semibold">{title}</strong>
       <div className="grid min-w-0 gap-1.5">
-        <ChannelMeter channel="L" peak={level?.leftPeak ?? 0} meanSquare={level?.leftMeanSquare ?? 0} source={source} tone={tone} />
-        <ChannelMeter channel="R" peak={level?.rightPeak ?? 0} meanSquare={level?.rightMeanSquare ?? 0} source={source} tone={tone} />
+        <ChannelMeter channel="L" peak={level?.leftPeak ?? 0} source={source} tone={tone} />
+        <ChannelMeter channel="R" peak={level?.rightPeak ?? 0} source={source} tone={tone} />
       </div>
     </div>
   );

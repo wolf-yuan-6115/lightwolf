@@ -9,9 +9,9 @@ describe("LevelMeter", () => {
         level={{
           sequence: 1,
           preEq: {
-            leftPeak: 32768,
+            leftPeak: 32767,
             rightPeak: 32768,
-            leftMeanSquare: 32768 * 32768,
+            leftMeanSquare: 16384 * 16384,
             rightMeanSquare: 32768 * 32768,
           },
           postEq: {
@@ -30,5 +30,7 @@ describe("LevelMeter", () => {
     expect(container.querySelector(".bg-emerald-500")).toBeInTheDocument();
     expect(container.querySelector(".bg-amber-400")).toBeInTheDocument();
     expect(container.querySelector(".bg-red-500")).toBeInTheDocument();
+    const leftInputSegments = container.querySelector('[aria-label="L input 0.0 dBFS"] [aria-hidden="true"]');
+    expect(leftInputSegments?.lastElementChild).toHaveClass("bg-red-500");
   });
 });
