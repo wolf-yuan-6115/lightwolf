@@ -20,6 +20,9 @@ static void test_default_config(void) {
 }
 
 static void test_protocol_header(void) {
+  assert(EQ_OPCODE_RESTART_DEVICE == 0x40u);
+  assert(EQ_OPCODE_ENTER_BOOTSEL == 0x41u);
+
   uint8_t report[EQ_PROTOCOL_REPORT_SIZE];
   eq_protocol_response_init(report, EQ_OPCODE_GET_STATUS, 0x1234u, EQ_STATUS_OK, 3u);
   report[EQ_PROTOCOL_HEADER_SIZE] = 1u;
@@ -36,11 +39,14 @@ static void test_protocol_header(void) {
                             EQ_PROTOCOL_METER_LEVEL_PAYLOAD_SIZE);
   eq_protocol_write_u32(&report[EQ_PROTOCOL_HEADER_SIZE], 42u);
   eq_protocol_write_u16(&report[EQ_PROTOCOL_HEADER_SIZE + 4u], 32768u);
+  eq_protocol_write_u16(&report[EQ_PROTOCOL_HEADER_SIZE + 16u], 16384u);
   assert(eq_protocol_decode(report, sizeof(report), &packet));
   assert(packet.opcode == (EQ_OPCODE_METER_LEVEL | EQ_OPCODE_RESPONSE));
   assert(packet.request_id == 0u);
+  assert(packet.payload_length == 28u);
   assert(eq_protocol_read_u32(packet.payload) == 42u);
   assert(eq_protocol_read_u16(packet.payload + 4u) == 32768u);
+  assert(eq_protocol_read_u16(packet.payload + 16u) == 16384u);
 }
 
 static void test_protocol_config_round_trip(void) {

@@ -43,6 +43,8 @@ target_link_libraries(rp2350_usb_dac PRIVATE
   hardware_clocks
   hardware_pwm
   hardware_flash
+  hardware_watchdog
+  pico_bootrom
   m
 )
 

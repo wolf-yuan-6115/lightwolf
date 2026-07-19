@@ -9,7 +9,7 @@
 //   • Supports 44.1 / 48 / 96 / 192 kHz sample rates (host-selectable)
 //   • Per-channel mute and volume control via UAC2 Feature Unit
 //   • Red LED indicates active USB audio streaming
-//   • Blue LED shows audio level, capped at the configured LED on-level
+//   • Blue LED shows audio level, capped at its configured maximum brightness
 //   • Runtime-configurable ten-band parametric EQ controlled over WebHID
 
 #include <stdbool.h>
@@ -18,6 +18,8 @@
 
 #include "bsp/board_api.h"
 #include "hardware/pwm.h"
+#include "hardware/watchdog.h"
+#include "pico/bootrom.h"
 #include "pico/critical_section.h"
 #include "pico/multicore.h"
 #include "pico/stdlib.h"
@@ -38,15 +40,18 @@
 #define METER_REPORT_INTERVAL_MAX_MS 250u
 #define METER_TIMEOUT_MIN_MS 250u
 #define METER_TIMEOUT_MAX_MS 5000u
+#define DEVICE_RESET_ACK_DELAY_US 250000u
+#define DEVICE_RESET_FALLBACK_DELAY_US 1000000u
 
 // GPIO pins for the two status LEDs (active-low, driven via PWM).
 #define LED_RED_PIN  10u  // Lit when USB audio streaming is active
 #define LED_BLUE_PIN  9u  // Brightness tracks the audio peak level
 
 // PWM configuration: 8-bit counter (wrap = 255).
-// ON_LEVEL is 40% of full scale so the LEDs are visible but not blinding.
-#define LED_PWM_WRAP      255u
-#define LED_PWM_ON_LEVEL  ((LED_PWM_WRAP * 40u) / 100u)
+// Maximum brightness is configured separately for each LED.
+#define LED_PWM_WRAP             255u
+#define LED_RED_MAX_BRIGHTNESS   ((LED_PWM_WRAP * 40u) / 100u)
+#define LED_BLUE_MAX_BRIGHTNESS  ((LED_PWM_WRAP * 60u) / 100u)
 
 // Sample rates advertised to the host via the Clock Source range descriptor.
 // The host picks one and sets it via tud_audio_set_req_entity_cb().
@@ -82,7 +87,7 @@ static eq_config_t s_saved_config;
 static volatile uint32_t s_config_generation = 1u;
 static volatile uint32_t s_applied_generation = 0u;
 static volatile uint32_t s_saved_generation = 0u;
-static volatile uint32_t s_dropped_blocks = 0u;
+static volatile uint32_t s_backpressure_events = 0u;
 static volatile bool s_streaming_active = false;
 static volatile uint32_t s_stream_generation = 0u;
 static volatile bool s_dsp_core_ready = false;
@@ -94,6 +99,11 @@ typedef struct {
   uint16_t right_peak;
   uint64_t left_square_sum;
   uint64_t right_square_sum;
+} meter_level_accumulator_t;
+
+typedef struct {
+  meter_level_accumulator_t pre_eq;
+  meter_level_accumulator_t post_eq;
   uint32_t frame_count;
 } meter_accumulator_t;
 
@@ -109,6 +119,14 @@ static uint32_t s_meter_sequence = 0u;
 
 static uint8_t s_hid_response[EQ_PROTOCOL_REPORT_SIZE];
 static bool s_hid_response_pending = false;
+typedef enum {
+  DEVICE_RESET_NONE,
+  DEVICE_RESET_RESTART,
+  DEVICE_RESET_BOOTSEL,
+} device_reset_action_t;
+static device_reset_action_t s_device_reset_action = DEVICE_RESET_NONE;
+static bool s_device_reset_response_in_flight = false;
+static uint64_t s_device_reset_deadline_us = 0u;
 typedef enum {
   FLASH_ACTION_SAVE_PROFILE,
   FLASH_ACTION_SET_DEFAULT_PROFILE,
@@ -140,11 +158,11 @@ static void led_pwm_init(uint pin) {
   pwm_set_enabled(slice, true);
 }
 
-// Set a LED to its fixed on-level or fully off.
-static void led_set(uint pin, bool on) {
-  uint slice = pwm_gpio_to_slice_num(pin);
-  uint channel = pwm_gpio_to_channel(pin);
-  pwm_set_chan_level(slice, channel, on ? LED_PWM_ON_LEVEL : 0);
+// Set the red streaming indicator to its fixed maximum brightness or fully off.
+static void red_led_set(bool on) {
+  uint slice = pwm_gpio_to_slice_num(LED_RED_PIN);
+  uint channel = pwm_gpio_to_channel(LED_RED_PIN);
+  pwm_set_chan_level(slice, channel, on ? LED_RED_MAX_BRIGHTNESS : 0);
 }
 
 // Set a LED to an arbitrary brightness level (0 = off, LED_PWM_WRAP = full).
@@ -205,29 +223,35 @@ static void meter_reset(void) {
   critical_section_exit(&s_meter_lock);
 }
 
-static void meter_accumulate(int16_t const *samples, uint16_t frames) {
-  if (!s_meter_active || frames == 0u) return;
-
-  meter_accumulator_t block = {0};
-  block.frame_count = frames;
+static void meter_measure_block(int16_t const *samples, uint16_t frames,
+                                meter_level_accumulator_t *level) {
   for (uint16_t frame = 0u; frame < frames; frame++) {
     int32_t left = samples[frame * AUDIO_CHANNELS];
     int32_t right = samples[frame * AUDIO_CHANNELS + 1u];
     uint32_t left_magnitude = (uint32_t)(left < 0 ? -left : left);
     uint32_t right_magnitude = (uint32_t)(right < 0 ? -right : right);
-    if (left_magnitude > block.left_peak) block.left_peak = (uint16_t)left_magnitude;
-    if (right_magnitude > block.right_peak) block.right_peak = (uint16_t)right_magnitude;
-    block.left_square_sum += (uint64_t)left_magnitude * left_magnitude;
-    block.right_square_sum += (uint64_t)right_magnitude * right_magnitude;
+    if (left_magnitude > level->left_peak) level->left_peak = (uint16_t)left_magnitude;
+    if (right_magnitude > level->right_peak) level->right_peak = (uint16_t)right_magnitude;
+    level->left_square_sum += (uint64_t)left_magnitude * left_magnitude;
+    level->right_square_sum += (uint64_t)right_magnitude * right_magnitude;
   }
+}
 
+static void meter_merge_level(meter_level_accumulator_t *accumulator,
+                              meter_level_accumulator_t const *block) {
+  if (block->left_peak > accumulator->left_peak) accumulator->left_peak = block->left_peak;
+  if (block->right_peak > accumulator->right_peak) accumulator->right_peak = block->right_peak;
+  accumulator->left_square_sum += block->left_square_sum;
+  accumulator->right_square_sum += block->right_square_sum;
+}
+
+static void meter_accumulate(meter_level_accumulator_t const *pre_eq,
+                             meter_level_accumulator_t const *post_eq, uint16_t frames) {
   critical_section_enter_blocking(&s_meter_lock);
   if (s_meter_active) {
-    if (block.left_peak > s_meter_accumulator.left_peak) s_meter_accumulator.left_peak = block.left_peak;
-    if (block.right_peak > s_meter_accumulator.right_peak) s_meter_accumulator.right_peak = block.right_peak;
-    s_meter_accumulator.left_square_sum += block.left_square_sum;
-    s_meter_accumulator.right_square_sum += block.right_square_sum;
-    s_meter_accumulator.frame_count += block.frame_count;
+    meter_merge_level(&s_meter_accumulator.pre_eq, pre_eq);
+    meter_merge_level(&s_meter_accumulator.post_eq, post_eq);
+    s_meter_accumulator.frame_count += frames;
   }
   critical_section_exit(&s_meter_lock);
 }
@@ -266,9 +290,17 @@ static void dsp_core_main(void) {
     }
 
     if (s_streaming_active && block->stream_generation == s_stream_generation) {
+      bool const measure_block = s_meter_active;
+      meter_level_accumulator_t pre_eq_meter = {0};
+      if (measure_block) meter_measure_block(block->samples, block->frames, &pre_eq_meter);
+
       eq_process_interleaved_stereo16(block->samples, block->frames);
-      // Report the same post-EQ, saturated samples that are sent to I2S.
-      meter_accumulate(block->samples, block->frames);
+      if (measure_block) {
+        // Post-EQ measurement uses the same saturated samples that are sent to I2S.
+        meter_level_accumulator_t post_eq_meter = {0};
+        meter_measure_block(block->samples, block->frames, &post_eq_meter);
+        meter_accumulate(&pre_eq_meter, &post_eq_meter, block->frames);
+      }
       size_t written = 0u;
       while (written < block->frames && s_streaming_active && block->stream_generation == s_stream_generation) {
         written += i2s_out_write_stereo16(block->samples + written * AUDIO_CHANNELS, block->frames - written);
@@ -293,7 +325,7 @@ static void audio_task(void) {
     audio_block_t *block;
     if (!queue_try_remove(&s_free_audio_blocks, &block)) {
       if (!backpressure_latched) {
-        s_dropped_blocks++;
+        s_backpressure_events++;
         backpressure_latched = true;
       }
       break;
@@ -320,8 +352,8 @@ static void audio_task(void) {
         if (abs_sample > peak) peak = abs_sample;
       }
       
-      // Map a full-scale sample to the same maximum used by led_set().
-      uint16_t led_level = (uint16_t)((peak * LED_PWM_ON_LEVEL) / 32768u);
+      // Map a full-scale sample to the configured blue LED maximum.
+      uint16_t led_level = (uint16_t)((peak * LED_BLUE_MAX_BRIGHTNESS) / 32768u);
       led_set_level(LED_BLUE_PIN, led_level);
     }
 
@@ -469,7 +501,7 @@ bool tud_audio_set_itf_close_EP_cb(uint8_t rhport, tusb_control_request_t const 
     s_stream_generation++;
     s_streaming_active = false;
     i2s_out_set_streaming(false);
-    led_set(LED_RED_PIN, false);
+    red_led_set(false);
     led_set_level(LED_BLUE_PIN, 0u);
   }
   return true;
@@ -486,7 +518,7 @@ bool tud_audio_set_itf_cb(uint8_t rhport, tusb_control_request_t const *p_reques
     s_stream_generation++;
     s_streaming_active = alt != 0;
     i2s_out_set_streaming(s_streaming_active);
-    led_set(LED_RED_PIN, s_streaming_active);
+    red_led_set(s_streaming_active);
     if (!s_streaming_active) led_set_level(LED_BLUE_PIN, 0u);
   }
   return true;
@@ -564,7 +596,7 @@ static void hid_response_status(uint8_t opcode, uint16_t request_id) {
   hid_response_prepare(opcode, request_id, EQ_STATUS_OK, 28u);
   uint8_t *payload = &s_hid_response[EQ_PROTOCOL_HEADER_SIZE];
   payload[0] = 1u;  // Firmware major version.
-  payload[1] = 5u;  // Firmware minor version.
+  payload[1] = 7u;  // Firmware minor version.
   payload[2] = EQ_NUM_FILTERS;
   payload[3] = (s_streaming_active ? 0x01u : 0u) | (config_is_dirty() ? 0x02u : 0u) |
                (config.enabled ? 0x04u : 0u);
@@ -573,7 +605,7 @@ static void hid_response_status(uint8_t opcode, uint16_t request_id) {
   eq_protocol_write_u32(payload + 12u, s_saved_generation);
   eq_protocol_write_u32(payload + 16u, s_applied_generation);
   eq_protocol_write_u32(payload + 20u, i2s_out_underrun_frames());
-  eq_protocol_write_u32(payload + 24u, s_dropped_blocks);
+  eq_protocol_write_u32(payload + 24u, s_backpressure_events);
 }
 
 static void hid_process_command(eq_protocol_packet_t const *packet) {
@@ -839,6 +871,22 @@ static void hid_process_command(eq_protocol_packet_t const *packet) {
       }
       break;
 
+    case EQ_OPCODE_RESTART_DEVICE:
+    case EQ_OPCODE_ENTER_BOOTSEL:
+      if (packet->payload_length != 0u) {
+        hid_response_prepare(packet->opcode, packet->request_id, EQ_STATUS_INVALID_LENGTH, 0u);
+      } else {
+        s_meter_active = false;
+        s_meter_configured = false;
+        s_meter_next_report_us = 0u;
+        meter_reset();
+        s_device_reset_action = packet->opcode == EQ_OPCODE_ENTER_BOOTSEL
+                                    ? DEVICE_RESET_BOOTSEL
+                                    : DEVICE_RESET_RESTART;
+        hid_response_prepare(packet->opcode, packet->request_id, EQ_STATUS_OK, 0u);
+      }
+      break;
+
     default:
       hid_response_prepare(packet->opcode, packet->request_id, EQ_STATUS_INVALID_COMMAND, 0u);
       break;
@@ -859,7 +907,8 @@ void tud_hid_set_report_cb(uint8_t instance, uint8_t report_id, hid_report_type_
                            uint8_t const *buffer, uint16_t bufsize) {
   (void)instance;
   (void)report_id;
-  if (report_type != HID_REPORT_TYPE_OUTPUT || s_hid_response_pending || s_flash_write_pending) return;
+  if (report_type != HID_REPORT_TYPE_OUTPUT || s_hid_response_pending || s_flash_write_pending ||
+      s_device_reset_action != DEVICE_RESET_NONE) return;
   eq_protocol_packet_t packet;
   if (eq_protocol_decode(buffer, bufsize, &packet)) hid_process_command(&packet);
 }
@@ -903,7 +952,32 @@ static void hid_control_task(void) {
 
   if (s_hid_response_pending && tud_hid_ready() && tud_hid_report(0u, s_hid_response, sizeof(s_hid_response))) {
     s_hid_response_pending = false;
+    if (s_device_reset_action != DEVICE_RESET_NONE) {
+      s_device_reset_response_in_flight = true;
+      s_device_reset_deadline_us = time_us_64() + DEVICE_RESET_FALLBACK_DELAY_US;
+    }
   }
+}
+
+void tud_hid_report_complete_cb(uint8_t instance, uint8_t const *report, uint16_t len) {
+  (void)instance;
+  (void)report;
+  (void)len;
+  if (!s_device_reset_response_in_flight) return;
+  s_device_reset_response_in_flight = false;
+  s_device_reset_deadline_us = time_us_64() + DEVICE_RESET_ACK_DELAY_US;
+}
+
+static void device_reset_task(void) {
+  if (s_device_reset_action == DEVICE_RESET_NONE || s_device_reset_deadline_us == 0u ||
+      time_us_64() < s_device_reset_deadline_us) return;
+
+  device_reset_action_t action = s_device_reset_action;
+  s_device_reset_action = DEVICE_RESET_NONE;
+  if (action == DEVICE_RESET_BOOTSEL) reset_usb_boot(0u, 0u);
+
+  watchdog_reboot(0u, 0u, 0u);
+  while (true) tight_loop_contents();
 }
 
 static void meter_stream_task(void) {
@@ -924,11 +998,15 @@ static void meter_stream_task(void) {
   memset(&s_meter_accumulator, 0, sizeof(s_meter_accumulator));
   critical_section_exit(&s_meter_lock);
 
-  uint32_t left_mean_square = 0u;
-  uint32_t right_mean_square = 0u;
+  uint32_t pre_eq_left_mean_square = 0u;
+  uint32_t pre_eq_right_mean_square = 0u;
+  uint32_t post_eq_left_mean_square = 0u;
+  uint32_t post_eq_right_mean_square = 0u;
   if (meter.frame_count != 0u) {
-    left_mean_square = (uint32_t)(meter.left_square_sum / meter.frame_count);
-    right_mean_square = (uint32_t)(meter.right_square_sum / meter.frame_count);
+    pre_eq_left_mean_square = (uint32_t)(meter.pre_eq.left_square_sum / meter.frame_count);
+    pre_eq_right_mean_square = (uint32_t)(meter.pre_eq.right_square_sum / meter.frame_count);
+    post_eq_left_mean_square = (uint32_t)(meter.post_eq.left_square_sum / meter.frame_count);
+    post_eq_right_mean_square = (uint32_t)(meter.post_eq.right_square_sum / meter.frame_count);
   }
 
   uint8_t report[EQ_PROTOCOL_REPORT_SIZE];
@@ -936,10 +1014,14 @@ static void meter_stream_task(void) {
                             EQ_PROTOCOL_METER_LEVEL_PAYLOAD_SIZE);
   uint8_t *payload = &report[EQ_PROTOCOL_HEADER_SIZE];
   eq_protocol_write_u32(payload, ++s_meter_sequence);
-  eq_protocol_write_u16(payload + 4u, meter.left_peak);
-  eq_protocol_write_u16(payload + 6u, meter.right_peak);
-  eq_protocol_write_u32(payload + 8u, left_mean_square);
-  eq_protocol_write_u32(payload + 12u, right_mean_square);
+  eq_protocol_write_u16(payload + 4u, meter.pre_eq.left_peak);
+  eq_protocol_write_u16(payload + 6u, meter.pre_eq.right_peak);
+  eq_protocol_write_u32(payload + 8u, pre_eq_left_mean_square);
+  eq_protocol_write_u32(payload + 12u, pre_eq_right_mean_square);
+  eq_protocol_write_u16(payload + 16u, meter.post_eq.left_peak);
+  eq_protocol_write_u16(payload + 18u, meter.post_eq.right_peak);
+  eq_protocol_write_u32(payload + 20u, post_eq_left_mean_square);
+  eq_protocol_write_u32(payload + 24u, post_eq_right_mean_square);
 
   s_meter_next_report_us = now + (uint64_t)s_meter_report_interval_ms * 1000u;
   (void)tud_hid_report(0u, report, sizeof(report));
@@ -985,8 +1067,8 @@ int main(void) {
   // Initialise both status LEDs and ensure they start off.
   led_pwm_init(LED_RED_PIN);
   led_pwm_init(LED_BLUE_PIN);
-  led_set(LED_RED_PIN, false);
-  led_set(LED_BLUE_PIN, false);
+  red_led_set(false);
+  led_set_level(LED_BLUE_PIN, 0u);
 
   // Start the I2S output driver (plays silence until USB audio arrives).
   i2s_out_init(s_sample_rate_hz);
@@ -1002,6 +1084,7 @@ int main(void) {
   // Main loop: process USB events then forward any received audio to I2S.
   while (true) {
     tud_task();    // TinyUSB internal event pump (must be called regularly)
+    device_reset_task();
     hid_control_task();
     meter_stream_task();
     audio_task();  // Drain USB receive buffer → I2S ring buffer

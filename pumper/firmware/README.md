@@ -1,6 +1,6 @@
 # Pumper firmware
 
-The firmware enumerates as a composite USB Audio Class 2 and vendor HID device. Core 0 services TinyUSB and core 1 processes the ten-band EQ before audio enters the PIO/DMA I2S ring. Post-EQ stereo peak/RMS metering is streamed over HID only while the controller's heartbeat remains active.
+The firmware enumerates as a composite USB Audio Class 2 and vendor HID device. Core 0 services TinyUSB and core 1 processes the ten-band EQ before audio enters the PIO/DMA I2S ring. Pre-EQ input and saturated post-EQ output stereo peak/RMS metering is streamed over HID only while the controller's heartbeat remains active.
 
 Ten numbered EQ profiles use the final two 4 KiB flash sectors as alternating banks. A bank is committed only after all profile pages have been programmed, so an interrupted save leaves the previous bank available. Live editing and profile loading do not erase flash. Save Profile writes a slot without changing the power-on selection; Set Default explicitly chooses which stored profile loads at boot; Delete Profile empties a slot. Deleting the default promotes the lowest-numbered remaining profile, while deleting the last profile restores the flat compiled fallback on the next boot. The first saved profile becomes the default when no profile exists. The previous single-profile record is imported into Profile 1 on first boot and migrated on the next save. The compiled fallback and Restore Defaults configuration are flat: 0 dB preamp and 0 dB filter gains.
 
@@ -99,6 +99,14 @@ cmake --build firmware/build-fresh --target rp2350_usb_dac -j
 No development-origin firmware flag is required. WebHID works from a secure production origin and from `http://localhost`.
 
 ## Flashing
+
+From firmware 1.7 onward, a connected web controller can restart the DAC into
+BOOTSEL mode with the Firmware update action. The browser does not receive or
+upload the firmware image. Copy `firmware/build/rp2350_usb_dac.uf2` onto the
+`RP2350` USB drive exposed by the boot ROM, then wait for the drive to disconnect
+and the DAC to restart.
+
+To enter BOOTSEL manually:
 
 1. Disconnect the DAC.
 2. Hold the RP2354 BOOTSEL button while reconnecting USB.
