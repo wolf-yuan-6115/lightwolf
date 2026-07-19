@@ -54,7 +54,7 @@ describe("Pumper HID transport", () => {
     transport.addEventListener(METER_REPORT_EVENT, meterListener);
     await transport.open(device);
 
-    const report = createRequest(Opcode.MeterLevel, 0, new Uint8Array(16));
+    const report = createRequest(Opcode.MeterLevel, 0, new Uint8Array(28));
     report[3] |= 0x80;
     const event = { device, data: new DataView(report.buffer) } as HIDInputReportEvent;
     const listener = listeners.input;

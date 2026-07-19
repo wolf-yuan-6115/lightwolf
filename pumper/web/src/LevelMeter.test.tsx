@@ -1,0 +1,34 @@
+import { render, screen } from "@testing-library/react";
+import { describe, expect, it } from "vitest";
+import { LevelMeter } from "./LevelMeter";
+
+describe("LevelMeter", () => {
+  it("shows distinct pre- and post-EQ levels with shared warning colors", () => {
+    const { container } = render(
+      <LevelMeter
+        level={{
+          sequence: 1,
+          preEq: {
+            leftPeak: 32768,
+            rightPeak: 32768,
+            leftMeanSquare: 32768 * 32768,
+            rightMeanSquare: 32768 * 32768,
+          },
+          postEq: {
+            leftPeak: 16384,
+            rightPeak: 16384,
+            leftMeanSquare: 16384 * 16384,
+            rightMeanSquare: 16384 * 16384,
+          },
+        }}
+      />,
+    );
+
+    expect(screen.getByLabelText("L input 0.0 dBFS")).toBeInTheDocument();
+    expect(screen.getByLabelText("L output -6.0 dBFS")).toBeInTheDocument();
+    expect(container.querySelector(".bg-indigo-500")).toBeInTheDocument();
+    expect(container.querySelector(".bg-emerald-500")).toBeInTheDocument();
+    expect(container.querySelector(".bg-amber-400")).toBeInTheDocument();
+    expect(container.querySelector(".bg-red-500")).toBeInTheDocument();
+  });
+});

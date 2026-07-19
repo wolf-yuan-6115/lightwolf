@@ -1,13 +1,16 @@
 # Pumper EQ Controller
 
 Static WebHID controller for the LightWolf Pumper USB DAC, built with React,
-TypeScript, Vite, and Tailwind CSS 4. The utility-first interface uses a dark
-stone palette and Lucide icons. It provides live EQ preview and a
-heartbeat-controlled post-EQ stereo output meter. Ten numbered device profiles
-can be loaded live and are written to flash only through the explicit Save
-Profile action. A separate Make Default action selects the profile loaded at
-power-on without overwriting that profile's EQ settings, and the trash action
-returns a stored slot to the empty state.
+TypeScript, Vite, Tailwind CSS 4, and daisyUI 5. The utility-first interface
+uses daisyUI's built-in light and dark themes, self-hosted Inter from Fontsource,
+and Lucide icons. It provides live EQ preview and heartbeat-controlled pre- and
+post-EQ stereo level meters. Ten numbered device profiles can be loaded live
+and are written to flash only through the explicit Save Profile action. A
+separate Make Default action selects the profile loaded at power-on without
+overwriting that profile's EQ settings, and the trash action returns a stored
+slot to the empty state. Device actions in the diagnostics bar can restart
+firmware 1.7 or newer normally or enter BOOTSEL mode for a manual UF2 copy to
+the `RP2350` USB drive; the web controller does not upload firmware images.
 
 ## Development
 

@@ -29,6 +29,12 @@ describe("Pumper HID protocol", () => {
     expect(Array.from(report.slice(0, 9))).toEqual([80, 69, 1, Opcode.GetBand, 0x34, 0x12, 1, 0, 7]);
   });
 
+  it("assigns device reset commands without payloads", () => {
+    expect(Opcode.RestartDevice).toBe(0x40);
+    expect(Opcode.EnterBootsel).toBe(0x41);
+    expect(createRequest(Opcode.EnterBootsel, 7)[6]).toBe(0);
+  });
+
   it("round-trips global milli-decibel values", () => {
     expect(decodeGlobal(encodeGlobal({ enabled: true, preampDb: -5.321, bands: [] }))).toEqual({
       enabled: true,
@@ -60,23 +66,36 @@ describe("Pumper HID protocol", () => {
     });
   });
 
-  it("encodes meter timing and decodes a stereo meter report", () => {
+  it("encodes meter timing and decodes pre- and post-EQ stereo levels", () => {
     expect(Array.from(encodeMeterConfig(40, 1250))).toEqual([40, 0, 0xe2, 0x04]);
 
-    const payload = new Uint8Array(16);
+    const payload = new Uint8Array(28);
     const view = new DataView(payload.buffer);
     view.setUint32(0, 17, true);
     view.setUint16(4, 32768, true);
     view.setUint16(6, 16384, true);
     view.setUint32(8, 536870912, true);
     view.setUint32(12, 134217728, true);
+    view.setUint16(16, 24576, true);
+    view.setUint16(18, 8192, true);
+    view.setUint32(20, 301989888, true);
+    view.setUint32(24, 33554432, true);
     expect(decodeMeterLevel(payload)).toEqual({
       sequence: 17,
-      leftPeak: 32768,
-      rightPeak: 16384,
-      leftMeanSquare: 536870912,
-      rightMeanSquare: 134217728,
+      preEq: {
+        leftPeak: 32768,
+        rightPeak: 16384,
+        leftMeanSquare: 536870912,
+        rightMeanSquare: 134217728,
+      },
+      postEq: {
+        leftPeak: 24576,
+        rightPeak: 8192,
+        leftMeanSquare: 301989888,
+        rightMeanSquare: 33554432,
+      },
     });
+    expect(() => decodeMeterLevel(new Uint8Array(16))).toThrow("Invalid audio meter report");
   });
 
   it("decodes ten-slot profile state", () => {

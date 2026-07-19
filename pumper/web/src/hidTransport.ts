@@ -52,7 +52,7 @@ export class PumperHidTransport extends EventTarget {
     } catch (reason) {
       this.device = null;
       if (navigator.userAgent.includes("Linux")) {
-        throw new Error("Linux denied access to Pumper. Install the Pumper udev rule, reconnect the DAC, and try again.", {
+        throw new Error("Linux denied access to Pumper.", {
           cause: reason,
         });
       }

@@ -101,25 +101,25 @@ export function EqGraph({ config, sampleRateHz, selectedBand, onSelectBand, onCh
       onPointerUp={() => setDragging(null)}
       onPointerCancel={() => setDragging(null)}
     >
-      <rect className="fill-stone-950" x={margin.left} y={margin.top} width={graphWidth} height={graphHeight} rx={3} />
+      <rect className="fill-base-200" x={margin.left} y={margin.top} width={graphWidth} height={graphHeight} rx={3} />
       {frequencyTicks.map((frequency) => (
         <g key={frequency}>
-          <line className="stroke-stone-800 [stroke-width:1]" x1={xForFrequency(frequency)} x2={xForFrequency(frequency)} y1={margin.top} y2={height - margin.bottom} />
-          <text className="fill-stone-500 text-[11px] font-semibold" x={xForFrequency(frequency)} y={height - 13} textAnchor="middle">
+          <line className="stroke-base-300 [stroke-width:1]" x1={xForFrequency(frequency)} x2={xForFrequency(frequency)} y1={margin.top} y2={height - margin.bottom} />
+          <text className="fill-base-content/45 text-[11px] font-semibold" x={xForFrequency(frequency)} y={height - 13} textAnchor="middle">
             {frequency >= 1000 ? `${frequency / 1000}k` : frequency}
           </text>
         </g>
       ))}
       {gainTicks.map((gain) => (
         <g key={gain}>
-          <line className={gain === 0 ? "stroke-stone-500 [stroke-width:1.5]" : "stroke-stone-800 [stroke-width:1]"} x1={margin.left} x2={width - margin.right} y1={yForGain(gain)} y2={yForGain(gain)} />
-          <text className="fill-stone-500 text-[11px] font-semibold" x={margin.left - 10} y={yForGain(gain) + 4} textAnchor="end">
+          <line className={gain === 0 ? "stroke-base-content/45 [stroke-width:1.5]" : "stroke-base-300 [stroke-width:1]"} x1={margin.left} x2={width - margin.right} y1={yForGain(gain)} y2={yForGain(gain)} />
+          <text className="fill-base-content/45 text-[11px] font-semibold" x={margin.left - 10} y={yForGain(gain) + 4} textAnchor="end">
             {gain > 0 ? `+${gain}` : gain}
           </text>
         </g>
       ))}
-      <path className="fill-none stroke-black/70 [stroke-width:8]" d={path} />
-      <path className="fill-none stroke-amber-400 [stroke-width:3]" d={path} />
+      <path className="fill-none stroke-base-100/70 [stroke-width:8]" d={path} />
+      <path className="fill-none stroke-accent [stroke-width:3]" d={path} />
       {config.bands.map((band, index) => (
         <g key={index} className={band.enabled ? "" : "opacity-35"}>
           <circle
@@ -127,14 +127,14 @@ export function EqGraph({ config, sampleRateHz, selectedBand, onSelectBand, onCh
             cy={yForGain(clamp(band.gainDb, minimumGain, maximumGain))}
             r={selectedBand === index ? 14 : 12}
             fill={bandColors[index]}
-            stroke={selectedBand === index ? "#fafaf9" : "#292524"}
+            stroke={selectedBand === index ? "var(--color-base-content)" : "var(--color-base-300)"}
             strokeWidth={selectedBand === index ? 3 : 2}
             className="cursor-grab active:cursor-grabbing"
             onPointerDown={(event) => startDragging(event, index)}
             onClick={() => onSelectBand(index)}
           />
           <text
-            className="pointer-events-none fill-stone-950 text-[10px] font-black"
+            className="pointer-events-none fill-black text-[10px] font-black"
             x={xForFrequency(band.frequencyHz)}
             y={yForGain(clamp(band.gainDb, minimumGain, maximumGain)) + 4}
             textAnchor="middle"

@@ -28,6 +28,8 @@ export enum Opcode {
   MeterKeepalive = 0x31,
   MeterStop = 0x32,
   MeterLevel = 0x33,
+  RestartDevice = 0x40,
+  EnterBootsel = 0x41,
 }
 
 export enum ProtocolStatus {
@@ -79,7 +81,7 @@ export interface DeviceStatus {
   savedGeneration: number;
   appliedGeneration: number;
   underrunFrames: number;
-  droppedBlocks: number;
+  backpressureEvents: number;
 }
 
 export interface ResponsePacket {
@@ -89,12 +91,17 @@ export interface ResponsePacket {
   payload: Uint8Array;
 }
 
-export interface MeterLevel {
-  sequence: number;
+export interface StereoMeterLevel {
   leftPeak: number;
   rightPeak: number;
   leftMeanSquare: number;
   rightMeanSquare: number;
+}
+
+export interface MeterLevel {
+  sequence: number;
+  preEq: StereoMeterLevel;
+  postEq: StereoMeterLevel;
 }
 
 export interface ProfileState {
@@ -224,7 +231,7 @@ export function decodeStatus(payload: Uint8Array): DeviceStatus {
     savedGeneration: view.getUint32(12, true),
     appliedGeneration: view.getUint32(16, true),
     underrunFrames: view.getUint32(20, true),
-    droppedBlocks: view.getUint32(24, true),
+    backpressureEvents: view.getUint32(24, true),
   };
 }
 
@@ -237,14 +244,22 @@ export function encodeMeterConfig(reportIntervalMs: number, timeoutMs: number): 
 }
 
 export function decodeMeterLevel(payload: Uint8Array): MeterLevel {
-  if (payload.length !== 16) throw new Error("Invalid audio meter report");
+  if (payload.length !== 28) throw new Error("Invalid audio meter report");
   const view = viewFor(payload);
   return {
     sequence: view.getUint32(0, true),
-    leftPeak: view.getUint16(4, true),
-    rightPeak: view.getUint16(6, true),
-    leftMeanSquare: view.getUint32(8, true),
-    rightMeanSquare: view.getUint32(12, true),
+    preEq: {
+      leftPeak: view.getUint16(4, true),
+      rightPeak: view.getUint16(6, true),
+      leftMeanSquare: view.getUint32(8, true),
+      rightMeanSquare: view.getUint32(12, true),
+    },
+    postEq: {
+      leftPeak: view.getUint16(16, true),
+      rightPeak: view.getUint16(18, true),
+      leftMeanSquare: view.getUint32(20, true),
+      rightMeanSquare: view.getUint32(24, true),
+    },
   };
 }
 

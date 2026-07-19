@@ -17,8 +17,8 @@ describe("EQ response math", () => {
     expect(responseCurve(config, 48000, 8).every((point) => Math.abs(point.gainDb) < 1e-8)).toBe(true);
   });
 
-  it("reserves 0.5 dB for a flat auto preamp", () => {
-    expect(calculateAutoPreamp(flatConfig(), 48000)).toEqual({ preampDb: -0.5, peakDb: 0 });
+  it("keeps a flat auto preamp at zero decibels", () => {
+    expect(calculateAutoPreamp(flatConfig(), 48000)).toEqual({ preampDb: 0, peakDb: 0 });
   });
 
   it("accounts for overlapping filter gains", () => {
@@ -35,7 +35,7 @@ describe("EQ response math", () => {
     config.bands[1] = { ...config.bands[0] };
     const result = calculateAutoPreamp(config, 48000);
     expect(result.peakDb).toBeCloseTo(12, 2);
-    expect(result.preampDb).toBeCloseTo(-12.5, 2);
+    expect(result.preampDb).toBeCloseTo(-12, 2);
   });
 
   it("does not add positive gain when every enabled filter cuts", () => {

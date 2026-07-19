@@ -108,7 +108,7 @@ export function responseCurve(config: EqConfig, sampleRateHz: number, count = 51
 }
 
 export function calculateAutoPreamp(config: EqConfig, sampleRateHz: number): { preampDb: number; peakDb: number } {
-  if (!config.enabled) return { preampDb: -0.5, peakDb: 0 };
+  if (!config.enabled) return { preampDb: 0, peakDb: 0 };
   const chain = buildChain(config, sampleRateHz);
   const count = 4096;
   const frequencies = Array.from({ length: count }, (_, index) => logFrequency(index, count));
@@ -131,6 +131,7 @@ export function calculateAutoPreamp(config: EqConfig, sampleRateHz: number): { p
     const frequency = lower * (upper / lower) ** (i / 256);
     peakDb = Math.max(peakDb, chainGainDb(chain, frequency, sampleRateHz));
   }
-  const preampDb = Math.round(Math.min(0, -0.5 - peakDb) * 1000) / 1000;
+  const roundedPreampDb = Math.round(Math.min(0, -peakDb) * 1000) / 1000;
+  const preampDb = roundedPreampDb === 0 ? 0 : roundedPreampDb;
   return { preampDb, peakDb };
 }
