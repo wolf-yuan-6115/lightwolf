@@ -22,6 +22,7 @@ static void test_default_config(void) {
 static void test_protocol_header(void) {
   assert(EQ_OPCODE_RESTART_DEVICE == 0x40u);
   assert(EQ_OPCODE_ENTER_BOOTSEL == 0x41u);
+  assert(EQ_PROTOCOL_STATUS_PAYLOAD_SIZE == 32u);
 
   uint8_t report[EQ_PROTOCOL_REPORT_SIZE];
   eq_protocol_response_init(report, EQ_OPCODE_GET_STATUS, 0x1234u, EQ_STATUS_OK, 3u);
@@ -34,6 +35,10 @@ static void test_protocol_header(void) {
   assert(packet.request_id == 0x1234u);
   assert(packet.payload_length == 3u);
   assert(packet.payload[2] == 3u);
+
+  uint8_t signed_value[4];
+  eq_protocol_write_i32(signed_value, -12345);
+  assert(eq_protocol_read_i32(signed_value) == -12345);
 
   eq_protocol_response_init(report, EQ_OPCODE_METER_LEVEL, 0u, EQ_STATUS_OK,
                             EQ_PROTOCOL_METER_LEVEL_PAYLOAD_SIZE);

@@ -13,10 +13,12 @@
 //   • Runtime-configurable ten-band parametric EQ controlled over WebHID
 
 #include <stdbool.h>
+#include <math.h>
 #include <stdint.h>
 #include <string.h>
 
 #include "bsp/board_api.h"
+#include "hardware/adc.h"
 #include "hardware/pwm.h"
 #include "hardware/watchdog.h"
 #include "pico/bootrom.h"
@@ -42,6 +44,12 @@
 #define METER_TIMEOUT_MAX_MS 5000u
 #define DEVICE_RESET_ACK_DELAY_US 250000u
 #define DEVICE_RESET_FALLBACK_DELAY_US 1000000u
+#define TEMPERATURE_SAMPLE_COUNT 8u
+#define ADC_REFERENCE_VOLTAGE 3.3f
+#define ADC_MAX_COUNTS 4096.0f
+#define TEMPERATURE_REFERENCE_C 27.0f
+#define TEMPERATURE_REFERENCE_VOLTAGE 0.706f
+#define TEMPERATURE_VOLTAGE_SLOPE 0.001721f
 
 // GPIO pins for the two status LEDs (active-low, driven via PWM).
 #define LED_RED_PIN  10u  // Lit when USB audio streaming is active
@@ -171,6 +179,16 @@ static void led_set_level(uint pin, uint16_t level) {
   uint channel = pwm_gpio_to_channel(pin);
   if (level > LED_PWM_WRAP) level = LED_PWM_WRAP;
   pwm_set_chan_level(slice, channel, level);
+}
+
+static int32_t chip_temperature_millicelsius(void) {
+  uint32_t sample_total = 0u;
+  for (uint32_t i = 0; i < TEMPERATURE_SAMPLE_COUNT; i++) sample_total += adc_read();
+  float average_sample = (float)sample_total / (float)TEMPERATURE_SAMPLE_COUNT;
+  float voltage = average_sample * (ADC_REFERENCE_VOLTAGE / ADC_MAX_COUNTS);
+  float celsius = TEMPERATURE_REFERENCE_C -
+                  (voltage - TEMPERATURE_REFERENCE_VOLTAGE) / TEMPERATURE_VOLTAGE_SLOPE;
+  return (int32_t)lrintf(celsius * 1000.0f);
 }
 
 // Respond to an unhandled control request with a zero-filled buffer.
@@ -593,10 +611,10 @@ static void hid_response_prepare(uint8_t opcode, uint16_t request_id, eq_protoco
 
 static void hid_response_status(uint8_t opcode, uint16_t request_id) {
   eq_config_t config = config_snapshot(NULL);
-  hid_response_prepare(opcode, request_id, EQ_STATUS_OK, 28u);
+  hid_response_prepare(opcode, request_id, EQ_STATUS_OK, EQ_PROTOCOL_STATUS_PAYLOAD_SIZE);
   uint8_t *payload = &s_hid_response[EQ_PROTOCOL_HEADER_SIZE];
   payload[0] = 1u;  // Firmware major version.
-  payload[1] = 7u;  // Firmware minor version.
+  payload[1] = 8u;  // Firmware minor version.
   payload[2] = EQ_NUM_FILTERS;
   payload[3] = (s_streaming_active ? 0x01u : 0u) | (config_is_dirty() ? 0x02u : 0u) |
                (config.enabled ? 0x04u : 0u);
@@ -606,6 +624,7 @@ static void hid_response_status(uint8_t opcode, uint16_t request_id) {
   eq_protocol_write_u32(payload + 16u, s_applied_generation);
   eq_protocol_write_u32(payload + 20u, i2s_out_underrun_frames());
   eq_protocol_write_u32(payload + 24u, s_backpressure_events);
+  eq_protocol_write_i32(payload + 28u, chip_temperature_millicelsius());
 }
 
 static void hid_process_command(eq_protocol_packet_t const *packet) {
@@ -1037,6 +1056,10 @@ void tud_audio_feedback_params_cb(uint8_t func_id, uint8_t alt_itf, audio_feedba
 
 int main(void) {
   board_init();
+
+  adc_init();
+  adc_set_temp_sensor_enabled(true);
+  adc_select_input(ADC_TEMPERATURE_CHANNEL_NUM);
 
   critical_section_init(&s_config_lock);
   critical_section_init(&s_meter_lock);

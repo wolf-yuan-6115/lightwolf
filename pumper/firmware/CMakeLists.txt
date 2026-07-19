@@ -39,6 +39,7 @@ target_link_libraries(rp2350_usb_dac PRIVATE
   tinyusb_board
   hardware_pio
   hardware_dma
+  hardware_adc
   hardware_irq
   hardware_clocks
   hardware_pwm
