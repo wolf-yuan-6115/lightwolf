@@ -67,16 +67,28 @@ describe("Pumper HID protocol", () => {
     });
   });
 
-  it("decodes chip temperature while accepting older status payloads", () => {
-    const payload = new Uint8Array(32);
+  it("decodes performance diagnostics while accepting older status payloads", () => {
+    const payload = new Uint8Array(44);
     const view = new DataView(payload.buffer);
-    payload.set([1, 8, 10, 0x04]);
-    view.setUint32(4, 48000, true);
+    payload.set([1, 9, 10, 0x04]);
+    view.setUint32(4, 192000, true);
     view.setInt32(28, 42375, true);
+    view.setUint32(32, 180000000, true);
+    view.setUint32(36, 417, true);
+    view.setUint32(40, 322, true);
 
     expect(decodeStatus(payload)).toMatchObject({
-      firmwareVersion: "1.8",
+      firmwareVersion: "1.9",
       temperatureC: 42.375,
+      systemClockMHz: 180,
+      maxDspBlockUs: 417,
+      i2sLowWaterFrames: 322,
+    });
+    expect(decodeStatus(payload.slice(0, 32))).toMatchObject({
+      temperatureC: 42.375,
+      systemClockMHz: null,
+      maxDspBlockUs: null,
+      i2sLowWaterFrames: null,
     });
     expect(decodeStatus(payload.slice(0, 28)).temperatureC).toBeNull();
     expect(() => decodeStatus(new Uint8Array(30))).toThrow("Invalid status response");

@@ -83,6 +83,9 @@ export interface DeviceStatus {
   underrunFrames: number;
   backpressureEvents: number;
   temperatureC: number | null;
+  systemClockMHz: number | null;
+  maxDspBlockUs: number | null;
+  i2sLowWaterFrames: number | null;
 }
 
 export interface ResponsePacket {
@@ -218,7 +221,9 @@ export function decodeBand(payload: Uint8Array): { index: number; band: EqBand }
 }
 
 export function decodeStatus(payload: Uint8Array): DeviceStatus {
-  if (payload.length !== 28 && payload.length !== 32) throw new Error("Invalid status response");
+  if (payload.length !== 28 && payload.length !== 32 && payload.length !== 44) {
+    throw new Error("Invalid status response");
+  }
   const view = viewFor(payload);
   const flags = payload[3];
   return {
@@ -234,6 +239,9 @@ export function decodeStatus(payload: Uint8Array): DeviceStatus {
     underrunFrames: view.getUint32(20, true),
     backpressureEvents: view.getUint32(24, true),
     temperatureC: payload.length >= 32 ? view.getInt32(28, true) / 1000 : null,
+    systemClockMHz: payload.length >= 44 ? view.getUint32(32, true) / 1_000_000 : null,
+    maxDspBlockUs: payload.length >= 44 ? view.getUint32(36, true) : null,
+    i2sLowWaterFrames: payload.length >= 44 ? view.getUint32(40, true) : null,
   };
 }
 
