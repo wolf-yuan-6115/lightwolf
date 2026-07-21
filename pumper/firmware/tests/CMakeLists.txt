@@ -16,6 +16,14 @@ target_link_libraries(eq_host_tests PRIVATE m)
 
 add_test(NAME eq_host_tests COMMAND eq_host_tests)
 
+add_executable(audio_feedback_tests
+  test_audio_feedback.c
+  ../src/audio_feedback.c
+)
+target_include_directories(audio_feedback_tests PRIVATE ../src)
+target_compile_options(audio_feedback_tests PRIVATE -Wall -Wextra -Werror)
+add_test(NAME audio_feedback_tests COMMAND audio_feedback_tests)
+
 add_executable(profile_store_tests
   test_profile_store.c
   ../src/eq_settings.c

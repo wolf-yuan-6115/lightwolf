@@ -18,6 +18,7 @@ typedef struct {
 typedef struct {
   eq_coefficients_t current;
   eq_coefficients_t target;
+  eq_coefficients_t delta;
   float z1_l;
   float z2_l;
   float z1_r;
@@ -25,14 +26,32 @@ typedef struct {
 } eq_biquad_t;
 
 static eq_biquad_t s_bands[EQ_NUM_FILTERS];
+static uint8_t s_active_bands[EQ_NUM_FILTERS];
+static uint8_t s_active_band_count = 0u;
 static eq_config_t s_config;
 static float s_preamp_current = 1.0f;
 static float s_preamp_target = 1.0f;
+static float s_preamp_delta = 0.0f;
 static uint32_t s_transition_frames = 1u;
 static uint32_t s_transition_remaining = 0u;
 static uint32_t s_sample_rate_hz = 48000u;
 
 static eq_coefficients_t const k_identity = {1.0f, 0.0f, 0.0f, 0.0f, 0.0f};
+
+static bool coefficients_are_identity(eq_coefficients_t const *coefficients) {
+  return coefficients->b0 == 1.0f && coefficients->b1 == 0.0f && coefficients->b2 == 0.0f &&
+         coefficients->a1 == 0.0f && coefficients->a2 == 0.0f;
+}
+
+static void rebuild_active_bands(bool include_current) {
+  s_active_band_count = 0u;
+  for (uint8_t i = 0u; i < EQ_NUM_FILTERS; i++) {
+    if (!coefficients_are_identity(&s_bands[i].target) ||
+        (include_current && !coefficients_are_identity(&s_bands[i].current))) {
+      s_active_bands[s_active_band_count++] = i;
+    }
+  }
+}
 
 static float db_to_linear(float gain_db) {
   return powf(10.0f, gain_db / 20.0f);
@@ -135,35 +154,50 @@ static bool rebuild_targets(eq_config_t const *config, bool immediate) {
   s_preamp_target = config->enabled ? db_to_linear(config->preamp_db) : 1.0f;
   for (uint32_t i = 0; i < EQ_NUM_FILTERS; i++) {
     s_bands[i].target = next[i];
-    if (immediate) s_bands[i].current = next[i];
+    if (immediate) {
+      s_bands[i].current = next[i];
+      s_bands[i].delta = (eq_coefficients_t){0};
+    } else {
+      float scale = 1.0f / (float)s_transition_frames;
+      s_bands[i].delta = (eq_coefficients_t){
+          (next[i].b0 - s_bands[i].current.b0) * scale,
+          (next[i].b1 - s_bands[i].current.b1) * scale,
+          (next[i].b2 - s_bands[i].current.b2) * scale,
+          (next[i].a1 - s_bands[i].current.a1) * scale,
+          (next[i].a2 - s_bands[i].current.a2) * scale,
+      };
+    }
   }
   if (immediate) {
     s_preamp_current = s_preamp_target;
+    s_preamp_delta = 0.0f;
     s_transition_remaining = 0u;
+    rebuild_active_bands(false);
   } else {
+    s_preamp_delta = (s_preamp_target - s_preamp_current) / (float)s_transition_frames;
     s_transition_remaining = s_transition_frames;
+    rebuild_active_bands(true);
   }
   return true;
 }
 
-static float move_toward(float current, float target, float fraction) {
-  return current + (target - current) * fraction;
-}
-
 static void advance_transition(void) {
   if (s_transition_remaining == 0u) return;
-  float fraction = 1.0f / (float)s_transition_remaining;
-  s_preamp_current = move_toward(s_preamp_current, s_preamp_target, fraction);
-  for (uint32_t i = 0; i < EQ_NUM_FILTERS; i++) {
-    eq_coefficients_t *current = &s_bands[i].current;
-    eq_coefficients_t const *target = &s_bands[i].target;
-    current->b0 = move_toward(current->b0, target->b0, fraction);
-    current->b1 = move_toward(current->b1, target->b1, fraction);
-    current->b2 = move_toward(current->b2, target->b2, fraction);
-    current->a1 = move_toward(current->a1, target->a1, fraction);
-    current->a2 = move_toward(current->a2, target->a2, fraction);
+  s_preamp_current += s_preamp_delta;
+  for (uint8_t active = 0u; active < s_active_band_count; active++) {
+    eq_biquad_t *band = &s_bands[s_active_bands[active]];
+    band->current.b0 += band->delta.b0;
+    band->current.b1 += band->delta.b1;
+    band->current.b2 += band->delta.b2;
+    band->current.a1 += band->delta.a1;
+    band->current.a2 += band->delta.a2;
   }
   s_transition_remaining--;
+  if (s_transition_remaining == 0u) {
+    s_preamp_current = s_preamp_target;
+    for (uint32_t i = 0u; i < EQ_NUM_FILTERS; i++) s_bands[i].current = s_bands[i].target;
+    rebuild_active_bands(false);
+  }
 }
 
 void eq_init(uint32_t sample_rate_hz, eq_config_t const *config) {
@@ -192,22 +226,61 @@ bool eq_set_config(eq_config_t const *config) {
   return rebuild_targets(config, false);
 }
 
-void eq_process_interleaved_stereo16(int16_t *interleaved, size_t frame_count) {
+static uint32_t sample_magnitude(int16_t sample) {
+  int32_t value = sample;
+  return (uint32_t)(value < 0 ? -value : value);
+}
+
+static void measure_pair(eq_level_metrics_t *level, int16_t left, int16_t right, bool measure_rms) {
+  uint32_t left_magnitude = sample_magnitude(left);
+  uint32_t right_magnitude = sample_magnitude(right);
+  if (left_magnitude > level->left_peak) level->left_peak = (uint16_t)left_magnitude;
+  if (right_magnitude > level->right_peak) level->right_peak = (uint16_t)right_magnitude;
+  if (measure_rms) {
+    level->left_square_sum += (uint64_t)left_magnitude * left_magnitude;
+    level->right_square_sum += (uint64_t)right_magnitude * right_magnitude;
+  }
+}
+
+static int16_t saturating_round(float sample) {
+  if (sample >= 32767.0f) return 32767;
+  if (sample <= -32768.0f) return -32768;
+  return (int16_t)(sample < 0.0f ? sample - 0.5f : sample + 0.5f);
+}
+
+void eq_process_interleaved_stereo16(int16_t *interleaved, size_t frame_count,
+                                     eq_block_metrics_t *metrics, bool measure_rms) {
   if (interleaved == NULL || frame_count == 0u) return;
+  if (metrics != NULL) memset(metrics, 0, sizeof(*metrics));
+
+  if (s_active_band_count == 0u && s_transition_remaining == 0u &&
+      s_preamp_current == 1.0f) {
+    if (metrics != NULL) {
+      for (size_t frame = 0u; frame < frame_count; frame++) {
+        measure_pair(&metrics->pre_eq, interleaved[frame * 2u],
+                     interleaved[frame * 2u + 1u], measure_rms);
+      }
+      metrics->post_eq = metrics->pre_eq;
+    }
+    return;
+  }
 
   for (size_t frame = 0; frame < frame_count; frame++) {
+    int16_t input_left = interleaved[frame * 2u];
+    int16_t input_right = interleaved[frame * 2u + 1u];
+    if (metrics != NULL) measure_pair(&metrics->pre_eq, input_left, input_right, measure_rms);
     advance_transition();
-    float left = (float)interleaved[frame * 2u] * s_preamp_current;
-    float right = (float)interleaved[frame * 2u + 1u] * s_preamp_current;
-    for (uint32_t i = 0; i < EQ_NUM_FILTERS; i++) {
-      left = process_one(left, &s_bands[i], false);
-      right = process_one(right, &s_bands[i], true);
+    float left = (float)input_left * s_preamp_current;
+    float right = (float)input_right * s_preamp_current;
+    for (uint8_t active = 0u; active < s_active_band_count; active++) {
+      eq_biquad_t *band = &s_bands[s_active_bands[active]];
+      left = process_one(left, band, false);
+      right = process_one(right, band, true);
     }
-    if (left > 32767.0f) left = 32767.0f;
-    if (left < -32768.0f) left = -32768.0f;
-    if (right > 32767.0f) right = 32767.0f;
-    if (right < -32768.0f) right = -32768.0f;
-    interleaved[frame * 2u] = (int16_t)lrintf(left);
-    interleaved[frame * 2u + 1u] = (int16_t)lrintf(right);
+    int16_t output_left = saturating_round(left);
+    int16_t output_right = saturating_round(right);
+    interleaved[frame * 2u] = output_left;
+    interleaved[frame * 2u + 1u] = output_right;
+    if (metrics != NULL) measure_pair(&metrics->post_eq, output_left, output_right, measure_rms);
   }
 }

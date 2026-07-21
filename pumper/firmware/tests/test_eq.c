@@ -22,7 +22,7 @@ static void test_default_config(void) {
 static void test_protocol_header(void) {
   assert(EQ_OPCODE_RESTART_DEVICE == 0x40u);
   assert(EQ_OPCODE_ENTER_BOOTSEL == 0x41u);
-  assert(EQ_PROTOCOL_STATUS_PAYLOAD_SIZE == 32u);
+  assert(EQ_PROTOCOL_STATUS_PAYLOAD_SIZE == 44u);
 
   uint8_t report[EQ_PROTOCOL_REPORT_SIZE];
   eq_protocol_response_init(report, EQ_OPCODE_GET_STATUS, 0x1234u, EQ_STATUS_OK, 3u);
@@ -78,7 +78,7 @@ static void test_dsp_bypass_and_processing(void) {
   int16_t original[4];
   memcpy(original, bypass_samples, sizeof(original));
   eq_init(48000u, &bypass);
-  eq_process_interleaved_stereo16(bypass_samples, 2u);
+  eq_process_interleaved_stereo16(bypass_samples, 2u, NULL, false);
   assert(memcmp(original, bypass_samples, sizeof(original)) == 0);
 
   eq_config_t preamp = bypass;
@@ -87,9 +87,13 @@ static void test_dsp_bypass_and_processing(void) {
   for (uint32_t i = 0; i < EQ_NUM_FILTERS; i++) preamp.filters[i].enabled = false;
   int16_t samples[] = {10000, -10000};
   eq_init(48000u, &preamp);
-  eq_process_interleaved_stereo16(samples, 1u);
+  eq_block_metrics_t metrics;
+  eq_process_interleaved_stereo16(samples, 1u, &metrics, true);
   assert(abs(samples[0] - 5000) <= 1);
   assert(abs(samples[1] + 5000) <= 1);
+  assert(metrics.pre_eq.left_peak == 10000u);
+  assert(metrics.pre_eq.left_square_sum == 100000000u);
+  assert(metrics.post_eq.left_peak >= 4999u && metrics.post_eq.left_peak <= 5001u);
 }
 
 int main(void) {

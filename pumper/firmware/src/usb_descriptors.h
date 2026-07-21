@@ -67,7 +67,7 @@ enum {
 //   _epout            OUT endpoint number for audio data (host → device)
 //   _epoutsize        Max packet size for _epout
 //   _epfb             IN  endpoint number for feedback (device → host)
-//   _epfbsize         Packet size for the feedback endpoint (4 bytes)
+//   _epfbsize         Packet size for the feedback endpoint (3 or 4 bytes)
 #define TUD_AUDIO_SPEAKER_STEREO_FB_DESCRIPTOR(_itfnum, _stridx, _nBytesPerSample, _nBitsUsedPerSample, _epout, _epoutsize, _epfb, _epfbsize) \
   /* Standard Interface Association Descriptor (IAD) */\
   TUD_AUDIO_DESC_IAD(/*_firstitf*/ _itfnum, /*_nitfs*/ 0x02, /*_stridx*/ 0x00),\

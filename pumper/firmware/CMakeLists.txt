@@ -17,6 +17,8 @@ add_executable(rp2350_usb_dac
   src/main.c
   src/usb_descriptors.c
   src/i2s_out.c
+  src/audio_feedback.c
+  src/quirk_os_guessing.c
   src/eq_config.c
   src/eq_dsp.c
   src/eq_protocol.c
@@ -24,6 +26,7 @@ add_executable(rp2350_usb_dac
 )
 
 pico_override_flash_size(rp2350_usb_dac ${PICO_FLASH_SIZE_BYTES})
+pico_set_binary_type(rp2350_usb_dac copy_to_ram)
 
 pico_generate_pio_header(rp2350_usb_dac ${CMAKE_CURRENT_LIST_DIR}/src/audio_i2s.pio)
 
@@ -42,12 +45,15 @@ target_link_libraries(rp2350_usb_dac PRIVATE
   hardware_adc
   hardware_irq
   hardware_clocks
+  hardware_vreg
   hardware_pwm
   hardware_flash
   hardware_watchdog
   pico_bootrom
   m
 )
+
+target_compile_options(rp2350_usb_dac PRIVATE -fno-trapping-math -fno-rounding-math)
 
 pico_enable_stdio_usb(rp2350_usb_dac 0)
 pico_enable_stdio_uart(rp2350_usb_dac 0)

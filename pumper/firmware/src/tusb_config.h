@@ -87,7 +87,7 @@ extern "C" {
 
 #define CFG_TUD_AUDIO_ENABLE_EP_OUT                    1  // Enable audio OUT (host → device)
 #define CFG_TUD_AUDIO_ENABLE_FEEDBACK_EP               1  // Enable SOF feedback for async rate adaptation
-#define CFG_TUD_AUDIO_ENABLE_FEEDBACK_FORMAT_CORRECTION 0  // No correction needed at Full Speed
+#define CFG_TUD_AUDIO_ENABLE_FEEDBACK_FORMAT_CORRECTION 0  // Runtime callback enables 10.14 for macOS
 
 #ifdef __cplusplus
 }

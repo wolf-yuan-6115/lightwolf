@@ -19,6 +19,7 @@
 #include <string.h>
 
 #include "bsp/board_api.h"
+#include "quirk_os_guessing.h"
 #include "tusb.h"
 #include "usb_descriptors.h"
 
@@ -68,7 +69,7 @@ uint8_t const *tud_hid_descriptor_report_cb(uint8_t instance) {
 static tusb_desc_device_t const desc_device = {
     .bLength = sizeof(tusb_desc_device_t),
     .bDescriptorType = TUSB_DESC_DEVICE,
-    .bcdUSB = 0x0200,
+    .bcdUSB = 0x0201,
     .bDeviceClass = TUSB_CLASS_MISC,
     .bDeviceSubClass = MISC_SUBCLASS_COMMON,
     .bDeviceProtocol = MISC_PROTOCOL_IAD,
@@ -84,6 +85,7 @@ static tusb_desc_device_t const desc_device = {
 
 // TinyUSB callback: return the device descriptor to the host.
 uint8_t const *tud_descriptor_device_cb(void) {
+  quirk_os_guessing_desc_device_cb();
   return (uint8_t const *) &desc_device;
 }
 
@@ -98,11 +100,39 @@ static uint8_t const desc_configuration[] = {
         EPNUM_HID_OUT, EPNUM_HID_IN, CFG_TUD_HID_EP_BUFSIZE, 1),
 };
 
+// macOS uses the standards-compliant three-byte 10.14 feedback packet at full speed.
+static uint8_t const desc_configuration_macos[] = {
+    TUD_CONFIG_DESCRIPTOR(1, ITF_NUM_TOTAL, 0, CONFIG_TOTAL_LEN, 0x00, 100),
+    TUD_AUDIO_SPEAKER_STEREO_FB_DESCRIPTOR(ITF_NUM_AUDIO_CONTROL, STRID_AUDIO_IF,
+        CFG_TUD_AUDIO_FUNC_1_N_BYTES_PER_SAMPLE_RX, CFG_TUD_AUDIO_FUNC_1_RESOLUTION_RX,
+        EPNUM_AUDIO_OUT, CFG_TUD_AUDIO_FUNC_1_EP_OUT_SZ_MAX, EPNUM_AUDIO_FB, 3),
+    TUD_HID_INOUT_DESCRIPTOR(ITF_NUM_HID, STRID_HID_IF, HID_ITF_PROTOCOL_NONE, sizeof(desc_hid_report),
+        EPNUM_HID_OUT, EPNUM_HID_IN, CFG_TUD_HID_EP_BUFSIZE, 1),
+};
+
 // TinyUSB callback: return the configuration descriptor (index is ignored since
 // there is only one configuration).
 uint8_t const *tud_descriptor_configuration_cb(uint8_t index) {
   (void) index;
+  quirk_os_guessing_desc_configuration_cb();
+  if (tud_speed_get() == TUSB_SPEED_FULL &&
+      quirk_os_guessing_get() == QUIRK_OS_GUESSING_OSX) {
+    return desc_configuration_macos;
+  }
   return desc_configuration;
+}
+
+#define BOS_TOTAL_LEN (TUD_BOS_DESC_LEN + 7u)
+
+static uint8_t const desc_bos[] = {
+    TUD_BOS_DESCRIPTOR(BOS_TOTAL_LEN, 1),
+    0x07, TUSB_DESC_DEVICE_CAPABILITY, DEVICE_CAPABILITY_USB20_EXTENSION,
+    0x00, 0x00, 0x00, 0x00,
+};
+
+uint8_t const *tud_descriptor_bos_cb(void) {
+  quirk_os_guessing_desc_bos_cb();
+  return desc_bos;
 }
 
 // String descriptor table indexed by STRID_* constants from usb_descriptors.h.
@@ -129,6 +159,7 @@ static uint16_t _desc_str[32 + 1];
 // Strings are converted from ASCII to USB UTF-16LE on the fly.
 uint16_t const *tud_descriptor_string_cb(uint8_t index, uint16_t langid) {
   (void) langid;
+  quirk_os_guessing_desc_string_cb();
   size_t chr_count;
 
   switch (index) {

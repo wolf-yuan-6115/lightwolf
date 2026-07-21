@@ -37,10 +37,10 @@ bool eq_config_validate(eq_config_t const *config) {
 
   for (uint32_t i = 0; i < EQ_NUM_FILTERS; i++) {
     eq_filter_config_t const *filter = &config->filters[i];
-    if (filter->type < EQ_FILTER_LOW_SHELF || filter->type > EQ_FILTER_HIGH_SHELF) {
+    if ((uint32_t)filter->type > EQ_FILTER_HIGH_SHELF) {
       return false;
     }
-    if (filter->width_mode < EQ_WIDTH_Q || filter->width_mode > EQ_WIDTH_BANDWIDTH) {
+    if ((uint32_t)filter->width_mode > EQ_WIDTH_BANDWIDTH) {
       return false;
     }
     if (!finite_in_range(filter->frequency_hz, EQ_FREQUENCY_MIN_HZ, EQ_FREQUENCY_MAX_HZ) ||

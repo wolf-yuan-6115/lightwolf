@@ -26,11 +26,17 @@ void i2s_out_set_sample_rate(uint32_t sample_rate_hz);
 // overflowing the ring buffer.
 size_t i2s_out_free_frames(void);
 
+// Current number of stereo frames waiting in the final I2S ring.
+uint32_t i2s_out_buffered_frames(void);
+
 // Mark the USB audio interface active/inactive. Disabling streaming drops any
 // queued audio so a later stream cannot replay stale samples.
 void i2s_out_set_streaming(bool streaming);
 
 // Number of silent frames inserted because streaming data was unavailable.
 uint32_t i2s_out_underrun_frames(void);
+
+// Lowest post-prime ring occupancy observed during the current stream.
+uint32_t i2s_out_low_water_frames(void);
 
 #endif
