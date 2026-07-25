@@ -183,17 +183,19 @@ static bool rebuild_targets(eq_config_t const *config, bool immediate) {
 
 static void advance_transition(void) {
   if (s_transition_remaining == 0u) return;
-  s_preamp_current += s_preamp_delta;
+  uint32_t remaining = s_transition_remaining - 1u;
+  // Anchor each step to the target so float rounding cannot accumulate into an end-of-ramp snap.
+  s_preamp_current = s_preamp_target - s_preamp_delta * (float)remaining;
   for (uint8_t active = 0u; active < s_active_band_count; active++) {
     eq_biquad_t *band = &s_bands[s_active_bands[active]];
-    band->current.b0 += band->delta.b0;
-    band->current.b1 += band->delta.b1;
-    band->current.b2 += band->delta.b2;
-    band->current.a1 += band->delta.a1;
-    band->current.a2 += band->delta.a2;
+    band->current.b0 = band->target.b0 - band->delta.b0 * (float)remaining;
+    band->current.b1 = band->target.b1 - band->delta.b1 * (float)remaining;
+    band->current.b2 = band->target.b2 - band->delta.b2 * (float)remaining;
+    band->current.a1 = band->target.a1 - band->delta.a1 * (float)remaining;
+    band->current.a2 = band->target.a2 - band->delta.a2 * (float)remaining;
   }
-  s_transition_remaining--;
-  if (s_transition_remaining == 0u) {
+  s_transition_remaining = remaining;
+  if (remaining == 0u) {
     s_preamp_current = s_preamp_target;
     for (uint32_t i = 0u; i < EQ_NUM_FILTERS; i++) s_bands[i].current = s_bands[i].target;
     rebuild_active_bands(false);

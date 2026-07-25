@@ -1,9 +1,11 @@
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import App from "./App";
 import { PumperHidTransport } from "./hidTransport";
 import {
   defaultConfig,
+  decodeBand,
+  decodeGlobal,
   encodeBand,
   encodeGlobal,
   type EqConfig,
@@ -31,6 +33,7 @@ beforeEach(() => {
 
 afterEach(() => {
   cleanup();
+  vi.useRealTimers();
   vi.restoreAllMocks();
   window.localStorage.removeItem("pumper-theme");
   document.documentElement.removeAttribute("data-theme");
@@ -248,6 +251,86 @@ describe("Pumper controller", () => {
 
     expect(screen.getByLabelText("Slope for band 1")).toHaveValue("1");
     expect(screen.queryByText(/Band 1 slope must be between/i)).not.toBeInTheDocument();
+  });
+
+  it("coalesces continuous band edits without losing the latest value", async () => {
+    const { request } = mockConnectedPumper();
+    render(<App />);
+    const profileMenu = await screen.findByRole("button", { name: "Profile: Profile 1 (default)" });
+    await waitFor(() => expect(profileMenu).toBeEnabled());
+    request.mockClear();
+    vi.useFakeTimers();
+
+    const gainSlider = screen.getByLabelText("Gain slider for band 1");
+    fireEvent.change(gainSlider, { target: { value: "1" } });
+    fireEvent.change(gainSlider, { target: { value: "2" } });
+    fireEvent.change(gainSlider, { target: { value: "3" } });
+    await act(() => vi.advanceTimersByTimeAsync(54));
+    expect(request.mock.calls.filter(([opcode]) => opcode === Opcode.SetBand)).toHaveLength(0);
+
+    await act(() => vi.advanceTimersByTimeAsync(1));
+    let bandCalls = request.mock.calls.filter(([opcode]) => opcode === Opcode.SetBand);
+    expect(bandCalls).toHaveLength(1);
+    expect(decodeBand(bandCalls[0][1] as Uint8Array).band.gainDb).toBe(3);
+
+    fireEvent.change(gainSlider, { target: { value: "4" } });
+    await act(() => vi.advanceTimersByTimeAsync(30));
+    fireEvent.change(gainSlider, { target: { value: "5" } });
+    await act(() => vi.advanceTimersByTimeAsync(25));
+    bandCalls = request.mock.calls.filter(([opcode]) => opcode === Opcode.SetBand);
+    expect(bandCalls).toHaveLength(2);
+    expect(decodeBand(bandCalls[1][1] as Uint8Array).band.gainDb).toBe(5);
+
+    fireEvent.change(gainSlider, { target: { value: "6" } });
+    await act(() => vi.advanceTimersByTimeAsync(55));
+    bandCalls = request.mock.calls.filter(([opcode]) => opcode === Opcode.SetBand);
+    expect(bandCalls).toHaveLength(3);
+    expect(decodeBand(bandCalls[2][1] as Uint8Array).band.gainDb).toBe(6);
+  });
+
+  it("orders auto-preamp updates to preserve headroom", async () => {
+    const { request } = mockConnectedPumper();
+    render(<App />);
+    const profileMenu = await screen.findByRole("button", { name: "Profile: Profile 1 (default)" });
+    await waitFor(() => expect(profileMenu).toBeEnabled());
+    vi.useFakeTimers();
+
+    fireEvent.click(screen.getByRole("button", { name: "Auto" }));
+    await act(() => vi.advanceTimersByTimeAsync(55));
+    request.mockClear();
+
+    const gainSlider = screen.getByLabelText("Gain slider for band 1");
+    fireEvent.change(gainSlider, { target: { value: "6" } });
+    await act(() => vi.advanceTimersByTimeAsync(55));
+    let previewCalls = request.mock.calls.filter(([opcode]) => opcode === Opcode.SetGlobal || opcode === Opcode.SetBand);
+    expect(previewCalls.map(([opcode]) => opcode)).toEqual([Opcode.SetGlobal, Opcode.SetBand]);
+    expect(decodeGlobal(previewCalls[0][1] as Uint8Array).preampDb).toBeLessThan(0);
+    expect(decodeBand(previewCalls[1][1] as Uint8Array).band.gainDb).toBe(6);
+
+    request.mockClear();
+    fireEvent.change(gainSlider, { target: { value: "0" } });
+    await act(() => vi.advanceTimersByTimeAsync(55));
+    previewCalls = request.mock.calls.filter(([opcode]) => opcode === Opcode.SetGlobal || opcode === Opcode.SetBand);
+    expect(previewCalls.map(([opcode]) => opcode)).toEqual([Opcode.SetBand, Opcode.SetGlobal]);
+    expect(decodeBand(previewCalls[0][1] as Uint8Array).band.gainDb).toBe(0);
+    expect(decodeGlobal(previewCalls[1][1] as Uint8Array).preampDb).toBe(0);
+  });
+
+  it("discards a pending preview before restoring defaults", async () => {
+    const { request } = mockConnectedPumper();
+    render(<App />);
+    const profileMenu = await screen.findByRole("button", { name: "Profile: Profile 1 (default)" });
+    await waitFor(() => expect(profileMenu).toBeEnabled());
+    request.mockClear();
+    vi.useFakeTimers();
+
+    fireEvent.change(screen.getByLabelText("Gain slider for band 1"), { target: { value: "6" } });
+    fireEvent.click(screen.getByRole("button", { name: "Defaults" }));
+    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Restore defaults" }));
+    await act(() => vi.advanceTimersByTimeAsync(55));
+
+    expect(request.mock.calls.filter(([opcode]) => opcode === Opcode.SetBand)).toHaveLength(0);
+    expect(request).toHaveBeenCalledWith(Opcode.RestoreDefaults);
   });
 
   it("confirms device resets and shows the BOOTSEL handoff", async () => {

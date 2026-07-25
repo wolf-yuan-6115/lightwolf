@@ -96,10 +96,79 @@ static void test_dsp_bypass_and_processing(void) {
   assert(metrics.post_eq.left_peak >= 4999u && metrics.post_eq.left_peak <= 5001u);
 }
 
+static eq_config_t single_peaking_filter(float frequency_hz) {
+  eq_config_t config = k_eq_default_config;
+  config.preamp_db = 0.0f;
+  for (uint32_t i = 0u; i < EQ_NUM_FILTERS; i++) config.filters[i].enabled = false;
+  config.filters[0].enabled = true;
+  config.filters[0].type = EQ_FILTER_PEAKING;
+  config.filters[0].width_mode = EQ_WIDTH_Q;
+  config.filters[0].frequency_hz = frequency_hz;
+  config.filters[0].gain_db = 12.0f;
+  config.filters[0].q = 10.0f;
+  return config;
+}
+
+static int16_t process_constant_sample(void) {
+  int16_t samples[2] = {10000, 10000};
+  eq_process_interleaved_stereo16(samples, 1u, NULL, false);
+  return samples[0];
+}
+
+static void settle_filter(uint32_t frame_count) {
+  for (uint32_t i = 0u; i < frame_count; i++) (void)process_constant_sample();
+}
+
+static void test_dsp_transition_smoothing(void) {
+  uint32_t const sample_rate_hz = 192000u;
+  uint32_t const transition_frames = sample_rate_hz / 100u;
+
+  eq_config_t config = single_peaking_filter(1000.0f);
+  eq_init(sample_rate_hz, &config);
+  settle_filter(sample_rate_hz / 2u);
+  config.filters[0].frequency_hz = 1050.0f;
+  assert(eq_set_config(&config));
+  for (uint32_t i = 0u; i < transition_frames * 2u; i++) {
+    assert(abs(process_constant_sample() - 10000) <= 32);
+  }
+
+  config = single_peaking_filter(100.0f);
+  eq_init(sample_rate_hz, &config);
+  settle_filter(sample_rate_hz / 2u);
+  int previous = process_constant_sample();
+  config.filters[0].frequency_hz = 1000.0f;
+  assert(eq_set_config(&config));
+  for (uint32_t i = 0u; i < transition_frames * 2u; i++) {
+    int output = process_constant_sample();
+    assert(abs(output - previous) <= 16);
+    previous = output;
+  }
+
+  config = single_peaking_filter(1000.0f);
+  eq_init(sample_rate_hz, &config);
+  settle_filter(sample_rate_hz / 2u);
+  previous = process_constant_sample();
+  config.filters[0].frequency_hz = 1050.0f;
+  assert(eq_set_config(&config));
+  for (uint32_t i = 0u; i < transition_frames / 2u; i++) {
+    int output = process_constant_sample();
+    assert(abs(output - previous) <= 16);
+    previous = output;
+  }
+  config.filters[0].frequency_hz = 1100.0f;
+  assert(eq_set_config(&config));
+  for (uint32_t i = 0u; i < transition_frames * 2u; i++) {
+    int output = process_constant_sample();
+    assert(abs(output - previous) <= 16);
+    previous = output;
+  }
+}
+
 int main(void) {
   test_default_config();
   test_protocol_header();
   test_protocol_config_round_trip();
   test_dsp_bypass_and_processing();
+  test_dsp_transition_smoothing();
   return 0;
 }

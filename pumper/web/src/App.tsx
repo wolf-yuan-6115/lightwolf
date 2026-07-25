@@ -34,12 +34,22 @@ type Dialog = "clear" | "flash" | "defaults" | "set-default" | "switch" | null;
 type DeviceDialog = "info" | "restart" | "bootsel" | "bootsel-ready" | null;
 type Theme = "light" | "dark";
 
+interface PendingPreviewUpdate {
+  payload: Uint8Array<ArrayBufferLike>;
+  context: string;
+}
+
+interface PendingGlobalPreviewUpdate extends PendingPreviewUpdate {
+  preampDb: number;
+}
+
 const buttonBase = "btn btn-sm";
 const primaryButton = "btn btn-primary btn-sm";
 const secondaryButton = "btn btn-sm";
 const clearButton = "btn btn-square btn-error btn-soft btn-sm shrink-0";
 const rangeClass = "range range-xs min-w-18";
 const themeStorageKey = "pumper-theme";
+const livePreviewIntervalMs = 55;
 const filterOptions: readonly SelectMenuOption<FilterType>[] = [
   { value: FilterType.LowShelf, label: "Low shelf" },
   { value: FilterType.Peaking, label: "Peaking" },
@@ -162,8 +172,10 @@ export default function App() {
   const configRef = useRef<EqConfig>(cloneConfig(defaultConfig));
   const savedConfigRef = useRef<EqConfig | null>(null);
   const autoRef = useRef(false);
-  const bandTimers = useRef(new Map<number, number>());
-  const globalTimer = useRef<number | null>(null);
+  const previewTimer = useRef<number | null>(null);
+  const pendingGlobalPreview = useRef<PendingGlobalPreviewUpdate | null>(null);
+  const pendingBandPreviews = useRef(new Map<number, PendingPreviewUpdate>());
+  const submittedPreampDb = useRef(defaultConfig.preampDb);
   const mounted = useRef(true);
   const expectedDisconnect = useRef(false);
 
@@ -224,10 +236,41 @@ export default function App() {
   }, [notice]);
 
   const clearTimers = () => {
-    bandTimers.current.forEach((timer) => window.clearTimeout(timer));
-    bandTimers.current.clear();
-    if (globalTimer.current !== null) window.clearTimeout(globalTimer.current);
-    globalTimer.current = null;
+    if (previewTimer.current !== null) window.clearTimeout(previewTimer.current);
+    previewTimer.current = null;
+    pendingGlobalPreview.current = null;
+    pendingBandPreviews.current.clear();
+  };
+
+  const schedulePreviewFlush = () => {
+    if (previewTimer.current !== null) return;
+    previewTimer.current = window.setTimeout(() => {
+      previewTimer.current = null;
+      const global = pendingGlobalPreview.current;
+      const bands = Array.from(pendingBandPreviews.current.entries()).sort(([left], [right]) => left - right);
+      pendingGlobalPreview.current = null;
+      pendingBandPreviews.current.clear();
+
+      const sendGlobal = () => {
+        if (!global) return;
+        transport.current.request(Opcode.SetGlobal, global.payload).catch((reason: unknown) => {
+          setError(deviceError(global.context, reason));
+        });
+      };
+      const sendBands = () => {
+        bands.forEach(([, update]) => {
+          transport.current.request(Opcode.SetBand, update.payload).catch((reason: unknown) => {
+            setError(deviceError(update.context, reason));
+          });
+        });
+      };
+
+      const attenuating = global !== null && global.preampDb < submittedPreampDb.current;
+      if (attenuating) sendGlobal();
+      sendBands();
+      if (!attenuating) sendGlobal();
+      if (global) submittedPreampDb.current = global.preampDb;
+    }, livePreviewIntervalMs);
   };
 
   const sendGlobalSoon = (next: EqConfig, context: string) => {
@@ -236,12 +279,8 @@ export default function App() {
       setError(rangeMessage("Preamp gain", -241, 12, "dB"));
       return;
     }
-    if (globalTimer.current !== null) window.clearTimeout(globalTimer.current);
-    globalTimer.current = window.setTimeout(() => {
-      transport.current.request(Opcode.SetGlobal, encodeGlobal(next)).catch((reason: unknown) => {
-        setError(deviceError(context, reason));
-      });
-    }, 55);
+    pendingGlobalPreview.current = { payload: encodeGlobal(next), preampDb: next.preampDb, context };
+    schedulePreviewFlush();
   };
 
   const sendBandSoon = (index: number, band: EqBand, context: string) => {
@@ -251,17 +290,8 @@ export default function App() {
       setError(validationError);
       return;
     }
-    const previous = bandTimers.current.get(index);
-    if (previous !== undefined) window.clearTimeout(previous);
-    bandTimers.current.set(
-      index,
-      window.setTimeout(() => {
-        bandTimers.current.delete(index);
-        transport.current.request(Opcode.SetBand, encodeBand(index, band)).catch((reason: unknown) => {
-          setError(deviceError(context, reason));
-        });
-      }, 55),
-    );
+    pendingBandPreviews.current.set(index, { payload: encodeBand(index, band), context });
+    schedulePreviewFlush();
   };
 
   const updateDirtyState = (next: EqConfig) => {
@@ -322,6 +352,7 @@ export default function App() {
       if (autoChanged) await transport.current.request(Opcode.SetGlobal, encodeGlobal(next));
     }
     configRef.current = next;
+    submittedPreampDb.current = next.preampDb;
     if (knownStoredProfile || !nextStatus.dirty) savedConfigRef.current = cloneConfig(deviceConfig);
     setConfig(next);
     setStatus(nextStatus);
