@@ -2,6 +2,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testi
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import App from "./App";
 import { PumperHidTransport } from "./hidTransport";
+import { audioSettingsMock } from "./test/audioSettingsMock";
 import {
   defaultConfig,
   decodeBand,
@@ -12,6 +13,8 @@ import {
   Opcode,
   ProtocolStatus,
   ResponsePacket,
+  CrossfeedMode,
+  decodeCrossfeed,
 } from "./protocol";
 
 const originalHid = Object.getOwnPropertyDescriptor(navigator, "hid");
@@ -44,7 +47,8 @@ afterEach(() => {
   else Reflect.deleteProperty(navigator, "hid");
 });
 
-function mockConnectedPumper(deviceConfig: EqConfig = defaultConfig, rejectRequest?: (opcode: Opcode) => Error | null) {
+function mockConnectedPumper(deviceConfig: EqConfig = defaultConfig, rejectRequest?: (opcode: Opcode) => Error | null, version = [1, 8]) {
+  const audioMock = audioSettingsMock();
   const device = { vendorId: 0x2e8a, productId: 0xf10a } as HIDDevice;
   Object.defineProperty(navigator, "hid", {
     configurable: true,
@@ -58,11 +62,14 @@ function mockConnectedPumper(deviceConfig: EqConfig = defaultConfig, rejectReque
     const rejection = rejectRequest?.(opcode) ?? null;
     if (rejection) throw rejection;
     const requestPayload = payload ?? new Uint8Array();
+    if ([Opcode.GetAudioControls, Opcode.GetCrossfeed, Opcode.SetCrossfeed, Opcode.SaveCrossfeed].includes(opcode)) {
+      return audioMock.handle(opcode, new Uint8Array(requestPayload));
+    }
     let responsePayload: Uint8Array<ArrayBufferLike> = new Uint8Array();
     if (opcode === Opcode.Hello || opcode === Opcode.GetStatus) {
       responsePayload = new Uint8Array(32);
       const view = new DataView(responsePayload.buffer);
-      responsePayload.set([1, 8, 10, 0x04]);
+      responsePayload.set([...version, 10, 0x04]);
       view.setUint32(4, 48000, true);
       view.setInt32(28, 42375, true);
     } else if (opcode === Opcode.GetGlobal) {
@@ -86,7 +93,7 @@ function mockConnectedPumper(deviceConfig: EqConfig = defaultConfig, rejectReque
     } satisfies ResponsePacket;
   });
 
-  return { request };
+  return { request, audioMock };
 }
 
 function getProfileOption(label: string) {
@@ -99,6 +106,125 @@ function getProfileOption(label: string) {
 }
 
 describe("Pumper controller", () => {
+  it("keeps new audio controls disabled on old firmware without sending unsupported commands", async () => {
+    const { request } = mockConnectedPumper();
+    render(<App />);
+    await screen.findByRole("button", { name: "Profile: Profile 1 (default)" });
+    expect(screen.getAllByText("Requires firmware 2.2")).toHaveLength(2);
+    expect(screen.getByRole("button", { name: "Crossfeed mode: Off" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Save crossfeed" })).toBeDisabled();
+    expect(request.mock.calls.some(([opcode]) => [Opcode.GetAudioControls, Opcode.GetCrossfeed].includes(opcode))).toBe(false);
+  });
+
+  it("displays host controls without editable volume controls", async () => {
+    const { audioMock } = mockConnectedPumper(defaultConfig, undefined, [2, 2]);
+    const view = new DataView(audioMock.audio.buffer);
+    view.setInt16(0, -10 * 256, true);
+    view.setInt16(2, -5 * 256, true);
+    audioMock.audio[8] = 1;
+    render(<App />);
+    const group = screen.getByRole("group", { name: "Host USB audio controls" });
+    expect(await within(group).findByText("-10 dB")).toBeInTheDocument();
+    expect(within(group).queryByText("Left (effective)")).not.toBeInTheDocument();
+    expect(within(group).queryByText("Right (effective)")).not.toBeInTheDocument();
+    expect(within(group).queryByRole("slider")).not.toBeInTheDocument();
+    expect(within(group).queryByRole("button")).not.toBeInTheDocument();
+    const globalPane = screen.getByRole("heading", { name: "Global EQ" }).closest("aside")!;
+    expect(within(globalPane).getByRole("group", { name: "Host USB audio controls" })).toBe(group);
+    expect(within(globalPane).getByText("Sample rate")).toBeInTheDocument();
+    expect(within(globalPane).getByText("Stream state")).toBeInTheDocument();
+    expect(within(group).getByText("Master volume")).toBeInTheDocument();
+    const filters = screen.getByRole("heading", { name: "Filter configuration" }).closest("section")!;
+    const crossfeed = screen.getByRole("heading", { name: "Headphone crossfeed" }).closest("section")!;
+    expect(filters.compareDocumentPosition(crossfeed) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it("shows each preset's parameters read-only and restores retained Custom settings", async () => {
+    const { request } = mockConnectedPumper(defaultConfig, undefined, [2, 2]);
+    render(<App />);
+    const mode = await screen.findByRole("button", { name: "Crossfeed mode: Off" });
+    await waitFor(() => expect(mode).toBeEnabled());
+    const chooseMode = (name: string) => fireEvent.click(within(document.querySelector<HTMLElement>('[role="listbox"][aria-label="Crossfeed mode"]')!).getByRole("option", { name, hidden: true }));
+    for (const [name, strength, delay] of [["Low", "10", "0.2"], ["Medium", "20", "0.25"], ["High", "30", "0.3"], ["Off", "0", "0"]]) {
+      chooseMode(name);
+      expect(screen.getByLabelText("Crossfeed strength")).toHaveValue(strength);
+      expect(screen.getByLabelText("Crossfeed cutoff")).toHaveValue("700");
+      expect(screen.getByLabelText("Crossfeed delay")).toHaveValue(delay);
+      for (const control of ["strength", "cutoff", "delay"]) {
+        expect(screen.getByLabelText(`Crossfeed ${control}`)).toHaveAttribute("readonly");
+        expect(screen.getByLabelText(`Crossfeed ${control} slider`)).toBeDisabled();
+      }
+    }
+    request.mockClear();
+    fireEvent.keyDown(screen.getByLabelText("Crossfeed strength"), { key: "ArrowUp" });
+    expect(screen.getByLabelText("Crossfeed strength")).toHaveValue("0");
+    expect(request).not.toHaveBeenCalled();
+    chooseMode("Custom");
+    expect(screen.getByLabelText("Crossfeed strength")).toHaveValue("20");
+    expect(screen.getByLabelText("Crossfeed delay")).toHaveValue("0.25");
+    expect(screen.getByLabelText("Crossfeed strength slider")).toBeEnabled();
+    expect(screen.getByLabelText("Crossfeed strength")).not.toHaveAttribute("readonly");
+  });
+
+  it("preserves Custom values across presets and saves independently of EQ", async () => {
+    const { request, audioMock } = mockConnectedPumper(defaultConfig, undefined, [2, 2]);
+    render(<App />);
+    const mode = await screen.findByRole("button", { name: "Crossfeed mode: Off" });
+    await waitFor(() => expect(mode).toBeEnabled());
+    const chooseMode = (name: string) => {
+      const list = document.querySelector<HTMLElement>('[role="listbox"][aria-label="Crossfeed mode"]')!;
+      fireEvent.click(within(list).getByRole("option", { name, hidden: true }));
+    };
+    chooseMode("Custom");
+    expect(screen.getByLabelText("Crossfeed strength")).toHaveValue("20");
+    expect(screen.getByLabelText("Crossfeed cutoff")).toHaveValue("700");
+    expect(screen.getByLabelText("Crossfeed delay")).toHaveValue("0.25");
+    fireEvent.change(screen.getByLabelText("Crossfeed strength slider"), { target: { value: "35" } });
+    fireEvent.change(screen.getByLabelText("Crossfeed cutoff slider"), { target: { value: "1000" } });
+    fireEvent.change(screen.getByLabelText("Crossfeed delay slider"), { target: { value: "0.4" } });
+    chooseMode("Low");
+    expect(screen.getByLabelText("Crossfeed strength")).toHaveValue("10");
+    expect(screen.getByLabelText("Crossfeed cutoff")).toHaveValue("700");
+    expect(screen.getByLabelText("Crossfeed delay")).toHaveValue("0.2");
+    expect(screen.getByLabelText("Crossfeed strength")).toHaveAttribute("readonly");
+    expect(screen.getByLabelText("Crossfeed strength slider")).toBeDisabled();
+    chooseMode("Custom");
+    expect(screen.getByLabelText("Crossfeed strength")).toHaveValue("35");
+    expect(screen.getByLabelText("Crossfeed cutoff")).toHaveValue("1000");
+    expect(screen.getByLabelText("Crossfeed delay")).toHaveValue("0.4");
+    expect(screen.getByRole("button", { name: "Save profile" })).toBeDisabled();
+    fireEvent.click(getProfileOption("Profile 2"));
+    await screen.findByRole("button", { name: "Profile: Profile 2" });
+    expect(screen.queryByRole("heading", { name: "Discard unsaved changes?" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Crossfeed mode: Custom" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Save crossfeed" }));
+    expect(await screen.findByText("Crossfeed saved for power-on")).toBeInTheDocument();
+    expect(audioMock.state.saved).toEqual({ mode: CrossfeedMode.Custom, strengthPercent: 35, cutoffHz: 1000, delayMs: 0.4 });
+    const calls = request.mock.calls.filter(([opcode]) => [Opcode.SetCrossfeed, Opcode.SaveCrossfeed].includes(opcode));
+    expect(calls.at(-2)?.[0]).toBe(Opcode.SetCrossfeed);
+    expect(decodeCrossfeed(calls.at(-2)?.[1] as Uint8Array).strengthPercent).toBe(35);
+    expect(calls.at(-1)?.[0]).toBe(Opcode.SaveCrossfeed);
+    expect(screen.getByRole("button", { name: "Save crossfeed" })).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "Defaults" }));
+    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Restore defaults" }));
+    await waitFor(() => expect(request).toHaveBeenCalledWith(Opcode.RestoreDefaults));
+    expect(audioMock.state.saved.mode).toBe(CrossfeedMode.Custom);
+    expect(screen.getByRole("button", { name: "Crossfeed mode: Custom" })).toBeInTheDocument();
+  });
+
+  it("shows failed crossfeed saves without clearing unsaved state", async () => {
+    mockConnectedPumper(defaultConfig, (opcode) => opcode === Opcode.SaveCrossfeed ? new Error("Storage error") : null, [2, 2]);
+    render(<App />);
+    const mode = await screen.findByRole("button", { name: "Crossfeed mode: Off" });
+    await waitFor(() => expect(mode).toBeEnabled());
+    const list = document.querySelector<HTMLElement>('[role="listbox"][aria-label="Crossfeed mode"]')!;
+    fireEvent.click(within(list).getByRole("option", { name: "Medium", hidden: true }));
+    fireEvent.click(screen.getByRole("button", { name: "Save crossfeed" }));
+    expect(await screen.findByText("Save crossfeed: Storage error")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Save crossfeed" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Crossfeed mode: Medium" })).toBeInTheDocument();
+  });
+
   it("shows a useful browser compatibility state without WebHID", () => {
     render(<App />);
     expect(screen.getByText(/WebHID is unavailable/i)).toBeInTheDocument();

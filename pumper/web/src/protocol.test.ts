@@ -16,9 +16,67 @@ import {
   ProtocolStatus,
   REPORT_SIZE,
   WidthMode,
+  CrossfeedMode,
+  defaultCrossfeed,
+  decodeAudioControls,
+  decodeCrossfeed,
+  decodeCrossfeedState,
+  effectiveAudioControl,
+  encodeCrossfeed,
+  supportsAudioControls,
 } from "./protocol";
 
 describe("Pumper HID protocol", () => {
+  it("gates new audio commands at firmware 2.2", () => {
+    for (const version of ["1.8", "2.0", "2.1", "invalid", "2.2oops"]) expect(supportsAudioControls(version)).toBe(false);
+    for (const version of ["2.2", "2.10", "3.0"]) expect(supportsAudioControls(version)).toBe(true);
+    expect([Opcode.GetAudioControls, Opcode.GetCrossfeed, Opcode.SetCrossfeed, Opcode.SaveCrossfeed]).toEqual([6, 7, 0x12, 0x26]);
+    expect(createRequest(Opcode.SaveCrossfeed, 1)[6]).toBe(0);
+  });
+
+  it("decodes host Q8.8 controls and combines master/channel state", () => {
+    const payload = new Uint8Array([0, 0xf6, 0, 0xfb, 0x80, 0xff, 0, 1, 0]);
+    const audio = decodeAudioControls(payload);
+    expect(audio).toEqual({ master: { volumeDb: -10, muted: false }, left: { volumeDb: -5, muted: true }, right: { volumeDb: -0.5, muted: false } });
+    expect(effectiveAudioControl(audio.master, audio.left)).toEqual({ volumeDb: -15, muted: true });
+    expect(effectiveAudioControl({ ...audio.master, muted: true }, audio.right)).toEqual({ volumeDb: -10.5, muted: true });
+    expect(() => decodeAudioControls(payload.subarray(0, 8))).toThrow();
+    payload[6] = 2;
+    expect(() => decodeAudioControls(payload)).toThrow();
+    payload[6] = 0;
+    new DataView(payload.buffer).setInt16(0, -51 * 256, true);
+    expect(() => decodeAudioControls(payload)).toThrow();
+  });
+
+  it("encodes crossfeed in an eight-byte record and retains Custom values in preset modes", () => {
+    const custom = { mode: CrossfeedMode.Custom, strengthPercent: 40, cutoffHz: 2000, delayMs: 0.6 };
+    expect(Array.from(encodeCrossfeed(custom))).toEqual([4, 0, 0xa0, 0x0f, 0xd0, 7, 0x58, 2]);
+    expect(decodeCrossfeed(encodeCrossfeed(custom))).toEqual(custom);
+    const preset = { ...custom, mode: CrossfeedMode.Low };
+    expect(decodeCrossfeed(encodeCrossfeed(preset))).toEqual(preset);
+    const payload = new Uint8Array(17);
+    payload.set(encodeCrossfeed(custom));
+    payload.set(encodeCrossfeed(defaultCrossfeed), 8);
+    payload[16] = 1;
+    expect(decodeCrossfeedState(payload)).toEqual({ live: custom, saved: defaultCrossfeed, dirty: true });
+    payload[16] = 2;
+    expect(() => decodeCrossfeedState(payload)).toThrow();
+    expect(() => decodeCrossfeedState(payload.subarray(0, 16))).toThrow();
+  });
+
+  it("rejects invalid crossfeed modes, lengths, reserved fields, and parameters", () => {
+    for (const patch of [{ mode: 5 }, { mode: 1.5 }, { strengthPercent: -1 }, { strengthPercent: 41 }, { cutoffHz: 299 }, { cutoffHz: 2001 }, { delayMs: -0.01 }, { delayMs: 0.61 }, { delayMs: NaN }, { strengthPercent: Infinity }]) {
+      expect(() => encodeCrossfeed({ ...defaultCrossfeed, ...patch })).toThrow();
+    }
+    const payload = encodeCrossfeed(defaultCrossfeed);
+    payload[1] = 1;
+    expect(() => decodeCrossfeed(payload)).toThrow();
+    expect(() => decodeCrossfeed(new Uint8Array(7))).toThrow();
+    payload[1] = 0;
+    payload[0] = 5;
+    expect(() => decodeCrossfeed(payload)).toThrow();
+  });
+
   it("uses a flat factory EQ", () => {
     expect(defaultConfig.preampDb).toBe(0);
     expect(defaultConfig.bands.every((band) => band.gainDb === 0)).toBe(true);

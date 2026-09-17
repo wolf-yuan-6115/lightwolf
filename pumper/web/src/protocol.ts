@@ -16,14 +16,18 @@ export enum Opcode {
   GetGlobal = 0x03,
   GetBand = 0x04,
   GetProfiles = 0x05,
+  GetAudioControls = 0x06,
+  GetCrossfeed = 0x07,
   SetGlobal = 0x10,
   SetBand = 0x11,
+  SetCrossfeed = 0x12,
   WriteFlash = 0x20,
   RestoreDefaults = 0x21,
   LoadProfile = 0x22,
   SaveProfile = 0x23,
   SetDefaultProfile = 0x24,
   DeleteProfile = 0x25,
+  SaveCrossfeed = 0x26,
   MeterStart = 0x30,
   MeterKeepalive = 0x31,
   MeterStop = 0x32,
@@ -68,6 +72,123 @@ export interface EqConfig {
   enabled: boolean;
   preampDb: number;
   bands: EqBand[];
+}
+
+export interface AudioChannelControl {
+  volumeDb: number;
+  muted: boolean;
+}
+
+export interface AudioControls {
+  master: AudioChannelControl;
+  left: AudioChannelControl;
+  right: AudioChannelControl;
+}
+
+export enum CrossfeedMode {
+  Off = 0,
+  Low = 1,
+  Medium = 2,
+  High = 3,
+  Custom = 4,
+}
+
+// Parameter fields always retain Custom values, including in preset modes.
+export interface CrossfeedConfig {
+  mode: CrossfeedMode;
+  strengthPercent: number;
+  cutoffHz: number;
+  delayMs: number;
+}
+
+export interface CrossfeedState {
+  live: CrossfeedConfig;
+  saved: CrossfeedConfig;
+  dirty: boolean;
+}
+
+export const defaultCrossfeed: CrossfeedConfig = {
+  mode: CrossfeedMode.Off,
+  strengthPercent: 20,
+  cutoffHz: 700,
+  delayMs: 0.25,
+};
+
+export function supportsAudioControls(firmwareVersion: string): boolean {
+  const match = /^(\d+)\.(\d+)$/.exec(firmwareVersion);
+  if (!match) return false;
+  const major = Number(match[1]);
+  return major > 2 || (major === 2 && Number(match[2]) >= 2);
+}
+
+export function effectiveAudioControl(master: AudioChannelControl, channel: AudioChannelControl): AudioChannelControl {
+  return { volumeDb: master.volumeDb + channel.volumeDb, muted: master.muted || channel.muted };
+}
+
+export function decodeAudioControls(payload: Uint8Array): AudioControls {
+  if (payload.length !== 9) throw new Error("Invalid USB audio control response");
+  const view = viewFor(payload);
+  const channels = [0, 1, 2].map((index): AudioChannelControl => {
+    const volumeDb = view.getInt16(index * 2, true) / 256;
+    if (volumeDb < -50 || volumeDb > 0 || payload[6 + index] > 1) {
+      throw new Error("Invalid USB audio control response");
+    }
+    return { volumeDb, muted: payload[6 + index] === 1 };
+  });
+  return { master: channels[0], left: channels[1], right: channels[2] };
+}
+
+export function validateCrossfeed(config: CrossfeedConfig): void {
+  if (!Number.isInteger(config.mode) || config.mode < CrossfeedMode.Off || config.mode > CrossfeedMode.Custom) {
+    throw new RangeError("Crossfeed mode is not supported.");
+  }
+  for (const [label, value, minimum, maximum, unit] of [
+    ["Crossfeed strength", config.strengthPercent, 0, 40, "%"],
+    ["Crossfeed cutoff", config.cutoffHz, 300, 2000, "Hz"],
+    ["Crossfeed delay", config.delayMs, 0, 0.6, "ms"],
+  ] as const) {
+    if (!Number.isFinite(value) || value < minimum || value > maximum) {
+      throw new RangeError(`${label} must be between ${minimum.toLocaleString("en-US")} and ${maximum.toLocaleString("en-US")} ${unit}.`);
+    }
+  }
+}
+
+export function encodeCrossfeed(config: CrossfeedConfig): Uint8Array {
+  validateCrossfeed(config);
+  const payload = new Uint8Array(8);
+  const view = viewFor(payload);
+  payload[0] = config.mode;
+  view.setUint16(2, Math.round(config.strengthPercent * 100), true);
+  view.setUint16(4, Math.round(config.cutoffHz), true);
+  view.setUint16(6, Math.round(config.delayMs * 1000), true);
+  return payload;
+}
+
+export function decodeCrossfeed(payload: Uint8Array): CrossfeedConfig {
+  if (payload.length !== 8 || payload[1] !== 0) throw new Error("Invalid crossfeed response");
+  const view = viewFor(payload);
+  const config = {
+    mode: payload[0] as CrossfeedMode,
+    strengthPercent: view.getUint16(2, true) / 100,
+    cutoffHz: view.getUint16(4, true),
+    delayMs: view.getUint16(6, true) / 1000,
+  };
+  validateCrossfeed(config);
+  return config;
+}
+
+export function decodeCrossfeedState(payload: Uint8Array): CrossfeedState {
+  if (payload.length !== 17 || payload[16] > 1) throw new Error("Invalid crossfeed state response");
+  return {
+    live: decodeCrossfeed(payload.subarray(0, 8)),
+    saved: decodeCrossfeed(payload.subarray(8, 16)),
+    dirty: payload[16] === 1,
+  };
+}
+
+export function crossfeedConfigsEqual(left: CrossfeedConfig, right: CrossfeedConfig): boolean {
+  return left.mode === right.mode && left.strengthPercent === right.strengthPercent &&
+    left.cutoffHz === right.cutoffHz && left.delayMs === right.delayMs;
 }
 
 export interface DeviceStatus {

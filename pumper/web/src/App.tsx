@@ -1,11 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { AlertTriangle, Check, Info, Moon, Power, RotateCcw, Save, Sun, Trash2, Upload, Usb, X } from "lucide-react";
+import { AlertTriangle, ChartSpline, Check, Info, ListFilter, SlidersHorizontal, Moon, Power, RotateCcw, Save, Sun, Trash2, Upload, Usb, X } from "lucide-react";
 import { bandColors, EqGraph } from "./EqGraph";
 import { calculateAutoPreamp } from "./eqMath";
 import { METER_REPORT_EVENT, PumperHidTransport } from "./hidTransport";
 import { LevelMeter } from "./LevelMeter";
+import { SaveStateBadge } from "./SaveStateBadge";
 import { NumericInput } from "./NumericInput";
 import { SelectMenu, type SelectMenuOption } from "./SelectMenu";
+import { CrossfeedSettings, UsbAudioState } from "./AudioSettings";
+import { useAudioSettings } from "./useAudioSettings";
 import {
   decodeBand,
   decodeGlobal,
@@ -204,6 +207,8 @@ export default function App() {
   const [error, setError] = useState<string | null>(null);
   const [connectionIssue, setConnectionIssue] = useState<string | null>(null);
   const [theme, setTheme] = useState<Theme>(initialTheme);
+
+  const audioSettings = useAudioSettings(transport.current, connected, status?.firmwareVersion, setError, setNotice);
 
   const supported = PumperHidTransport.supported();
   const sampleRateHz = status?.sampleRateHz ?? 48000;
@@ -422,9 +427,10 @@ export default function App() {
         .request(Opcode.GetStatus)
         .then((response) => setStatus(decodeStatus(response.payload)))
         .catch(() => undefined);
+      void audioSettings.refresh();
     }, 1000);
     return () => window.clearInterval(timer);
-  }, [connected]);
+  }, [connected, audioSettings.refresh]);
 
   useEffect(() => {
     if (!connected) return;
@@ -665,25 +671,25 @@ export default function App() {
                   label: `Profile ${index + 1}${(profileState.presentMask & (1 << index)) === 0 ? " (empty)" : index === profileState.persistedProfile ? " (default)" : ""}`,
                 }))}
                 onChange={(value) => { void selectProfile(value); }}
-                disabled={!connected || writing}
+                disabled={!connected || writing || audioSettings.saving}
               />
             </div>
             <div className="flex w-full items-center justify-between gap-2 sm:ml-auto sm:w-auto sm:justify-end">
               <div className="tooltip tooltip-bottom" data-tip="Clear profile">
-                <button className={clearButton} onClick={() => setDialog("clear")} disabled={!connected || writing || hasUnsavedEdits || selectedProfileEmpty} aria-label={`Clear Profile ${selectedProfile + 1}`}>
+                <button className={clearButton} onClick={() => setDialog("clear")} disabled={!connected || writing || audioSettings.saving || hasUnsavedEdits || selectedProfileEmpty} aria-label={`Clear Profile ${selectedProfile + 1}`}>
                   <Trash2 size={17} />
                 </button>
               </div>
-              <button className={`${secondaryButton} max-sm:size-9 max-sm:p-0`} onClick={() => setDialog("set-default")} disabled={!connected || writing || hasUnsavedEdits || selectedProfileEmpty || selectedProfileIsDefault} title={selectedProfileIsDefault ? "Current power-on profile" : "Load this profile automatically at power-on"}>
+              <button className={`${secondaryButton} max-sm:size-9 max-sm:p-0`} onClick={() => setDialog("set-default")} disabled={!connected || writing || audioSettings.saving || hasUnsavedEdits || selectedProfileEmpty || selectedProfileIsDefault} title={selectedProfileIsDefault ? "Current power-on profile" : "Load this profile automatically at power-on"}>
                 <Check size={17} />
                 <span className="max-sm:sr-only">{selectedProfileIsDefault ? "Default" : "Make default"}</span>
               </button>
               <span className="h-6 w-px bg-base-300" aria-hidden="true" />
-              <button className={`${secondaryButton} max-sm:size-9 max-sm:p-0`} onClick={() => setDialog("defaults")} disabled={!connected || writing} title="Restore compiled EQ defaults">
+              <button className={`${secondaryButton} max-sm:size-9 max-sm:p-0`} onClick={() => setDialog("defaults")} disabled={!connected || writing || audioSettings.saving} title="Restore compiled EQ defaults">
                 <RotateCcw size={17} />
                 <span className="max-sm:sr-only">Defaults</span>
               </button>
-              <button className={`${connected ? primaryButton : secondaryButton} max-sm:size-9 max-sm:p-0`} onClick={() => setDialog("flash")} disabled={!connected || !needsSave || writing} title="Save profile">
+              <button className={`${connected ? primaryButton : secondaryButton} max-sm:size-9 max-sm:p-0`} onClick={() => setDialog("flash")} disabled={!connected || !needsSave || writing || audioSettings.saving} title="Save profile">
                 {writing ? <span className="loading loading-spinner loading-xs" aria-hidden="true" /> : <Save size={17} />}
                 <span className="max-sm:sr-only">{writing ? "Working..." : "Save profile"}</span>
               </button>
@@ -698,12 +704,12 @@ export default function App() {
         </div>
       )}
 
-      <section className={`mx-auto grid min-w-0 max-w-[1600px] gap-4 px-4 py-4 lg:px-6 lg:py-6 ${connected && !writing ? "" : "pointer-events-none opacity-55"}`} aria-disabled={!connected || writing}>
+      <section className={`mx-auto grid min-w-0 max-w-[1600px] gap-4 px-4 py-4 lg:px-6 lg:py-6 ${connected && !writing && !audioSettings.saving ? "" : "pointer-events-none opacity-55"}`} aria-disabled={!connected || writing || audioSettings.saving}>
         <div className="grid min-w-0 gap-4 xl:grid-cols-[minmax(0,1fr)_22rem]">
           <article className="card card-border min-w-0 overflow-hidden bg-base-100">
             <div className="card-body gap-3 p-4 sm:p-5">
               <div className="flex flex-wrap items-center justify-between gap-3">
-                <h2 className="card-title text-base">Frequency response</h2>
+                <h2 className="card-title text-base"><ChartSpline size={18} aria-hidden="true" />Frequency response</h2>
                 <div className="badge badge-ghost h-auto min-w-0 max-w-full gap-2 overflow-hidden py-1.5 text-xs font-medium">
                   <span className="grid size-5 shrink-0 place-items-center rounded-full text-[10px] font-bold text-black" style={{ backgroundColor: bandColors[selectedBand] }}>{selectedBand + 1}</span>
                   <span className="truncate">{filterName(selected.type)} · {selected.frequencyHz.toLocaleString()} Hz · {selected.gainDb > 0 ? "+" : ""}{selected.gainDb.toFixed(1)} dB</span>
@@ -716,7 +722,7 @@ export default function App() {
           <aside className="card card-border min-w-0 bg-base-100">
             <div className="card-body gap-4 p-4 sm:p-5">
               <div className="flex items-center justify-between gap-3">
-                <h2 className="card-title text-base">Global EQ</h2>
+                <h2 className="card-title text-base"><SlidersHorizontal size={18} aria-hidden="true" />Global EQ</h2>
                 <label className="label cursor-pointer gap-2 font-medium">
                   Enabled
                   <input className="toggle toggle-sm" type="checkbox" checked={config.enabled} onChange={(event) => updateGlobal({ enabled: event.target.checked })} disabled={!connected} />
@@ -740,11 +746,12 @@ export default function App() {
                 </div>
               </div>
 
-              <div className="stats stats-vertical w-full bg-base-200 shadow-none sm:stats-horizontal xl:stats-vertical">
-                <div className="stat px-4 py-3"><span className="stat-title text-xs">Sample rate</span><strong className="stat-value text-lg">{(sampleRateHz / 1000).toFixed(sampleRateHz % 1000 ? 1 : 0)} kHz</strong></div>
-                <div className="stat px-4 py-3"><span className="stat-title text-xs">Stream</span><strong className="stat-value text-lg">{status?.streaming ? "Streaming" : "Idle"}</strong></div>
-                <div className="stat px-4 py-3"><span className="stat-title text-xs">Profile state</span><strong className={`stat-value text-lg ${needsSave ? "text-warning" : ""}`}>{selectedProfileEmpty && !hasUnsavedEdits ? "Empty slot" : needsSave ? "Unsaved" : "Saved"}</strong></div>
+              <div className="flex items-center justify-between gap-3 text-sm">
+                <span className="text-base-content/55">Profile state</span>
+                <SaveStateBadge state={selectedProfileEmpty && !hasUnsavedEdits ? "Empty slot" : needsSave ? "Unsaved" : "Saved"} label="EQ profile save state" />
               </div>
+
+              <UsbAudioState settings={audioSettings} connected={connected} busy={writing || connecting || deviceActionPending} sampleRateHz={sampleRateHz} streaming={status?.streaming ?? false} />
             </div>
           </aside>
         </div>
@@ -753,7 +760,7 @@ export default function App() {
 
         <section className="card card-border min-w-0 overflow-hidden bg-base-100">
           <div className="border-b border-base-200 p-4 sm:p-5">
-            <h2 className="card-title text-base">Filter configuration</h2>
+            <h2 className="card-title text-base"><ListFilter size={18} aria-hidden="true" />Filter configuration</h2>
           </div>
           <div className="max-w-full overflow-x-auto">
             <table className="table table-sm w-full min-w-[930px] table-fixed">
@@ -787,6 +794,8 @@ export default function App() {
             </table>
           </div>
         </section>
+
+        <CrossfeedSettings settings={audioSettings} connected={connected} busy={writing || connecting || deviceActionPending} onError={setError} />
 
       </section>
 
@@ -838,11 +847,12 @@ export default function App() {
                   <li className="list-row items-center px-4 py-3"><DiagnosticLabel label="Backpressure events" help="Times USB audio had to wait because every processing buffer was busy." /><strong className="text-right text-sm font-semibold">{status?.backpressureEvents.toLocaleString() ?? "-"}</strong></li>
                 </ul>
 
+
                 <div className="modal-action flex-col sm:flex-row">
-                  <button className="btn btn-error btn-soft w-full sm:w-auto" type="button" onClick={() => setDeviceDialog("restart")}>
+                  <button className="btn btn-error btn-soft w-full sm:w-auto" type="button" onClick={() => setDeviceDialog("restart")} disabled={writing || audioSettings.saving}>
                     <Power size={17} /> Restart
                   </button>
-                  <button className="btn btn-error btn-soft w-full sm:w-auto" type="button" onClick={() => setDeviceDialog("bootsel")}>
+                  <button className="btn btn-error btn-soft w-full sm:w-auto" type="button" onClick={() => setDeviceDialog("bootsel")} disabled={writing || audioSettings.saving}>
                     <Upload size={17} /> Firmware update
                   </button>
                 </div>
@@ -857,9 +867,9 @@ export default function App() {
                 </h2>
                 <p className="mt-2 text-sm leading-relaxed text-base-content/70">
                   {deviceDialog === "restart"
-                    ? "Audio and the controller will disconnect. Unsaved live EQ edits will be lost; stored profiles are unchanged."
+                    ? "Audio and the controller will disconnect. Unsaved live EQ and crossfeed edits will be lost; saved settings are unchanged."
                     : deviceDialog === "bootsel"
-                      ? "Audio and the controller will disconnect, and unsaved live EQ edits will be lost. The DAC will appear as an RP2350 USB drive."
+                      ? "Audio and the controller will disconnect, and unsaved live EQ and crossfeed edits will be lost. The DAC will appear as an RP2350 USB drive."
                       : <>Drag the firmware <strong>.uf2</strong> file onto the <strong>RP2350</strong> USB drive. The DAC restarts automatically after the copy completes.</>}
                 </p>
                 <div className="modal-action">

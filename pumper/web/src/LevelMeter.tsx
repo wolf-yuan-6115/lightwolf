@@ -1,3 +1,4 @@
+import { Activity } from "lucide-react";
 import { MeterLevel, StereoMeterLevel } from "./protocol";
 
 const thresholdsDb = [
@@ -76,7 +77,7 @@ export function LevelMeter({ level }: { level: MeterLevel | null }) {
   return (
     <section className="card card-border min-w-0 overflow-hidden bg-base-100 text-base-content" aria-label="Realtime input and output levels">
       <div className="border-b border-base-200 px-4 py-3 sm:px-5">
-        <h2 className="card-title text-base">Signal levels</h2>
+        <h2 className="card-title text-base"><Activity size={18} aria-hidden="true" />Signal levels</h2>
       </div>
       <div className="grid min-w-0 divide-y divide-base-200 md:grid-cols-2 md:divide-x md:divide-y-0">
         <MeterRow title="INPUT" source="input" tone="indigo" level={level?.preEq ?? null} />

@@ -22,6 +22,7 @@ export class PumperHidTransport extends EventTarget {
   private requestId = 0;
   private pending: PendingRequest | null = null;
   private requestChain: Promise<unknown> = Promise.resolve();
+  private session = 0;
 
   static supported(): boolean {
     return typeof navigator !== "undefined" && "hid" in navigator && navigator.hid !== undefined;
@@ -46,6 +47,7 @@ export class PumperHidTransport extends EventTarget {
   }
 
   async open(device: HIDDevice): Promise<void> {
+    this.session++;
     this.device = device;
     try {
       if (!device.opened) await device.open();
@@ -63,14 +65,15 @@ export class PumperHidTransport extends EventTarget {
   }
 
   async close(): Promise<void> {
+    this.session++;
     const device = this.device;
     this.device = null;
+    this.rejectPending(new Error("Pumper disconnected"));
     if (device) {
       device.removeEventListener("inputreport", this.handleInputReport as EventListener);
       if (device.opened) await device.close();
     }
     navigator.hid?.removeEventListener?.("disconnect", this.handleDisconnect as EventListener);
-    this.rejectPending(new Error("Pumper disconnected"));
   }
 
   get productName(): string {
@@ -82,13 +85,18 @@ export class PumperHidTransport extends EventTarget {
     payload: Uint8Array<ArrayBufferLike> = new Uint8Array(),
     timeoutMs = 1500,
   ): Promise<ResponsePacket> {
-    const result = this.requestChain.then(() => this.performRequest(opcode, payload, timeoutMs));
+    const session = this.session;
+    const result = this.requestChain.then(() => {
+      if (session !== this.session) throw new Error("Pumper disconnected");
+      return this.performRequest(opcode, payload, timeoutMs);
+    });
     this.requestChain = result.catch(() => undefined);
     return result;
   }
 
   private performRequest(opcode: Opcode, payload: Uint8Array<ArrayBufferLike>, timeoutMs: number): Promise<ResponsePacket> {
     if (!this.device?.opened) return Promise.reject(new Error("Pumper is not connected"));
+    const session = this.session;
     const requestId = (this.requestId = (this.requestId + 1) & 0xffff);
     return new Promise<ResponsePacket>((resolve, reject) => {
       const timeout = setTimeout(() => {
@@ -100,7 +108,9 @@ export class PumperHidTransport extends EventTarget {
       const report = new Uint8Array(encoded.length);
       report.set(encoded);
       this.device?.sendReport(0, report).catch((error: unknown) => {
-        this.rejectPending(error instanceof Error ? error : new Error("Unable to send HID report"));
+        if (session === this.session && requestId === this.requestId) {
+          this.rejectPending(error instanceof Error ? error : new Error("Unable to send HID report"));
+        }
       });
     });
   }
@@ -129,6 +139,7 @@ export class PumperHidTransport extends EventTarget {
 
   private handleDisconnect = (event: HIDConnectionEvent): void => {
     if (event.device !== this.device) return;
+    this.session++;
     this.device = null;
     this.rejectPending(new Error("Pumper disconnected"));
     this.dispatchEvent(new Event("disconnect"));
