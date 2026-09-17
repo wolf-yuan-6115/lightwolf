@@ -4,7 +4,7 @@ A USB DAC that uses RP2350 to pump audio data to a DAC chip. The board uses PCM5
 
 This is a experimental project to learn about USB audio and DAC design. The board is designed to be as simple as possible, with minimal components and a small form factor while trying to give best audio quality.
 
-The RP2350 firmware exposes a ten-band parametric EQ over WebHID. The controller in [`web/`](web/) previews changes live, supports automatic clipping headroom, and writes the current profile to device flash only when requested.
+The RP2350 firmware exposes a ten-band parametric EQ and independent headphone crossfeed over WebHID, with host-controlled USB volume and mute. The controller in [`web/`](web/) previews changes live, retains optional Auto Preamp, and writes EQ profiles or crossfeed to flash only when explicitly saved. The red LED shows streaming state with HID activity flashes.
 
 ## Building the firmware
 
