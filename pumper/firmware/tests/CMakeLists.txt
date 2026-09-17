@@ -8,6 +8,7 @@ add_executable(eq_host_tests
   test_eq.c
   ../src/eq_config.c
   ../src/eq_dsp.c
+  ../src/audio_controls.c
   ../src/eq_protocol.c
 )
 target_include_directories(eq_host_tests PRIVATE ../src)
@@ -28,6 +29,7 @@ add_executable(profile_store_tests
   test_profile_store.c
   ../src/eq_settings.c
   ../src/eq_config.c
+  ../src/audio_controls.c
   ../src/eq_protocol.c
 )
 target_include_directories(profile_store_tests PRIVATE stubs ../src)
@@ -39,3 +41,19 @@ target_compile_options(profile_store_tests PRIVATE -Wall -Wextra -Werror)
 target_link_libraries(profile_store_tests PRIVATE m)
 
 add_test(NAME profile_store_tests COMMAND profile_store_tests)
+
+add_executable(audio_controls_tests
+  test_audio_controls.c
+  ../src/audio_controls.c
+  ../src/eq_protocol.c
+  ../src/eq_config.c
+  ../src/eq_dsp.c
+)
+target_include_directories(audio_controls_tests PRIVATE ../src)
+target_compile_options(audio_controls_tests PRIVATE -Wall -Wextra -Werror)
+target_link_libraries(audio_controls_tests PRIVATE m)
+add_test(NAME audio_controls_tests COMMAND audio_controls_tests)
+add_executable(hid_activity_tests test_hid_activity.c ../src/hid_activity.c)
+target_include_directories(hid_activity_tests PRIVATE ../src)
+target_compile_options(hid_activity_tests PRIVATE -Wall -Wextra -Werror)
+add_test(NAME hid_activity_tests COMMAND hid_activity_tests)

@@ -15,6 +15,9 @@
 
 uint8_t g_fake_flash[TEST_FLASH_SIZE];
 uint8_t __flash_binary_end;
+static size_t program_budget = SIZE_MAX;
+static unsigned program_calls;
+static bool fail_execute;
 
 void flash_range_erase(uint32_t offset, size_t count) {
   assert(offset + count <= sizeof(g_fake_flash));
@@ -23,7 +26,12 @@ void flash_range_erase(uint32_t offset, size_t count) {
 
 void flash_range_program(uint32_t offset, uint8_t const *data, size_t count) {
   assert(offset + count <= sizeof(g_fake_flash));
-  for (size_t i = 0; i < count; i++) g_fake_flash[offset + i] &= data[i];
+  program_calls++;
+  size_t n = count < program_budget ? count : program_budget;
+  for (size_t i = 0; i < n; i++)
+    g_fake_flash[offset + i] &= data[i];
+  if (program_budget != SIZE_MAX)
+    program_budget -= n;
 }
 
 int flash_safe_execute_core_init(void) {
@@ -32,6 +40,8 @@ int flash_safe_execute_core_init(void) {
 
 int flash_safe_execute(void (*callback)(void *), void *param, uint32_t timeout_ms) {
   (void)timeout_ms;
+  if (fail_execute)
+    return -1;
   callback(param);
   return PICO_OK;
 }
@@ -162,9 +172,134 @@ static void test_profile_deletion(void) {
   assert(state.bank_generation == 5u);
 }
 
+static void test_crossfeed_storage(void) {
+  memset(g_fake_flash, 0xff, sizeof(g_fake_flash));
+  eq_config_t loaded;
+  uint32_t generation;
+  assert(!eq_settings_load(&loaded, &generation));
+  crossfeed_config_t c = {4, 3100, 1230, 410}, saved;
+  assert(eq_settings_save_crossfeed(&c));
+  assert(!eq_settings_load(&loaded, &generation));
+  eq_settings_get_crossfeed(&saved);
+  assert(crossfeed_equal(&c, &saved));
+  eq_profile_state_t state;
+  eq_settings_get_profile_state(&state);
+  assert(state.present_mask == 0 && state.bank_generation == 1);
+  eq_config_t eq = k_eq_default_config;
+  eq.preamp_db = -8;
+  assert(eq_settings_save_profile(5, &eq, 42));
+  eq_settings_get_crossfeed(&saved);
+  assert(crossfeed_equal(&c, &saved));
+  c.mode = 1;
+  assert(eq_settings_save_crossfeed(&c));
+  assert(eq_settings_load(&loaded, &generation) && generation == 42 &&
+         eq_config_equal(&eq, &loaded));
+  eq_settings_get_crossfeed(&saved);
+  assert(crossfeed_equal(&c, &saved));
+  assert(eq_settings_delete_profile(5));
+  assert(!eq_settings_load(&loaded, &generation));
+  eq_settings_get_crossfeed(&saved);
+  assert(crossfeed_equal(&c, &saved));
+  c.mode = 3;
+  fail_execute = true;
+  assert(!eq_settings_save_crossfeed(&c));
+  fail_execute = false;
+  eq_settings_get_crossfeed(&saved);
+  assert(saved.mode == 1);
+}
+static void test_version_two_migration(void) {
+  memset(g_fake_flash, 0xff, sizeof(g_fake_flash));
+  eq_config_t loaded;
+  uint32_t generation;
+  assert(!eq_settings_load(&loaded, &generation));
+  eq_config_t eq = k_eq_default_config;
+  eq.preamp_db = -4;
+  assert(eq_settings_save_profile(2, &eq, 9));
+  uint8_t *header = g_fake_flash + PROFILE_STORAGE_OFFSET;
+  eq_protocol_write_u16(header + 4, 2);
+  eq_protocol_write_u32(header + 16, test_crc32(header, 16));
+  eq_protocol_write_u16(header + 3 * FLASH_PAGE_SIZE + 4, 2);
+  memset(header + 11 * FLASH_PAGE_SIZE, 0xff, FLASH_PAGE_SIZE);
+  unsigned calls = program_calls;
+  assert(eq_settings_load(&loaded, &generation));
+  assert(generation == 9 && eq_config_equal(&eq, &loaded));
+  crossfeed_config_t c;
+  eq_settings_get_crossfeed(&c);
+  assert(crossfeed_equal(&c, &k_crossfeed_default));
+  assert(program_calls == calls); // Read-only import never migrates flash.
+  c.mode = 2;
+  assert(eq_settings_save_crossfeed(&c));
+  assert(eq_protocol_read_u16(g_fake_flash + LEGACY_STORAGE_OFFSET + 4) == 3);
+  assert(eq_settings_load(&loaded, &generation));
+  assert(eq_config_equal(&eq, &loaded));
+  eq_settings_get_crossfeed(&c);
+  assert(c.mode == 2);
+}
+static void test_corrupt_crossfeed_fallback(void) {
+  memset(g_fake_flash, 0xff, sizeof(g_fake_flash));
+  eq_config_t loaded;
+  uint32_t generation;
+  assert(!eq_settings_load(&loaded, &generation));
+  assert(eq_settings_save_profile(0, &k_eq_default_config, 11));
+  crossfeed_config_t c = k_crossfeed_default;
+  c.mode = 3;
+  assert(eq_settings_save_crossfeed(&c));
+  uint8_t *record = g_fake_flash + LEGACY_STORAGE_OFFSET + 11 * FLASH_PAGE_SIZE;
+  record[4] = 5;
+  eq_protocol_write_u32(record + 12, test_crc32(record, 12));
+  assert(eq_settings_load(&loaded, &generation));
+  assert(generation == 11);
+  eq_settings_get_crossfeed(&c);
+  assert(c.mode == 0);
+  // Correct CRC with an illegal reserved byte is rejected too.
+  record[4] = 3;
+  record[5] = 1;
+  eq_protocol_write_u32(record + 12, test_crc32(record, 12));
+  assert(eq_settings_load(&loaded, &generation));
+  eq_settings_get_crossfeed(&c);
+  assert(c.mode == 0);
+  record[5] = 0;
+  eq_protocol_write_u32(record + 12, test_crc32(record, 12));
+  record[10] ^= 1;
+  assert(eq_settings_load(&loaded, &generation));
+  eq_settings_get_crossfeed(&c);
+  assert(c.mode == 0);
+}
+static void test_interrupted_writes(void) {
+  static uint8_t previous[2 * FLASH_SECTOR_SIZE];
+  memset(g_fake_flash, 0xff, sizeof(g_fake_flash));
+  eq_config_t loaded;
+  uint32_t generation;
+  assert(!eq_settings_load(&loaded, &generation));
+  assert(eq_settings_save_profile(7, &k_eq_default_config, 99));
+  crossfeed_config_t c = k_crossfeed_default;
+  c.mode = 1;
+  assert(eq_settings_save_crossfeed(&c));
+  memcpy(previous, g_fake_flash + PROFILE_STORAGE_OFFSET, sizeof(previous));
+  // Interrupt each page boundary and midway through a page, including the final commit header.
+  for (size_t attempt = 0; attempt < 26; attempt++) {
+    size_t cut = attempt < 23 ? attempt * 128 : 11 * FLASH_PAGE_SIZE + (attempt - 23) * 8;
+    memcpy(g_fake_flash + PROFILE_STORAGE_OFFSET, previous, sizeof(previous));
+    assert(eq_settings_load(&loaded, &generation));
+    c.mode = 3;
+    program_budget = cut;
+    assert(!eq_settings_save_crossfeed(&c));
+    program_budget = SIZE_MAX;
+    eq_settings_get_crossfeed(&c);
+    assert(c.mode == 1);
+    assert(eq_settings_load(&loaded, &generation));
+    assert(generation == 99);
+    eq_settings_get_crossfeed(&c);
+    assert(c.mode == 1);
+  }
+}
 int main(void) {
   test_alternating_profile_banks();
   test_legacy_profile_migration();
   test_profile_deletion();
+  test_crossfeed_storage();
+  test_version_two_migration();
+  test_corrupt_crossfeed_fallback();
+  test_interrupted_writes();
   return 0;
 }

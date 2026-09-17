@@ -1,4 +1,5 @@
 #include "eq_dsp.h"
+#include "audio_controls.h"
 
 #include <math.h>
 #include <stdbool.h>
@@ -256,7 +257,7 @@ void eq_process_interleaved_stereo16(int16_t *interleaved, size_t frame_count,
   if (metrics != NULL) memset(metrics, 0, sizeof(*metrics));
 
   if (s_active_band_count == 0u && s_transition_remaining == 0u &&
-      s_preamp_current == 1.0f) {
+      s_preamp_current == 1.0f && audio_controls_bypassed()) {
     if (metrics != NULL) {
       for (size_t frame = 0u; frame < frame_count; frame++) {
         measure_pair(&metrics->pre_eq, interleaved[frame * 2u],
@@ -279,6 +280,7 @@ void eq_process_interleaved_stereo16(int16_t *interleaved, size_t frame_count,
       left = process_one(left, band, false);
       right = process_one(right, band, true);
     }
+    audio_controls_process(&left, &right);
     int16_t output_left = saturating_round(left);
     int16_t output_right = saturating_round(right);
     interleaved[frame * 2u] = output_left;

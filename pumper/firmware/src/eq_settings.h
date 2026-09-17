@@ -5,6 +5,7 @@
 #include <stdint.h>
 
 #include "eq_config.h"
+#include "audio_controls.h"
 
 #define EQ_PROFILE_COUNT 10u
 
@@ -15,6 +16,8 @@ typedef struct {
 } eq_profile_state_t;
 
 void eq_settings_core_init(void);
+void eq_settings_get_crossfeed(crossfeed_config_t *config);
+bool eq_settings_save_crossfeed(crossfeed_config_t const *config);
 bool eq_settings_load(eq_config_t *config, uint32_t *generation);
 void eq_settings_get_profile_state(eq_profile_state_t *state);
 bool eq_settings_load_profile(uint8_t index, eq_config_t *config, uint32_t *generation);

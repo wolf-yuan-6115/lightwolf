@@ -10,7 +10,7 @@
 //
 //   [USB Streaming Input Terminal (0x01)]
 //          ↓
-//   [Feature Unit (0x02) — mute + volume per channel]
+//   [Feature Unit (0x02) — stereo master mute + volume]
 //          ↓
 //   [Headphones Output Terminal (0x03)]
 //          ↑
@@ -27,7 +27,7 @@
 // VID 0x2E8A is Raspberry Pi's USB VID.
 #define USB_VID 0x2E8A
 #define USB_PID 0xF10A
-#define USB_BCD 0x0101  // Device release number (BCD): 1.01
+#define USB_BCD 0x0203  // Device release number (BCD): 2.03
 
 // Endpoint numbers for audio data and SOF feedback.
 // EPNUM_AUDIO_OUT is a host→device (OUT) isochronous endpoint.

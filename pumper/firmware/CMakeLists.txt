@@ -17,6 +17,8 @@ add_executable(rp2350_usb_dac
   src/main.c
   src/usb_descriptors.c
   src/i2s_out.c
+  src/audio_controls.c
+  src/hid_activity.c
   src/audio_feedback.c
   src/quirk_os_guessing.c
   src/eq_config.c
