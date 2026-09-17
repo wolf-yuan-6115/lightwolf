@@ -1,0 +1,324 @@
+package dev.lightwolf.pumper.controller.protocol
+
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
+import kotlin.math.roundToInt
+
+const val USB_VENDOR_ID = 0x2e8a
+const val USB_PRODUCT_ID = 0xf10a
+const val REPORT_SIZE = 64
+const val HEADER_SIZE = 8
+const val PROTOCOL_VERSION = 1
+const val METER_REPORT_INTERVAL_MS = 20
+const val METER_HEARTBEAT_INTERVAL_MS = 500L
+const val METER_TIMEOUT_MS = 1_250
+
+enum class Opcode(val value: Int) {
+    Hello(0x01),
+    GetStatus(0x02),
+    GetGlobal(0x03),
+    GetBand(0x04),
+    GetProfiles(0x05),
+    SetGlobal(0x10),
+    SetBand(0x11),
+    WriteFlash(0x20),
+    RestoreDefaults(0x21),
+    LoadProfile(0x22),
+    SaveProfile(0x23),
+    SetDefaultProfile(0x24),
+    DeleteProfile(0x25),
+    MeterStart(0x30),
+    MeterKeepalive(0x31),
+    MeterStop(0x32),
+    MeterLevel(0x33),
+    RestartDevice(0x40),
+    EnterBootsel(0x41),
+}
+
+enum class ProtocolStatus(val value: Int) {
+    Ok(0),
+    InvalidPacket(1),
+    InvalidCommand(2),
+    InvalidLength(3),
+    InvalidIndex(4),
+    OutOfRange(5),
+    Busy(6),
+    StorageError(7);
+
+    companion object {
+        fun from(value: Int): ProtocolStatus? = entries.firstOrNull { it.value == value }
+    }
+}
+
+enum class FilterType(val value: Int) {
+    LowShelf(0),
+    Peaking(1),
+    HighShelf(2);
+
+    companion object {
+        fun from(value: Int): FilterType = entries.firstOrNull { it.value == value }
+            ?: throw ProtocolException("Unsupported filter type")
+    }
+}
+
+enum class WidthMode(val value: Int) {
+    Q(0),
+    Bandwidth(1);
+
+    companion object {
+        fun from(value: Int): WidthMode = entries.firstOrNull { it.value == value }
+            ?: throw ProtocolException("Unsupported width mode")
+    }
+}
+
+data class EqBand(
+    val enabled: Boolean,
+    val type: FilterType,
+    val widthMode: WidthMode,
+    val frequencyHz: Double,
+    val gainDb: Double,
+    val q: Double,
+    val bandwidthOctaves: Double,
+)
+
+data class EqConfig(
+    val enabled: Boolean,
+    val preampDb: Double,
+    val bands: List<EqBand>,
+)
+
+data class DeviceStatus(
+    val firmwareMajor: Int,
+    val firmwareMinor: Int,
+    val bandCount: Int,
+    val streaming: Boolean,
+    val dirty: Boolean,
+    val eqEnabled: Boolean,
+    val sampleRateHz: Long,
+    val configGeneration: Long,
+    val savedGeneration: Long,
+    val appliedGeneration: Long,
+    val underrunFrames: Long,
+    val backpressureEvents: Long,
+    val temperatureC: Double?,
+    val systemClockMHz: Double?,
+    val maxDspBlockUs: Long?,
+    val i2sLowWaterFrames: Long?,
+) {
+    val firmwareVersion: String get() = "$firmwareMajor.$firmwareMinor"
+    val supportsDeviceReset: Boolean get() = firmwareMajor > 1 || (firmwareMajor == 1 && firmwareMinor >= 7)
+}
+
+data class StereoMeterLevel(
+    val leftPeak: Int,
+    val rightPeak: Int,
+    val leftMeanSquare: Long,
+    val rightMeanSquare: Long,
+)
+
+data class MeterLevel(
+    val sequence: Long,
+    val preEq: StereoMeterLevel,
+    val postEq: StereoMeterLevel,
+)
+
+data class ProfileState(
+    val count: Int,
+    val activeProfile: Int,
+    val persistedProfile: Int,
+    val presentMask: Int,
+    val bankGeneration: Long,
+) {
+    fun isPresent(index: Int): Boolean = presentMask and (1 shl index) != 0
+}
+
+data class ResponsePacket(
+    val opcode: Int,
+    val requestId: Int,
+    val status: ProtocolStatus?,
+    val rawStatus: Int,
+    val payload: ByteArray,
+)
+
+class ProtocolException(message: String) : Exception(message)
+
+object PumperProtocol {
+    fun createRequest(opcode: Opcode, requestId: Int, payload: ByteArray = byteArrayOf()): ByteArray {
+        require(payload.size <= REPORT_SIZE - HEADER_SIZE) { "Payload is too large" }
+        val report = ByteArray(REPORT_SIZE)
+        report[0] = 'P'.code.toByte()
+        report[1] = 'E'.code.toByte()
+        report[2] = PROTOCOL_VERSION.toByte()
+        report[3] = opcode.value.toByte()
+        report.putU16(4, requestId)
+        report[6] = payload.size.toByte()
+        payload.copyInto(report, HEADER_SIZE)
+        return report
+    }
+
+    @Throws(ProtocolException::class)
+    fun parseResponse(report: ByteArray): ResponsePacket {
+        if (
+            report.size != REPORT_SIZE ||
+            report[0].toInt() != 'P'.code ||
+            report[1].toInt() != 'E'.code ||
+            report.u8(2) != PROTOCOL_VERSION ||
+            report.u8(6) > REPORT_SIZE - HEADER_SIZE
+        ) {
+            throw ProtocolException("Malformed response from Pumper")
+        }
+        val rawStatus = report.u8(7)
+        val payloadLength = report.u8(6)
+        return ResponsePacket(
+            opcode = report.u8(3),
+            requestId = report.u16(4),
+            status = ProtocolStatus.from(rawStatus),
+            rawStatus = rawStatus,
+            payload = report.copyOfRange(HEADER_SIZE, HEADER_SIZE + payloadLength),
+        )
+    }
+
+    @Throws(ProtocolException::class)
+    fun assertResponse(response: ResponsePacket, opcode: Opcode) {
+        if (response.opcode != (opcode.value or 0x80)) throw ProtocolException("Unexpected response from Pumper")
+        if (response.status != ProtocolStatus.Ok) throw ProtocolException(statusLabel(response))
+    }
+
+    fun encodeGlobal(config: EqConfig): ByteArray = ByteArray(8).also { payload ->
+        payload[0] = if (config.enabled) 1 else 0
+        payload.putI32(4, milli(config.preampDb))
+    }
+
+    @Throws(ProtocolException::class)
+    fun decodeGlobal(payload: ByteArray): Pair<Boolean, Double> {
+        if (payload.size != 8) throw ProtocolException("Invalid global EQ response")
+        return (payload[0].toInt() != 0) to payload.i32(4) / 1000.0
+    }
+
+    fun encodeBand(index: Int, band: EqBand): ByteArray = ByteArray(21).also { payload ->
+        payload[0] = index.toByte()
+        payload[1] = if (band.enabled) 1 else 0
+        payload[2] = band.type.value.toByte()
+        payload[3] = band.widthMode.value.toByte()
+        payload.putI32(5, milli(band.frequencyHz))
+        payload.putI32(9, milli(band.gainDb))
+        payload.putI32(13, milli(band.q))
+        payload.putI32(17, milli(band.bandwidthOctaves))
+    }
+
+    @Throws(ProtocolException::class)
+    fun decodeBand(payload: ByteArray): Pair<Int, EqBand> {
+        if (payload.size != 21) throw ProtocolException("Invalid EQ band response")
+        return payload.u8(0) to EqBand(
+            enabled = payload[1].toInt() != 0,
+            type = FilterType.from(payload.u8(2)),
+            widthMode = WidthMode.from(payload.u8(3)),
+            frequencyHz = payload.i32(5) / 1000.0,
+            gainDb = payload.i32(9) / 1000.0,
+            q = payload.i32(13) / 1000.0,
+            bandwidthOctaves = payload.i32(17) / 1000.0,
+        )
+    }
+
+    @Throws(ProtocolException::class)
+    fun decodeStatus(payload: ByteArray): DeviceStatus {
+        if (payload.size != 28 && payload.size != 32 && payload.size != 44) {
+            throw ProtocolException("Invalid status response")
+        }
+        val flags = payload.u8(3)
+        return DeviceStatus(
+            firmwareMajor = payload.u8(0),
+            firmwareMinor = payload.u8(1),
+            bandCount = payload.u8(2),
+            streaming = flags and 0x01 != 0,
+            dirty = flags and 0x02 != 0,
+            eqEnabled = flags and 0x04 != 0,
+            sampleRateHz = payload.u32(4),
+            configGeneration = payload.u32(8),
+            savedGeneration = payload.u32(12),
+            appliedGeneration = payload.u32(16),
+            underrunFrames = payload.u32(20),
+            backpressureEvents = payload.u32(24),
+            temperatureC = if (payload.size >= 32) payload.i32(28) / 1000.0 else null,
+            systemClockMHz = if (payload.size >= 44) payload.u32(32) / 1_000_000.0 else null,
+            maxDspBlockUs = if (payload.size >= 44) payload.u32(36) else null,
+            i2sLowWaterFrames = if (payload.size >= 44) payload.u32(40) else null,
+        )
+    }
+
+    fun encodeMeterConfig(reportIntervalMs: Int, timeoutMs: Int): ByteArray = ByteArray(4).also { payload ->
+        payload.putU16(0, reportIntervalMs)
+        payload.putU16(2, timeoutMs)
+    }
+
+    @Throws(ProtocolException::class)
+    fun decodeMeterLevel(payload: ByteArray): MeterLevel {
+        if (payload.size != 28) throw ProtocolException("Invalid audio meter report")
+        return MeterLevel(
+            sequence = payload.u32(0),
+            preEq = StereoMeterLevel(payload.u16(4), payload.u16(6), payload.u32(8), payload.u32(12)),
+            postEq = StereoMeterLevel(payload.u16(16), payload.u16(18), payload.u32(20), payload.u32(24)),
+        )
+    }
+
+    @Throws(ProtocolException::class)
+    fun decodeProfileState(payload: ByteArray): ProfileState {
+        if (payload.size != 12) throw ProtocolException("Invalid profile state response")
+        return ProfileState(
+            count = payload.u8(0),
+            activeProfile = payload.u8(1),
+            persistedProfile = payload.u8(2),
+            presentMask = payload.u16(4),
+            bankGeneration = payload.u32(8),
+        )
+    }
+
+    private fun statusLabel(response: ResponsePacket): String = when (response.status) {
+        ProtocolStatus.Ok -> "OK"
+        ProtocolStatus.InvalidPacket -> "The device rejected the packet"
+        ProtocolStatus.InvalidCommand -> "The command is not supported"
+        ProtocolStatus.InvalidLength -> "The command length is invalid"
+        ProtocolStatus.InvalidIndex -> "The EQ band index is invalid"
+        ProtocolStatus.OutOfRange -> "One or more EQ values are out of range"
+        ProtocolStatus.Busy -> "The device is busy"
+        ProtocolStatus.StorageError -> "The device could not write its flash storage"
+        null -> "Unknown device error (${response.rawStatus})"
+    }
+
+    private fun milli(value: Double): Int = (value * 1000.0).roundToInt()
+}
+
+val DefaultEqConfig = EqConfig(
+    enabled = true,
+    preampDb = 0.0,
+    bands = listOf(
+        defaultBand(FilterType.Peaking, 68.0, 0.71, 1.89),
+        defaultBand(FilterType.LowShelf, 105.0, 0.71, 1.89),
+        defaultBand(FilterType.Peaking, 260.0, 4.0, 0.36),
+        defaultBand(FilterType.Peaking, 1300.0, 3.0, 0.48),
+        defaultBand(FilterType.Peaking, 1650.0, 3.0, 0.48),
+        defaultBand(FilterType.Peaking, 2600.0, 5.0, 0.29),
+        defaultBand(FilterType.HighShelf, 3000.0, 0.35, 3.33),
+        defaultBand(FilterType.Peaking, 3000.0, 1.4, 1.01),
+        defaultBand(FilterType.Peaking, 5100.0, 4.5, 0.32),
+        defaultBand(FilterType.HighShelf, 10000.0, 0.71, 1.89),
+    ),
+)
+
+private fun defaultBand(type: FilterType, frequencyHz: Double, q: Double, bandwidth: Double) = EqBand(
+    enabled = true,
+    type = type,
+    widthMode = if (type == FilterType.Peaking) WidthMode.Bandwidth else WidthMode.Q,
+    frequencyHz = frequencyHz,
+    gainDb = 0.0,
+    q = q,
+    bandwidthOctaves = bandwidth,
+)
+
+private fun ByteArray.buffer(): ByteBuffer = ByteBuffer.wrap(this).order(ByteOrder.LITTLE_ENDIAN)
+private fun ByteArray.u8(offset: Int): Int = this[offset].toInt() and 0xff
+private fun ByteArray.u16(offset: Int): Int = buffer().getShort(offset).toInt() and 0xffff
+private fun ByteArray.u32(offset: Int): Long = buffer().getInt(offset).toLong() and 0xffff_ffffL
+private fun ByteArray.i32(offset: Int): Int = buffer().getInt(offset)
+private fun ByteArray.putU16(offset: Int, value: Int) { buffer().putShort(offset, value.toShort()) }
+private fun ByteArray.putI32(offset: Int, value: Int) { buffer().putInt(offset, value) }

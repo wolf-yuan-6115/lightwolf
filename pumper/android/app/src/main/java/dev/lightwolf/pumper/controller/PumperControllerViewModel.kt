@@ -1,0 +1,490 @@
+package dev.lightwolf.pumper.controller
+
+import android.app.Application
+import android.content.Intent
+import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.viewModelScope
+import dev.lightwolf.pumper.controller.protocol.DefaultEqConfig
+import dev.lightwolf.pumper.controller.protocol.EqBand
+import dev.lightwolf.pumper.controller.protocol.EqConfig
+import dev.lightwolf.pumper.controller.protocol.EqMath
+import dev.lightwolf.pumper.controller.protocol.EqValidation
+import dev.lightwolf.pumper.controller.protocol.FilterType
+import dev.lightwolf.pumper.controller.protocol.METER_HEARTBEAT_INTERVAL_MS
+import dev.lightwolf.pumper.controller.protocol.METER_REPORT_INTERVAL_MS
+import dev.lightwolf.pumper.controller.protocol.METER_TIMEOUT_MS
+import dev.lightwolf.pumper.controller.protocol.MeterLevel
+import dev.lightwolf.pumper.controller.protocol.Opcode
+import dev.lightwolf.pumper.controller.protocol.PumperProtocol
+import dev.lightwolf.pumper.controller.transport.PumperClient
+import dev.lightwolf.pumper.controller.transport.PumperDevice
+import dev.lightwolf.pumper.controller.transport.PumperTransport
+import dev.lightwolf.pumper.controller.transport.UsbDeviceManager
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
+import kotlin.math.max
+import kotlin.math.min
+
+private const val LIVE_PREVIEW_INTERVAL_MS = 55L
+
+private fun AppDestination.usesMeter(): Boolean = this == AppDestination.Info
+
+class PumperControllerViewModel(application: Application) : AndroidViewModel(application) {
+    private val deviceManager: UsbDeviceManager = (application as PumperApplication).deviceManager
+    private val _state = MutableStateFlow(ControllerUiState())
+    val state = _state.asStateFlow()
+    private val _meter = MutableStateFlow<MeterLevel?>(null)
+    val meter = _meter.asStateFlow()
+
+    private var client: PumperClient? = null
+    private var sessionScope: CoroutineScope? = null
+    private var savedConfig: EqConfig? = null
+    private var pendingGlobal: EqConfig? = null
+    private val pendingBands = mutableMapOf<Int, EqBand>()
+    private var previewJob: Job? = null
+    private var submittedPreampDb = DefaultEqConfig.preampDb
+    private var foreground = false
+
+    fun onForeground(intent: Intent?) {
+        foreground = true
+        refreshDevices()
+        if (_state.value.connection != ConnectionState.Disconnected) return
+        val intentDevice = deviceManager.deviceFromIntent(intent)
+        val target = intentDevice ?: deviceManager.attachedDevices().firstOrNull()
+        if (target != null) connect(target)
+    }
+
+    fun onBackground() {
+        foreground = false
+        disconnect()
+    }
+
+    fun refreshDevices() {
+        _state.update { it.copy(availableDevices = deviceManager.attachedDevices()) }
+    }
+
+    fun connect(device: PumperDevice? = _state.value.availableDevices.firstOrNull()) {
+        if (device == null) {
+            refreshDevices()
+            _state.update { it.copy(error = "Connect Pumper to this Android device with a USB data cable.") }
+            return
+        }
+        connectWith { deviceManager.open(device) }
+    }
+
+    fun connectSimulator() {
+        val transport = DebugFeatures.createTransport()
+        if (transport == null) {
+            _state.update { it.copy(error = "The simulated DAC is only available in debug builds.") }
+            return
+        }
+        connectWith { transport }
+    }
+
+    private fun connectWith(openTransport: suspend () -> PumperTransport) {
+        if (_state.value.connection != ConnectionState.Disconnected) return
+        viewModelScope.launch {
+            _state.update { it.copy(connection = ConnectionState.Connecting, error = null, message = null) }
+            try {
+                val transport = openTransport()
+                if (!foreground) {
+                    transport.close()
+                    _state.update { it.copy(connection = ConnectionState.Disconnected) }
+                    return@launch
+                }
+                val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+                sessionScope = scope
+                val nextClient = PumperClient(transport, scope)
+                client = nextClient
+                _state.update {
+                    it.copy(connection = ConnectionState.Connected, productName = nextClient.productName)
+                }
+                readDevice(knownStoredProfile = false)
+                startSessionTasks(scope, nextClient)
+            } catch (error: Throwable) {
+                closeSession()
+                _state.update {
+                    it.copy(
+                        connection = ConnectionState.Disconnected,
+                        productName = null,
+                        error = error.message ?: "Unable to connect to Pumper",
+                    )
+                }
+            }
+        }
+    }
+
+    fun disconnect() {
+        if (_state.value.connection == ConnectionState.Disconnected) return
+        viewModelScope.launch {
+            runCatching { client?.request(Opcode.MeterStop, timeoutMs = 300) }
+            closeSession()
+            _state.update {
+                it.copy(
+                    connection = ConnectionState.Disconnected,
+                    productName = null,
+                    status = null,
+                    busy = false,
+                    confirmation = null,
+                )
+            }
+        }
+    }
+
+    fun setDestination(destination: AppDestination) {
+        _state.update { it.copy(destination = destination) }
+        if (!destination.usesMeter()) _meter.value = null
+    }
+
+    fun selectBand(index: Int) {
+        if (index in _state.value.config.bands.indices) _state.update { it.copy(selectedBand = index) }
+    }
+
+    fun updateBand(index: Int, transform: (EqBand) -> EqBand) {
+        val current = _state.value.config
+        val oldBand = current.bands.getOrNull(index) ?: return
+        var newBand = transform(oldBand)
+        if (newBand.type != FilterType.Peaking) newBand = newBand.copy(q = newBand.q.coerceIn(0.1, 1.0))
+        EqValidation.band(newBand, index)?.let {
+            _state.update { state -> state.copy(error = it) }
+            return
+        }
+        val bands = current.bands.toMutableList().also { it[index] = newBand }
+        var next = current.copy(bands = bands)
+        var globalChanged = false
+        if (_state.value.autoPreamp) {
+            next = next.copy(preampDb = EqMath.calculateAutoPreamp(next, sampleRate()).preampDb)
+            globalChanged = next.preampDb != current.preampDb
+        }
+        commitConfig(next)
+        pendingBands[index] = newBand
+        if (globalChanged) pendingGlobal = next
+        schedulePreview()
+    }
+
+    fun updateGlobal(enabled: Boolean? = null, preampDb: Double? = null) {
+        val current = _state.value.config
+        var next = current.copy(
+            enabled = enabled ?: current.enabled,
+            preampDb = preampDb ?: current.preampDb,
+        )
+        if (_state.value.autoPreamp) next = next.copy(preampDb = EqMath.calculateAutoPreamp(next, sampleRate()).preampDb)
+        EqValidation.config(next)?.let {
+            _state.update { state -> state.copy(error = it) }
+            return
+        }
+        commitConfig(next)
+        pendingGlobal = next
+        schedulePreview()
+    }
+
+    fun setAutoPreamp(enabled: Boolean) {
+        _state.update { it.copy(autoPreamp = enabled) }
+        if (enabled) {
+            val next = _state.value.config.copy(
+                preampDb = EqMath.calculateAutoPreamp(_state.value.config, sampleRate()).preampDb,
+            )
+            commitConfig(next)
+            pendingGlobal = next
+            schedulePreview()
+        }
+    }
+
+    fun selectProfile(index: Int) {
+        val current = _state.value
+        if (index !in 0 until current.profiles.count || index == current.selectedProfile) return
+        if (!current.profiles.isPresent(index)) {
+            _state.update {
+                it.copy(selectedProfile = index, message = "Profile ${index + 1} selected as a save target.")
+            }
+        } else if (current.hasUnsavedEdits) {
+            _state.update { it.copy(confirmation = Confirmation.SwitchProfile(index)) }
+        } else {
+            runBusy { loadProfile(index) }
+        }
+    }
+
+    fun requestSaveProfile() = requestConfirmation(Confirmation.SaveProfile)
+    fun makeProfileDefault(index: Int) {
+        val current = _state.value
+        if (index !in 0 until current.profiles.count ||
+            !current.profiles.isPresent(index) ||
+            current.profiles.persistedProfile == index
+        ) return
+        runBusy { setDefaultProfile(index) }
+    }
+
+    fun deleteProfile(index: Int) {
+        val current = _state.value
+        if (index !in 0 until current.profiles.count || !current.profiles.isPresent(index)) return
+        runBusy { deleteStoredProfile(index) }
+    }
+
+    fun requestRestoreDefaults() = requestConfirmation(Confirmation.RestoreDefaults)
+    fun requestRestart() = requestConfirmation(Confirmation.Restart)
+    fun requestBootsel() = requestConfirmation(Confirmation.Bootsel)
+
+    fun dismissConfirmation() {
+        _state.update { it.copy(confirmation = null) }
+    }
+
+    fun confirmAction() {
+        val action = _state.value.confirmation ?: return
+        _state.update { it.copy(confirmation = null) }
+        runBusy {
+            when (action) {
+                Confirmation.SaveProfile -> saveProfile()
+                Confirmation.RestoreDefaults -> restoreDefaults()
+                is Confirmation.SwitchProfile -> loadProfile(action.index)
+                Confirmation.Restart -> resetDevice(Opcode.RestartDevice, "Pumper is restarting.")
+                Confirmation.Bootsel -> resetDevice(Opcode.EnterBootsel, "Pumper entered BOOTSEL. Copy a UF2 to the RP2350 USB drive.")
+            }
+        }
+    }
+
+    fun clearMessage() {
+        _state.update { it.copy(message = null) }
+    }
+
+    fun clearError() {
+        _state.update { it.copy(error = null) }
+    }
+
+    private fun requestConfirmation(confirmation: Confirmation) {
+        if (!_state.value.connected || _state.value.busy) return
+        _state.update { it.copy(confirmation = confirmation) }
+    }
+
+    private fun runBusy(block: suspend () -> Unit) {
+        if (!_state.value.connected || _state.value.busy) return
+        viewModelScope.launch {
+            _state.update { it.copy(busy = true, error = null, message = null) }
+            try {
+                block()
+            } catch (error: Throwable) {
+                _state.update { it.copy(error = error.message ?: "The operation failed.") }
+            } finally {
+                _state.update { it.copy(busy = false) }
+            }
+        }
+    }
+
+    private suspend fun readDevice(knownStoredProfile: Boolean) {
+        val activeClient = client ?: return
+        val nextStatus = PumperProtocol.decodeStatus(activeClient.request(Opcode.Hello).payload)
+        val (enabled, preampDb) = PumperProtocol.decodeGlobal(activeClient.request(Opcode.GetGlobal).payload)
+        val nextProfiles = PumperProtocol.decodeProfileState(activeClient.request(Opcode.GetProfiles).payload)
+        val bands = List(nextStatus.bandCount) { index ->
+            PumperProtocol.decodeBand(activeClient.request(Opcode.GetBand, byteArrayOf(index.toByte())).payload).second
+        }
+        val deviceConfig = EqConfig(enabled, preampDb, bands)
+        var next = deviceConfig
+        if (_state.value.autoPreamp) {
+            next = next.copy(preampDb = EqMath.calculateAutoPreamp(next, nextStatus.sampleRateHz).preampDb)
+            if (next.preampDb != deviceConfig.preampDb) {
+                activeClient.request(Opcode.SetGlobal, PumperProtocol.encodeGlobal(next))
+            }
+        }
+        if (knownStoredProfile || !nextStatus.dirty) savedConfig = deviceConfig
+        submittedPreampDb = next.preampDb
+        EqValidation.config(next)?.let { throw IllegalStateException("The DAC returned an invalid configuration. $it") }
+        _state.update {
+            it.copy(
+                config = next,
+                status = nextStatus,
+                profiles = nextProfiles,
+                selectedProfile = nextProfiles.activeProfile,
+                selectedBand = min(it.selectedBand, max(0, bands.lastIndex)),
+                hasUnsavedEdits = savedConfig == null || next != savedConfig,
+                error = null,
+            )
+        }
+    }
+
+    private fun startSessionTasks(scope: CoroutineScope, activeClient: PumperClient) {
+        scope.launch {
+            activeClient.meterLevels.catch { }.collect { level -> _meter.value = level }
+        }
+        scope.launch {
+            activeClient.disconnects.collect {
+                closeSession()
+                _state.update {
+                    it.copy(
+                        connection = ConnectionState.Disconnected,
+                        productName = null,
+                        status = null,
+                        busy = false,
+                        error = "Pumper disconnected.",
+                    )
+                }
+            }
+        }
+        scope.launch {
+            state.map { it.destination.usesMeter() }
+                .distinctUntilChanged()
+                .collect { enabled ->
+                    if (enabled) {
+                        activeClient.request(
+                            Opcode.MeterStart,
+                            PumperProtocol.encodeMeterConfig(METER_REPORT_INTERVAL_MS, METER_TIMEOUT_MS),
+                        )
+                        while (isActive && _state.value.destination.usesMeter()) {
+                            delay(METER_HEARTBEAT_INTERVAL_MS)
+                            runCatching { activeClient.request(Opcode.MeterKeepalive) }
+                        }
+                    } else {
+                        _meter.value = null
+                        runCatching { activeClient.request(Opcode.MeterStop, timeoutMs = 300) }
+                    }
+                }
+        }
+        scope.launch {
+            while (isActive) {
+                delay(1_000)
+                runCatching { PumperProtocol.decodeStatus(activeClient.request(Opcode.GetStatus).payload) }
+                    .onSuccess { status ->
+                        val oldRate = _state.value.status?.sampleRateHz
+                        _state.update { it.copy(status = status) }
+                        if (_state.value.autoPreamp && oldRate != status.sampleRateHz) {
+                            val next = _state.value.config.copy(
+                                preampDb = EqMath.calculateAutoPreamp(_state.value.config, status.sampleRateHz).preampDb,
+                            )
+                            commitConfig(next)
+                            pendingGlobal = next
+                            schedulePreview()
+                        }
+                    }
+            }
+        }
+    }
+
+    private fun commitConfig(next: EqConfig) {
+        _state.update {
+            it.copy(
+                config = next,
+                hasUnsavedEdits = savedConfig == null || next != savedConfig,
+                message = null,
+                error = null,
+            )
+        }
+    }
+
+    private fun schedulePreview() {
+        if (!_state.value.connected || previewJob?.isActive == true) return
+        previewJob = viewModelScope.launch {
+            delay(LIVE_PREVIEW_INTERVAL_MS)
+            flushPreview()
+        }
+    }
+
+    private suspend fun flushPreview() {
+        val activeClient = client ?: return
+        val global = pendingGlobal
+        val bands = pendingBands.toSortedMap()
+        pendingGlobal = null
+        pendingBands.clear()
+        try {
+            val attenuating = global != null && global.preampDb < submittedPreampDb
+            if (attenuating) activeClient.request(Opcode.SetGlobal, PumperProtocol.encodeGlobal(global))
+            bands.forEach { (index, band) ->
+                activeClient.request(Opcode.SetBand, PumperProtocol.encodeBand(index, band))
+            }
+            if (global != null && !attenuating) {
+                activeClient.request(Opcode.SetGlobal, PumperProtocol.encodeGlobal(global))
+            }
+            if (global != null) submittedPreampDb = global.preampDb
+        } catch (error: Throwable) {
+            _state.update { it.copy(error = error.message ?: "The DAC rejected the live EQ update.") }
+        }
+        if (pendingGlobal != null || pendingBands.isNotEmpty()) schedulePreview()
+    }
+
+    private fun clearPendingPreview() {
+        previewJob?.cancel()
+        previewJob = null
+        pendingGlobal = null
+        pendingBands.clear()
+    }
+
+    private suspend fun saveProfile() {
+        val activeClient = requireNotNull(client)
+        val current = _state.value.config
+        EqValidation.config(current)?.let { throw IllegalArgumentException(it) }
+        clearPendingPreview()
+        activeClient.request(Opcode.SetGlobal, PumperProtocol.encodeGlobal(current))
+        current.bands.forEachIndexed { index, band ->
+            activeClient.request(Opcode.SetBand, PumperProtocol.encodeBand(index, band))
+        }
+        activeClient.request(Opcode.SaveProfile, byteArrayOf(_state.value.selectedProfile.toByte()), timeoutMs = 8_000)
+        readDevice(knownStoredProfile = true)
+        _state.update { it.copy(message = "Profile ${it.selectedProfile + 1} saved to flash.") }
+    }
+
+    private suspend fun loadProfile(index: Int) {
+        clearPendingPreview()
+        requireNotNull(client).request(Opcode.LoadProfile, byteArrayOf(index.toByte()))
+        readDevice(knownStoredProfile = true)
+        _state.update { it.copy(message = "Profile ${index + 1} loaded into live preview.") }
+    }
+
+    private suspend fun setDefaultProfile(index: Int) {
+        val activeClient = requireNotNull(client)
+        activeClient.request(Opcode.SetDefaultProfile, byteArrayOf(index.toByte()), timeoutMs = 8_000)
+        val profiles = PumperProtocol.decodeProfileState(activeClient.request(Opcode.GetProfiles).payload)
+        _state.update { it.copy(profiles = profiles, message = "Profile ${index + 1} will load at power-on.") }
+    }
+
+    private suspend fun deleteStoredProfile(index: Int) {
+        val activeClient = requireNotNull(client)
+        activeClient.request(Opcode.DeleteProfile, byteArrayOf(index.toByte()), timeoutMs = 8_000)
+        val profiles = PumperProtocol.decodeProfileState(activeClient.request(Opcode.GetProfiles).payload)
+        _state.update {
+            it.copy(profiles = profiles, message = "Profile ${index + 1} cleared.")
+        }
+    }
+
+    private suspend fun restoreDefaults() {
+        clearPendingPreview()
+        requireNotNull(client).request(Opcode.RestoreDefaults)
+        savedConfig = null
+        _meter.value = null
+        readDevice(knownStoredProfile = false)
+        _state.update { it.copy(message = "Factory EQ loaded into live preview.") }
+    }
+
+    private suspend fun resetDevice(opcode: Opcode, message: String) {
+        clearPendingPreview()
+        requireNotNull(client).request(opcode)
+        _state.update { it.copy(message = message) }
+    }
+
+    private fun sampleRate(): Long = _state.value.status?.sampleRateHz ?: 48_000L
+
+    private suspend fun closeSession() {
+        clearPendingPreview()
+        val activeClient = client
+        client = null
+        val activeScope = sessionScope
+        sessionScope = null
+        runCatching { activeClient?.close() }
+        activeScope?.cancel()
+        savedConfig = null
+    }
+
+    override fun onCleared() {
+        sessionScope?.cancel()
+        super.onCleared()
+    }
+}
