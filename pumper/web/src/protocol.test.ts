@@ -24,6 +24,11 @@ import {
   effectiveAudioControl,
   encodeCrossfeed,
   supportsAudioControls,
+  supportsFirmware3Controls,
+  defaultOutputProcessing,
+  decodeOutputProcessing,
+  decodeOutputProcessingState,
+  encodeOutputProcessing,
 } from "./protocol";
 
 describe("Pumper HID protocol", () => {
@@ -32,6 +37,38 @@ describe("Pumper HID protocol", () => {
     for (const version of ["2.2", "2.10", "3.0"]) expect(supportsAudioControls(version)).toBe(true);
     expect([Opcode.GetAudioControls, Opcode.GetCrossfeed, Opcode.SetCrossfeed, Opcode.SaveCrossfeed]).toEqual([6, 7, 0x12, 0x26]);
     expect(createRequest(Opcode.SaveCrossfeed, 1)[6]).toBe(0);
+  });
+
+  it("gates firmware 3 controls and assigns their wire values", () => {
+    for (const version of ["2.2", "2.99", "invalid", "3.0beta"]) expect(supportsFirmware3Controls(version)).toBe(false);
+    for (const version of ["3.0", "3.1", "4.0"]) expect(supportsFirmware3Controls(version)).toBe(true);
+    expect([Opcode.GetOutputProcessing, Opcode.SetOutputProcessing, Opcode.SaveOutputProcessing]).toEqual([0x08, 0x13, 0x27]);
+    expect([FilterType.LowPass, FilterType.HighPass, FilterType.Notch, FilterType.BandPass]).toEqual([3, 4, 5, 6]);
+  });
+
+  it("round-trips output processing and decodes live, saved, and dirty state", () => {
+    const config = { mono: true, swap: true, invertLeft: true, invertRight: false, balancePercent: -25.5, widthPercent: 150.25 };
+    expect(Array.from(encodeOutputProcessing(config))).toEqual([7, 0, 0x0a, 0xf6, 0xb1, 0x3a, 0, 0]);
+    expect(decodeOutputProcessing(encodeOutputProcessing(config))).toEqual(config);
+    const payload = new Uint8Array(17);
+    payload.set(encodeOutputProcessing(config));
+    payload.set(encodeOutputProcessing(defaultOutputProcessing), 8);
+    payload[16] = 1;
+    expect(decodeOutputProcessingState(payload)).toEqual({ live: config, saved: defaultOutputProcessing, dirty: true });
+  });
+
+  it("rejects invalid output processing records", () => {
+    for (const patch of [{ balancePercent: -100.01 }, { balancePercent: 100.01 }, { widthPercent: -0.01 }, { widthPercent: 200.01 }, { widthPercent: NaN }]) {
+      expect(() => encodeOutputProcessing({ ...defaultOutputProcessing, ...patch })).toThrow();
+    }
+    const payload = encodeOutputProcessing(defaultOutputProcessing);
+    payload[0] = 0x10;
+    expect(() => decodeOutputProcessing(payload)).toThrow();
+    payload[0] = 0;
+    payload[6] = 1;
+    expect(() => decodeOutputProcessing(payload)).toThrow();
+    expect(() => decodeOutputProcessing(new Uint8Array(7))).toThrow();
+    expect(() => decodeOutputProcessingState(new Uint8Array(16))).toThrow();
   });
 
   it("decodes host Q8.8 controls and combines master/channel state", () => {

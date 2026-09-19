@@ -43,4 +43,33 @@ describe("EQ response math", () => {
     config.bands[0] = { ...defaultConfig.bands[0], gainDb: -6 };
     expect(calculateAutoPreamp(config, 48000).preampDb).toBeLessThanOrEqual(0);
   });
+
+  it("matches the firmware response for gain-independent filters at every supported rate", () => {
+    const rates = [44100, 48000, 88200, 96000, 176400, 192000];
+    for (const sampleRate of rates) {
+      const config = flatConfig();
+      const base = { ...defaultConfig.bands[0], enabled: true, widthMode: WidthMode.Q, frequencyHz: 1000, gainDb: 0, q: 0.707 };
+
+      config.bands[0] = { ...base, type: FilterType.LowPass };
+      expect(compositeGainDb(config, sampleRate, 100)).toBeGreaterThan(-0.1);
+      expect(compositeGainDb(config, sampleRate, 10000)).toBeLessThan(-30);
+
+      config.bands[0] = { ...base, type: FilterType.HighPass };
+      expect(compositeGainDb(config, sampleRate, 100)).toBeLessThan(-30);
+      expect(compositeGainDb(config, sampleRate, 10000)).toBeGreaterThan(-0.1);
+
+      config.bands[0] = { ...base, type: FilterType.Notch };
+      expect(compositeGainDb(config, sampleRate, 1000)).toBeLessThan(-100);
+
+      config.bands[0] = { ...base, type: FilterType.BandPass };
+      expect(compositeGainDb(config, sampleRate, 1000)).toBeCloseTo(0, 6);
+      expect(responseCurve(config, sampleRate, 128).every((point) => Number.isFinite(point.gainDb))).toBe(true);
+    }
+  });
+
+  it("treats filters at or above Nyquist as neutral", () => {
+    const config = flatConfig();
+    config.bands[0] = { ...defaultConfig.bands[0], enabled: true, type: FilterType.LowPass, widthMode: WidthMode.Q, frequencyHz: 20000, gainDb: 0, q: 0.707 };
+    expect(compositeGainDb(config, 32000, 1000)).toBe(0);
+  });
 });

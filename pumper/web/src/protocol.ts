@@ -18,9 +18,11 @@ export enum Opcode {
   GetProfiles = 0x05,
   GetAudioControls = 0x06,
   GetCrossfeed = 0x07,
+  GetOutputProcessing = 0x08,
   SetGlobal = 0x10,
   SetBand = 0x11,
   SetCrossfeed = 0x12,
+  SetOutputProcessing = 0x13,
   WriteFlash = 0x20,
   RestoreDefaults = 0x21,
   LoadProfile = 0x22,
@@ -28,6 +30,7 @@ export enum Opcode {
   SetDefaultProfile = 0x24,
   DeleteProfile = 0x25,
   SaveCrossfeed = 0x26,
+  SaveOutputProcessing = 0x27,
   MeterStart = 0x30,
   MeterKeepalive = 0x31,
   MeterStop = 0x32,
@@ -51,6 +54,10 @@ export enum FilterType {
   LowShelf = 0,
   Peaking = 1,
   HighShelf = 2,
+  LowPass = 3,
+  HighPass = 4,
+  Notch = 5,
+  BandPass = 6,
 }
 
 export enum WidthMode {
@@ -114,11 +121,50 @@ export const defaultCrossfeed: CrossfeedConfig = {
   delayMs: 0.25,
 };
 
-export function supportsAudioControls(firmwareVersion: string): boolean {
+export enum OutputProcessingFlag {
+  Mono = 0x01,
+  Swap = 0x02,
+  InvertLeft = 0x04,
+  InvertRight = 0x08,
+}
+
+export interface OutputProcessingConfig {
+  mono: boolean;
+  swap: boolean;
+  invertLeft: boolean;
+  invertRight: boolean;
+  balancePercent: number;
+  widthPercent: number;
+}
+
+export interface OutputProcessingState {
+  live: OutputProcessingConfig;
+  saved: OutputProcessingConfig;
+  dirty: boolean;
+}
+
+export const defaultOutputProcessing: OutputProcessingConfig = {
+  mono: false,
+  swap: false,
+  invertLeft: false,
+  invertRight: false,
+  balancePercent: 0,
+  widthPercent: 100,
+};
+
+function firmwareAtLeast(firmwareVersion: string, requiredMajor: number, requiredMinor: number): boolean {
   const match = /^(\d+)\.(\d+)$/.exec(firmwareVersion);
   if (!match) return false;
   const major = Number(match[1]);
-  return major > 2 || (major === 2 && Number(match[2]) >= 2);
+  return major > requiredMajor || (major === requiredMajor && Number(match[2]) >= requiredMinor);
+}
+
+export function supportsAudioControls(firmwareVersion: string): boolean {
+  return firmwareAtLeast(firmwareVersion, 2, 2);
+}
+
+export function supportsFirmware3Controls(firmwareVersion: string): boolean {
+  return firmwareAtLeast(firmwareVersion, 3, 0);
 }
 
 export function effectiveAudioControl(master: AudioChannelControl, channel: AudioChannelControl): AudioChannelControl {
@@ -189,6 +235,65 @@ export function decodeCrossfeedState(payload: Uint8Array): CrossfeedState {
 export function crossfeedConfigsEqual(left: CrossfeedConfig, right: CrossfeedConfig): boolean {
   return left.mode === right.mode && left.strengthPercent === right.strengthPercent &&
     left.cutoffHz === right.cutoffHz && left.delayMs === right.delayMs;
+}
+
+export function validateOutputProcessing(config: OutputProcessingConfig): void {
+  if ([config.mono, config.swap, config.invertLeft, config.invertRight].some((value) => typeof value !== "boolean")) {
+    throw new RangeError("Output processing flags are invalid.");
+  }
+  if (!Number.isFinite(config.balancePercent) || config.balancePercent < -100 || config.balancePercent > 100) {
+    throw new RangeError("Balance must be between -100 and 100 %.");
+  }
+  if (!Number.isFinite(config.widthPercent) || config.widthPercent < 0 || config.widthPercent > 200) {
+    throw new RangeError("Stereo width must be between 0 and 200 %.");
+  }
+}
+
+export function encodeOutputProcessing(config: OutputProcessingConfig): Uint8Array {
+  validateOutputProcessing(config);
+  const payload = new Uint8Array(8);
+  const view = viewFor(payload);
+  payload[0] = (config.mono ? OutputProcessingFlag.Mono : 0) |
+    (config.swap ? OutputProcessingFlag.Swap : 0) |
+    (config.invertLeft ? OutputProcessingFlag.InvertLeft : 0) |
+    (config.invertRight ? OutputProcessingFlag.InvertRight : 0);
+  view.setInt16(2, Math.round(config.balancePercent * 100), true);
+  view.setUint16(4, Math.round(config.widthPercent * 100), true);
+  return payload;
+}
+
+export function decodeOutputProcessing(payload: Uint8Array): OutputProcessingConfig {
+  if (payload.length !== 8 || payload[1] !== 0 || payload[6] !== 0 || payload[7] !== 0 ||
+      (payload[0] & ~0x0f) !== 0) {
+    throw new Error("Invalid output processing response");
+  }
+  const view = viewFor(payload);
+  const flags = payload[0];
+  const config = {
+    mono: (flags & OutputProcessingFlag.Mono) !== 0,
+    swap: (flags & OutputProcessingFlag.Swap) !== 0,
+    invertLeft: (flags & OutputProcessingFlag.InvertLeft) !== 0,
+    invertRight: (flags & OutputProcessingFlag.InvertRight) !== 0,
+    balancePercent: view.getInt16(2, true) / 100,
+    widthPercent: view.getUint16(4, true) / 100,
+  };
+  validateOutputProcessing(config);
+  return config;
+}
+
+export function decodeOutputProcessingState(payload: Uint8Array): OutputProcessingState {
+  if (payload.length !== 17 || payload[16] > 1) throw new Error("Invalid output processing state response");
+  return {
+    live: decodeOutputProcessing(payload.subarray(0, 8)),
+    saved: decodeOutputProcessing(payload.subarray(8, 16)),
+    dirty: payload[16] === 1,
+  };
+}
+
+export function outputProcessingConfigsEqual(left: OutputProcessingConfig, right: OutputProcessingConfig): boolean {
+  return left.mono === right.mono && left.swap === right.swap && left.invertLeft === right.invertLeft &&
+    left.invertRight === right.invertRight && left.balancePercent === right.balancePercent &&
+    left.widthPercent === right.widthPercent;
 }
 
 export interface DeviceStatus {

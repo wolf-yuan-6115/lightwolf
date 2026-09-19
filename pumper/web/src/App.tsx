@@ -7,7 +7,7 @@ import { LevelMeter } from "./LevelMeter";
 import { SaveStateBadge } from "./SaveStateBadge";
 import { NumericInput } from "./NumericInput";
 import { SelectMenu, type SelectMenuOption } from "./SelectMenu";
-import { CrossfeedSettings, UsbAudioState } from "./AudioSettings";
+import { CrossfeedSettings, OutputProcessingSettings, UsbAudioState } from "./AudioSettings";
 import { useAudioSettings } from "./useAudioSettings";
 import {
   decodeBand,
@@ -53,10 +53,19 @@ const clearButton = "btn btn-square btn-error btn-soft btn-sm shrink-0";
 const rangeClass = "range range-xs min-w-18";
 const themeStorageKey = "pumper-theme";
 const livePreviewIntervalMs = 55;
-const filterOptions: readonly SelectMenuOption<FilterType>[] = [
-  { value: FilterType.LowShelf, label: "Low shelf" },
+const legacyFilterOptions: readonly SelectMenuOption<FilterType>[] = [
   { value: FilterType.Peaking, label: "Peaking" },
+  { value: FilterType.LowShelf, label: "Low shelf" },
   { value: FilterType.HighShelf, label: "High shelf" },
+];
+const firmware3FilterOptions: readonly SelectMenuOption<FilterType>[] = [
+  { value: FilterType.Peaking, label: "Peaking" },
+  { value: FilterType.LowPass, label: "Low-pass" },
+  { value: FilterType.LowShelf, label: "Low shelf" },
+  { value: FilterType.HighPass, label: "High-pass" },
+  { value: FilterType.HighShelf, label: "High shelf" },
+  { value: FilterType.Notch, label: "Notch" },
+  { value: FilterType.BandPass, label: "Band-pass" },
 ];
 const widthOptions: readonly SelectMenuOption<WidthMode>[] = [
   { value: WidthMode.Bandwidth, label: "Bandwidth" },
@@ -117,9 +126,17 @@ function inRange(value: number, minimum: number, maximum: number): boolean {
   return Number.isFinite(value) && value >= minimum && value <= maximum;
 }
 
+function filterUsesGain(type: FilterType): boolean {
+  return type <= FilterType.HighShelf;
+}
+
+function filterUsesQOnly(type: FilterType): boolean {
+  return type >= FilterType.LowPass;
+}
+
 function validateBand(band: EqBand, index: number): string | null {
   const label = `Band ${index + 1}`;
-  if (band.type !== FilterType.LowShelf && band.type !== FilterType.Peaking && band.type !== FilterType.HighShelf) {
+  if (!Number.isInteger(band.type) || band.type < FilterType.LowShelf || band.type > FilterType.BandPass) {
     return `${label} filter type is not supported.`;
   }
   if (band.widthMode !== WidthMode.Q && band.widthMode !== WidthMode.Bandwidth) {
@@ -128,8 +145,9 @@ function validateBand(band: EqBand, index: number): string | null {
   if (!inRange(band.frequencyHz, 20, 20000)) return rangeMessage(`${label} frequency`, 20, 20000, "Hz");
   if (!inRange(band.gainDb, -24, 24)) return rangeMessage(`${label} gain`, -24, 24, "dB");
   if (!inRange(band.bandwidthOctaves, 0.1, 4)) return rangeMessage(`${label} bandwidth`, 0.1, 4, "octaves");
-  const qMaximum = band.type === FilterType.Peaking ? 20 : 1;
-  const qLabel = band.type === FilterType.Peaking ? "Q" : "slope";
+  if (filterUsesQOnly(band.type) && band.widthMode !== WidthMode.Q) return `${label} width mode must be Q.`;
+  const qMaximum = band.type === FilterType.LowShelf || band.type === FilterType.HighShelf ? 1 : 20;
+  const qLabel = band.type === FilterType.LowShelf || band.type === FilterType.HighShelf ? "slope" : "Q";
   if (!inRange(band.q, 0.1, qMaximum)) return rangeMessage(`${label} ${qLabel}`, 0.1, qMaximum);
   return null;
 }
@@ -154,7 +172,7 @@ function describeBandUpdate(index: number, previous: EqBand, next: EqBand): stri
     frequencyHz: "frequency",
     gainDb: "gain",
     bandwidthOctaves: "bandwidth",
-    q: next.type === FilterType.Peaking ? "Q" : "slope",
+    q: next.type === FilterType.LowShelf || next.type === FilterType.HighShelf ? "slope" : "Q",
   };
   return `Band ${index + 1} ${names[field] ?? "settings"}`;
 }
@@ -167,6 +185,10 @@ function deviceError(context: string, reason: unknown): string {
 function filterName(type: FilterType): string {
   if (type === FilterType.LowShelf) return "Low shelf";
   if (type === FilterType.HighShelf) return "High shelf";
+  if (type === FilterType.LowPass) return "Low-pass";
+  if (type === FilterType.HighPass) return "High-pass";
+  if (type === FilterType.Notch) return "Notch";
+  if (type === FilterType.BandPass) return "Band-pass";
   return "Peaking";
 }
 
@@ -216,6 +238,7 @@ export default function App() {
   const selectedProfileIsDefault = !selectedProfileEmpty && profileState.persistedProfile === selectedProfile;
   const hasUnsavedEdits = localDirty;
   const needsSave = hasUnsavedEdits || (connected && selectedProfileEmpty);
+  const filterOptions = audioSettings.outputSupported ? firmware3FilterOptions : legacyFilterOptions;
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
@@ -328,8 +351,9 @@ export default function App() {
 
   const updateBandType = (index: number, type: FilterType) => {
     const current = configRef.current.bands[index];
-    const q = type === FilterType.Peaking ? current.q : Math.min(1, Math.max(0.1, current.q));
-    updateBand(index, { type, q });
+    const shelf = type === FilterType.LowShelf || type === FilterType.HighShelf;
+    const q = shelf ? Math.min(1, Math.max(0.1, current.q)) : current.q;
+    updateBand(index, { type, q, ...(filterUsesQOnly(type) ? { widthMode: WidthMode.Q } : {}) });
   };
 
   const updateGlobal = (patch: Partial<Pick<EqConfig, "enabled" | "preampDb">>) => {
@@ -712,7 +736,7 @@ export default function App() {
                 <h2 className="card-title text-base"><ChartSpline size={18} aria-hidden="true" />Frequency response</h2>
                 <div className="badge badge-ghost h-auto min-w-0 max-w-full gap-2 overflow-hidden py-1.5 text-xs font-medium">
                   <span className="grid size-5 shrink-0 place-items-center rounded-full text-[10px] font-bold text-black" style={{ backgroundColor: bandColors[selectedBand] }}>{selectedBand + 1}</span>
-                  <span className="truncate">{filterName(selected.type)} · {selected.frequencyHz.toLocaleString()} Hz · {selected.gainDb > 0 ? "+" : ""}{selected.gainDb.toFixed(1)} dB</span>
+                  <span className="truncate">{filterName(selected.type)} · {selected.frequencyHz.toLocaleString()} Hz{filterUsesGain(selected.type) ? ` · ${selected.gainDb > 0 ? "+" : ""}${selected.gainDb.toFixed(1)} dB` : ` · Q ${selected.q.toFixed(2)}`}</span>
                 </div>
               </div>
               <EqGraph config={config} sampleRateHz={sampleRateHz} selectedBand={selectedBand} onSelectBand={setSelectedBand} onChangeBand={updateBand} />
@@ -775,17 +799,19 @@ export default function App() {
               <thead><tr><th className="pl-4 sm:pl-5">Band</th><th>Filter</th><th>Frequency</th><th>Gain</th><th>Width</th><th className="pr-4 sm:pr-5">Value</th></tr></thead>
               <tbody>
                 {config.bands.map((band, index) => {
-                  const widthLabel = band.type === FilterType.Peaking ? (band.widthMode === WidthMode.Q ? "Q" : "Bandwidth") : "Slope";
+                  const qOnly = filterUsesQOnly(band.type);
+                  const usesGain = filterUsesGain(band.type);
+                  const widthLabel = qOnly ? "Q" : band.type === FilterType.Peaking ? (band.widthMode === WidthMode.Q ? "Q" : "Bandwidth") : "Slope";
                   const widthValue = band.type === FilterType.Peaking && band.widthMode === WidthMode.Bandwidth ? band.bandwidthOctaves : band.q;
-                  const widthMaximum = band.type === FilterType.Peaking && band.widthMode === WidthMode.Q ? 20 : band.type === FilterType.Peaking ? 4 : 1;
+                  const widthMaximum = qOnly || (band.type === FilterType.Peaking && band.widthMode === WidthMode.Q) ? 20 : band.type === FilterType.Peaking ? 4 : 1;
                   const widthUnit = band.type === FilterType.Peaking && band.widthMode === WidthMode.Bandwidth ? "octaves" : "";
                   return (
                     <tr className={`transition-colors ${selectedBand === index ? "bg-base-200" : "hover:bg-base-200/60"} ${band.enabled ? "" : "text-base-content/40"}`} key={index} onClick={() => setSelectedBand(index)} onFocus={() => setSelectedBand(index)}>
                       <th className="pl-4 sm:pl-5" scope="row"><div className="flex items-center gap-3"><input className="toggle toggle-sm" type="checkbox" checked={band.enabled} onChange={(event) => updateBand(index, { enabled: event.target.checked })} aria-label={`Enable band ${index + 1}`} /><span className="grid size-6 place-items-center rounded-full text-[11px] font-bold text-black" style={{ backgroundColor: bandColors[index] }}>{index + 1}</span></div></th>
                       <td><SelectMenu className="w-full" value={band.type} options={filterOptions} onChange={(value) => updateBandType(index, value)} label={`Band ${index + 1} filter type`} /></td>
                       <td><label className="input input-sm flex w-full items-center gap-2 has-[input[aria-invalid=true]]:input-error"><NumericInput className="min-w-0 grow" label={`Frequency for band ${index + 1}`} min={20} max={20000} step={1} value={band.frequencyHz} onChange={(frequencyHz) => updateBand(index, { frequencyHz })} onInvalid={() => setError(rangeMessage(`Band ${index + 1} frequency`, 20, 20000, "Hz"))} /><span className="text-xs text-base-content/55">Hz</span></label></td>
-                      <td><div className="flex items-center gap-3"><input className={`${rangeClass} flex-1`} aria-label={`Gain slider for band ${index + 1}`} type="range" min="-24" max="24" step="0.1" value={band.gainDb} onChange={(event) => updateBand(index, { gainDb: Number(event.target.value) })} /><label className="input input-sm flex w-24 items-center gap-1 has-[input[aria-invalid=true]]:input-error"><NumericInput className="min-w-0 grow" label={`Gain for band ${index + 1}`} min={-24} max={24} step={0.1} value={band.gainDb} onChange={(gainDb) => updateBand(index, { gainDb })} onInvalid={() => setError(rangeMessage(`Band ${index + 1} gain`, -24, 24, "dB"))} /><span className="text-xs text-base-content/55">dB</span></label></div></td>
-                      <td>{band.type === FilterType.Peaking ? <SelectMenu className="w-full" value={band.widthMode} options={widthOptions} onChange={(value) => updateBand(index, { widthMode: value })} label={`Width mode for band ${index + 1}`} /> : <span className="text-sm text-base-content/55">Slope</span>}</td>
+                      <td><div className={`flex items-center gap-3 ${usesGain ? "" : "opacity-45"}`} title={usesGain ? undefined : "Gain is not used by this filter type"}><input className={`${rangeClass} flex-1`} aria-label={`Gain slider for band ${index + 1}`} type="range" min="-24" max="24" step="0.1" value={band.gainDb} disabled={!usesGain} onChange={(event) => updateBand(index, { gainDb: Number(event.target.value) })} /><label className="input input-sm flex w-24 items-center gap-1 has-[input[aria-invalid=true]]:input-error"><NumericInput className="min-w-0 grow" label={`Gain for band ${index + 1}`} min={-24} max={24} step={0.1} value={band.gainDb} readOnly={!usesGain} onChange={(gainDb) => updateBand(index, { gainDb })} onInvalid={() => setError(rangeMessage(`Band ${index + 1} gain`, -24, 24, "dB"))} /><span className="text-[10px] text-base-content/55">{usesGain ? "dB" : "N/A"}</span></label></div></td>
+                      <td>{band.type === FilterType.Peaking ? <SelectMenu className="w-full" value={band.widthMode} options={widthOptions} onChange={(value) => updateBand(index, { widthMode: value })} label={`Width mode for band ${index + 1}`} /> : <span className="text-sm text-base-content/55">{qOnly ? "Q" : "Slope"}</span>}</td>
                       <td className="pr-4 sm:pr-5"><label className="input input-sm flex w-full items-center gap-1 has-[input[aria-invalid=true]]:input-error"><NumericInput className="min-w-0 grow" label={`${widthLabel} for band ${index + 1}`} min={0.1} max={widthMaximum} step={0.01} value={widthValue} onChange={(value) => updateBand(index, band.type === FilterType.Peaking && band.widthMode === WidthMode.Bandwidth ? { bandwidthOctaves: value } : { q: value })} onInvalid={() => setError(rangeMessage(`Band ${index + 1} ${widthLabel.toLowerCase()}`, 0.1, widthMaximum, widthUnit))} /><span className="text-xs text-base-content/55">{band.type === FilterType.Peaking && band.widthMode === WidthMode.Bandwidth ? "oct" : widthLabel}</span></label></td>
                     </tr>
                   );
@@ -795,7 +821,10 @@ export default function App() {
           </div>
         </section>
 
-        <CrossfeedSettings settings={audioSettings} connected={connected} busy={writing || connecting || deviceActionPending} onError={setError} />
+        <div className="grid min-w-0 gap-4 xl:grid-cols-2">
+          <CrossfeedSettings settings={audioSettings} connected={connected} busy={writing || connecting || deviceActionPending || audioSettings.saving} onError={setError} />
+          <OutputProcessingSettings settings={audioSettings} connected={connected} busy={writing || connecting || deviceActionPending || audioSettings.saving} onError={setError} />
+        </div>
 
       </section>
 
@@ -867,9 +896,9 @@ export default function App() {
                 </h2>
                 <p className="mt-2 text-sm leading-relaxed text-base-content/70">
                   {deviceDialog === "restart"
-                    ? "Audio and the controller will disconnect. Unsaved live EQ and crossfeed edits will be lost; saved settings are unchanged."
+                    ? "Audio and the controller will disconnect. Unsaved live EQ, crossfeed, and output-processing edits will be lost; saved settings are unchanged."
                     : deviceDialog === "bootsel"
-                      ? "Audio and the controller will disconnect, and unsaved live EQ and crossfeed edits will be lost. The DAC will appear as an RP2350 USB drive."
+                      ? "Audio and the controller will disconnect, and unsaved live EQ, crossfeed, and output-processing edits will be lost. The DAC will appear as an RP2350 USB drive."
                       : <>Drag the firmware <strong>.uf2</strong> file onto the <strong>RP2350</strong> USB drive. The DAC restarts automatically after the copy completes.</>}
                 </p>
                 <div className="modal-action">

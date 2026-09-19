@@ -15,6 +15,9 @@ import {
   ResponsePacket,
   CrossfeedMode,
   decodeCrossfeed,
+  decodeOutputProcessing,
+  FilterType,
+  WidthMode,
 } from "./protocol";
 
 const originalHid = Object.getOwnPropertyDescriptor(navigator, "hid");
@@ -62,7 +65,7 @@ function mockConnectedPumper(deviceConfig: EqConfig = defaultConfig, rejectReque
     const rejection = rejectRequest?.(opcode) ?? null;
     if (rejection) throw rejection;
     const requestPayload = payload ?? new Uint8Array();
-    if ([Opcode.GetAudioControls, Opcode.GetCrossfeed, Opcode.SetCrossfeed, Opcode.SaveCrossfeed].includes(opcode)) {
+    if ([Opcode.GetAudioControls, Opcode.GetCrossfeed, Opcode.SetCrossfeed, Opcode.SaveCrossfeed, Opcode.GetOutputProcessing, Opcode.SetOutputProcessing, Opcode.SaveOutputProcessing].includes(opcode)) {
       return audioMock.handle(opcode, new Uint8Array(requestPayload));
     }
     let responsePayload: Uint8Array<ArrayBufferLike> = new Uint8Array();
@@ -113,7 +116,12 @@ describe("Pumper controller", () => {
     expect(screen.getAllByText("Requires firmware 2.2")).toHaveLength(2);
     expect(screen.getByRole("button", { name: "Crossfeed mode: Off" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Save crossfeed" })).toBeDisabled();
+    expect(screen.getByText("Requires firmware 3.0")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Save output" })).toBeDisabled();
     expect(request.mock.calls.some(([opcode]) => [Opcode.GetAudioControls, Opcode.GetCrossfeed].includes(opcode))).toBe(false);
+    expect(request.mock.calls.some(([opcode]) => opcode === Opcode.GetOutputProcessing)).toBe(false);
+    const filterMenu = document.querySelector<HTMLElement>('[role="listbox"][aria-label="Band 1 filter type"]')!;
+    expect(within(filterMenu).queryByRole("option", { name: "Low-pass", hidden: true })).not.toBeInTheDocument();
   });
 
   it("displays host controls without editable volume controls", async () => {
@@ -223,6 +231,68 @@ describe("Pumper controller", () => {
     expect(await screen.findByText("Save crossfeed: Storage error")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Save crossfeed" })).toBeEnabled();
     expect(screen.getByRole("button", { name: "Crossfeed mode: Medium" })).toBeInTheDocument();
+  });
+
+  it("previews and saves firmware 3 output processing independently", async () => {
+    const { request, audioMock } = mockConnectedPumper(defaultConfig, undefined, [3, 0]);
+    render(<App />);
+    const balance = await screen.findByLabelText("Balance");
+    await waitFor(() => expect(balance).not.toHaveAttribute("readonly"));
+    const crossfeedCard = screen.getByRole("heading", { name: "Headphone crossfeed" }).closest("section")!;
+    const outputCard = screen.getByRole("heading", { name: "Output processing" }).closest("section")!;
+    expect(crossfeedCard.parentElement).toBe(outputCard.parentElement);
+    const mono = screen.getByRole("checkbox", { name: "Mono" });
+    const width = screen.getByLabelText("Stereo width");
+    fireEvent.click(mono);
+    expect(width).toHaveAttribute("readonly");
+    expect(screen.getByLabelText("Stereo width slider")).toBeDisabled();
+    expect(width).toHaveValue("100");
+    fireEvent.click(mono);
+    expect(width).not.toHaveAttribute("readonly");
+    fireEvent.click(screen.getByRole("checkbox", { name: "Swap channels" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "Invert left polarity" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "Invert right polarity" }));
+    fireEvent.change(screen.getByLabelText("Balance slider"), { target: { value: "-25" } });
+    fireEvent.change(screen.getByLabelText("Stereo width slider"), { target: { value: "140" } });
+    expect(screen.getByLabelText("Output processing save state")).toHaveTextContent("Unsaved");
+    fireEvent.click(screen.getByRole("button", { name: "Save output" }));
+    expect(await screen.findByText("Output processing saved for power-on")).toBeInTheDocument();
+    expect(audioMock.outputState.saved).toMatchObject({ mono: false, swap: true, invertLeft: true, invertRight: true, balancePercent: -25, widthPercent: 140 });
+    const calls = request.mock.calls.filter(([opcode]) => [Opcode.SetOutputProcessing, Opcode.SaveOutputProcessing].includes(opcode));
+    expect(calls.at(-2)?.[0]).toBe(Opcode.SetOutputProcessing);
+    expect(decodeOutputProcessing(calls.at(-2)?.[1] as Uint8Array)).toMatchObject({ swap: true, balancePercent: -25, widthPercent: 140 });
+    expect(calls.at(-1)?.[0]).toBe(Opcode.SaveOutputProcessing);
+  });
+
+  it("keeps output processing unsaved after a storage failure", async () => {
+    mockConnectedPumper(defaultConfig, (opcode) => opcode === Opcode.SaveOutputProcessing ? new Error("Storage error") : null, [3, 0]);
+    render(<App />);
+    const swap = await screen.findByRole("checkbox", { name: "Swap channels" });
+    await waitFor(() => expect(swap).toBeEnabled());
+    fireEvent.click(swap);
+    fireEvent.click(screen.getByRole("button", { name: "Save output" }));
+    expect(await screen.findByText("Save output processing: Storage error")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Save output" })).toBeEnabled();
+    expect(screen.getByLabelText("Output processing save state")).toHaveTextContent("Unsaved");
+  });
+
+  it("offers firmware 3 filters with Q-only controls and disabled gain", async () => {
+    const { request } = mockConnectedPumper(defaultConfig, undefined, [3, 0]);
+    render(<App />);
+    await screen.findByRole("button", { name: "Band 1 filter type: Peaking" });
+    const filterMenu = document.querySelector<HTMLElement>('[role="listbox"][aria-label="Band 1 filter type"]')!;
+    expect(within(filterMenu).getByRole("option", { name: "Low-pass", hidden: true })).toBeInTheDocument();
+    expect(within(filterMenu).getByRole("option", { name: "High-pass", hidden: true })).toBeInTheDocument();
+    expect(within(filterMenu).getByRole("option", { name: "Notch", hidden: true })).toBeInTheDocument();
+    expect(within(filterMenu).getByRole("option", { name: "Band-pass", hidden: true })).toBeInTheDocument();
+    request.mockClear();
+    fireEvent.click(within(filterMenu).getByRole("option", { name: "Low-pass", hidden: true }));
+    expect(screen.getByLabelText("Gain slider for band 1")).toBeDisabled();
+    expect(screen.getByLabelText("Gain for band 1")).toHaveAttribute("readonly");
+    expect(screen.getByLabelText("Q for band 1")).toHaveAttribute("aria-valuemax", "20");
+    await waitFor(() => expect(request.mock.calls.some(([opcode, payload]) => opcode === Opcode.SetBand && decodeBand(payload as Uint8Array).band.type === FilterType.LowPass)).toBe(true));
+    const sent = request.mock.calls.find(([opcode, payload]) => opcode === Opcode.SetBand && decodeBand(payload as Uint8Array).band.type === FilterType.LowPass);
+    expect(decodeBand(sent?.[1] as Uint8Array).band.widthMode).toBe(WidthMode.Q);
   });
 
   it("shows a useful browser compatibility state without WebHID", () => {

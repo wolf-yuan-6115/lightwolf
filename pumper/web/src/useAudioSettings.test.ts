@@ -1,19 +1,20 @@
 import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { PumperHidTransport } from "./hidTransport";
-import { CrossfeedMode, defaultCrossfeed, Opcode, type ResponsePacket } from "./protocol";
+import { CrossfeedMode, defaultCrossfeed, defaultOutputProcessing, Opcode, type ResponsePacket } from "./protocol";
 import { audioSettingsMock, crossfeedPayload } from "./test/audioSettingsMock";
 import { useAudioSettings } from "./useAudioSettings";
 
 afterEach(() => { cleanup(); vi.useRealTimers(); });
 
-async function setup() {
+async function setup(version = "2.2") {
   const mock = audioSettingsMock();
   const onError = vi.fn();
   const onNotice = vi.fn();
   const transport = { request: mock.handle } as unknown as PumperHidTransport;
-  const hook = renderHook(({ connected }) => useAudioSettings(transport, connected, "2.2", onError, onNotice), { initialProps: { connected: true } });
+  const hook = renderHook(({ connected }) => useAudioSettings(transport, connected, version, onError, onNotice), { initialProps: { connected: true } });
   await waitFor(() => expect(hook.result.current.crossfeed).not.toBeNull());
+  if (version === "3.0") await waitFor(() => expect(hook.result.current.outputProcessing).not.toBeNull());
   mock.handle.mockClear();
   return { ...hook, mock, onError, onNotice };
 }
@@ -139,5 +140,58 @@ describe("independent audio settings", () => {
     await act(async () => { acknowledgement.resolve(await mock.handle(Opcode.GetCrossfeed)); await save; });
     expect(mock.handle.mock.calls.some(([opcode]) => opcode === Opcode.SaveCrossfeed)).toBe(false);
     expect(result.current.crossfeed?.live.mode).toBe(CrossfeedMode.Off);
+  });
+
+  it("loads, coalesces, and saves output processing independently", async () => {
+    const { result, mock, onNotice } = await setup("3.0");
+    vi.useFakeTimers();
+    act(() => {
+      result.current.updateOutput({ swap: true });
+      result.current.updateOutput({ balancePercent: -20 });
+      result.current.updateOutput({ widthPercent: 140 });
+    });
+    expect(result.current.outputProcessing?.dirty).toBe(true);
+    await act(() => vi.advanceTimersByTimeAsync(55));
+    expect(mock.handle.mock.calls.map(([opcode]) => opcode)).toEqual([Opcode.SetOutputProcessing]);
+    expect(mock.outputState.live).toMatchObject({ swap: true, balancePercent: -20, widthPercent: 140 });
+    await act(async () => { await result.current.saveOutput(); });
+    expect(mock.handle.mock.calls.map(([opcode]) => opcode)).toEqual([
+      Opcode.SetOutputProcessing,
+      Opcode.SetOutputProcessing,
+      Opcode.SaveOutputProcessing,
+    ]);
+    expect(mock.outputState.saved).toEqual(mock.outputState.live);
+    expect(result.current.crossfeed?.dirty).toBe(false);
+    expect(result.current.outputProcessing?.dirty).toBe(false);
+    expect(onNotice).toHaveBeenCalledWith("Output processing saved for power-on");
+  });
+
+  it("normalizes output precision and restores device state after a rejected update", async () => {
+    const { result, mock, onError } = await setup("3.0");
+    vi.useFakeTimers();
+    mock.handle.mockRejectedValueOnce(new Error("Invalid settings"));
+    act(() => result.current.updateOutput({ balancePercent: 12.3456 }));
+    expect(result.current.outputProcessing?.live.balancePercent).toBe(12.35);
+    await act(() => vi.advanceTimersByTimeAsync(55));
+    expect(onError).toHaveBeenCalledWith("Output processing: Invalid settings");
+    expect(mock.handle.mock.calls.map(([opcode]) => opcode)).toEqual([Opcode.SetOutputProcessing, Opcode.GetOutputProcessing]);
+    expect(result.current.outputProcessing?.live).toEqual(defaultOutputProcessing);
+  });
+
+  it("drops unsent output edits across disconnect and reloads them on reconnect", async () => {
+    const { result, mock, rerender } = await setup("3.0");
+    vi.useFakeTimers();
+    act(() => result.current.updateOutput({ invertRight: true }));
+    rerender({ connected: false });
+    await act(() => vi.advanceTimersByTimeAsync(55));
+    expect(mock.handle).not.toHaveBeenCalled();
+    expect(result.current.outputProcessing).toBeNull();
+    await act(async () => { rerender({ connected: true }); });
+    expect(result.current.outputProcessing?.live).toEqual(defaultOutputProcessing);
+    expect(mock.handle.mock.calls.map(([opcode]) => opcode)).toEqual([
+      Opcode.GetAudioControls,
+      Opcode.GetCrossfeed,
+      Opcode.GetOutputProcessing,
+    ]);
   });
 });

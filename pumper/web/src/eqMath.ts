@@ -16,7 +16,8 @@ export interface ResponsePoint {
 const identity: Coefficients = { b0: 1, b1: 0, b2: 0, a1: 0, a2: 0 };
 
 export function buildCoefficients(band: EqBand, sampleRateHz: number): Coefficients {
-  if (!band.enabled || Math.abs(band.gainDb) < 0.0001 || band.frequencyHz >= sampleRateHz / 2) return identity;
+  const gainFilter = band.type <= FilterType.HighShelf;
+  if (!band.enabled || (gainFilter && Math.abs(band.gainDb) < 0.0001) || band.frequencyHz >= sampleRateHz / 2) return identity;
   const w0 = (2 * Math.PI * band.frequencyHz) / sampleRateHz;
   const sinW0 = Math.sin(w0);
   const cosW0 = Math.cos(w0);
@@ -40,7 +41,7 @@ export function buildCoefficients(band: EqBand, sampleRateHz: number): Coefficie
     a0 = 1 + alpha / a;
     a1 = -2 * cosW0;
     a2 = 1 - alpha / a;
-  } else {
+  } else if (band.type === FilterType.LowShelf || band.type === FilterType.HighShelf) {
     alpha = (sinW0 / 2) * Math.sqrt((a + 1 / a) * (1 / band.q - 1) + 2);
     const term = 2 * Math.sqrt(a) * alpha;
     if (band.type === FilterType.LowShelf) {
@@ -57,6 +58,28 @@ export function buildCoefficients(band: EqBand, sampleRateHz: number): Coefficie
       a0 = a + 1 - (a - 1) * cosW0 + term;
       a1 = 2 * (a - 1 - (a + 1) * cosW0);
       a2 = a + 1 - (a - 1) * cosW0 - term;
+    }
+  } else {
+    alpha = sinW0 / (2 * band.q);
+    a0 = 1 + alpha;
+    a1 = -2 * cosW0;
+    a2 = 1 - alpha;
+    if (band.type === FilterType.LowPass) {
+      b0 = (1 - cosW0) / 2;
+      b1 = 1 - cosW0;
+      b2 = b0;
+    } else if (band.type === FilterType.HighPass) {
+      b0 = (1 + cosW0) / 2;
+      b1 = -(1 + cosW0);
+      b2 = b0;
+    } else if (band.type === FilterType.Notch) {
+      b0 = 1;
+      b1 = -2 * cosW0;
+      b2 = 1;
+    } else {
+      b0 = alpha;
+      b1 = 0;
+      b2 = -alpha;
     }
   }
   return { b0: b0 / a0, b1: b1 / a0, b2: b2 / a0, a1: a1 / a0, a2: a2 / a0 };

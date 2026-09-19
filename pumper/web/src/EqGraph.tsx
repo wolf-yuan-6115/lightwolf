@@ -1,6 +1,6 @@
 import { PointerEvent, useMemo, useState } from "react";
 import { responseCurve } from "./eqMath";
-import { EqBand, EqConfig } from "./protocol";
+import { EqBand, EqConfig, FilterType } from "./protocol";
 
 export const bandColors = [
   "#f87171",
@@ -56,6 +56,10 @@ function roundedFrequency(value: number): number {
   return Math.round(value / step) * step;
 }
 
+function filterUsesGain(type: FilterType): boolean {
+  return type <= FilterType.HighShelf;
+}
+
 export function EqGraph({ config, sampleRateHz, selectedBand, onSelectBand, onChangeBand }: EqGraphProps) {
   const [dragging, setDragging] = useState<number | null>(null);
   const curve = useMemo(() => responseCurve(config, sampleRateHz), [config, sampleRateHz]);
@@ -76,9 +80,10 @@ export function EqGraph({ config, sampleRateHz, selectedBand, onSelectBand, onCh
     const rect = event.currentTarget.getBoundingClientRect();
     const x = clamp(((event.clientX - rect.left) / rect.width) * width, margin.left, width - margin.right);
     const y = clamp(((event.clientY - rect.top) / rect.height) * height, margin.top, height - margin.bottom);
+    const band = config.bands[dragging];
     onChangeBand(dragging, {
       frequencyHz: clamp(roundedFrequency(frequencyForX(x)), 20, 20000),
-      gainDb: Math.round(clamp(gainForY(y), -24, 24) * 10) / 10,
+      ...(filterUsesGain(band.type) ? { gainDb: Math.round(clamp(gainForY(y), -24, 24) * 10) / 10 } : {}),
     });
   };
 
@@ -120,29 +125,33 @@ export function EqGraph({ config, sampleRateHz, selectedBand, onSelectBand, onCh
       ))}
       <path className="fill-none stroke-base-100/70 [stroke-width:8]" d={path} />
       <path className="fill-none stroke-accent [stroke-width:3]" d={path} />
-      {config.bands.map((band, index) => (
-        <g key={index} className={band.enabled ? "" : "opacity-35"}>
-          <circle
-            cx={xForFrequency(band.frequencyHz)}
-            cy={yForGain(clamp(band.gainDb, minimumGain, maximumGain))}
-            r={selectedBand === index ? 14 : 12}
-            fill={bandColors[index]}
-            stroke={selectedBand === index ? "var(--color-base-content)" : "var(--color-base-300)"}
-            strokeWidth={selectedBand === index ? 3 : 2}
-            className="cursor-grab active:cursor-grabbing"
-            onPointerDown={(event) => startDragging(event, index)}
-            onClick={() => onSelectBand(index)}
-          />
-          <text
-            className="pointer-events-none fill-black text-[10px] font-black"
-            x={xForFrequency(band.frequencyHz)}
-            y={yForGain(clamp(band.gainDb, minimumGain, maximumGain)) + 4}
-            textAnchor="middle"
-          >
-            {index + 1}
-          </text>
-        </g>
-      ))}
+      {config.bands.map((band, index) => {
+        const handleGain = filterUsesGain(band.type) ? band.gainDb : 0;
+        return (
+          <g key={index} className={band.enabled ? "" : "opacity-35"}>
+            <circle
+              cx={xForFrequency(band.frequencyHz)}
+              cy={yForGain(clamp(handleGain, minimumGain, maximumGain))}
+              r={selectedBand === index ? 14 : 12}
+              fill={bandColors[index]}
+              stroke={selectedBand === index ? "var(--color-base-content)" : "var(--color-base-300)"}
+              strokeWidth={selectedBand === index ? 3 : 2}
+              className="cursor-grab active:cursor-grabbing"
+              aria-label={`Band ${index + 1} graph handle`}
+              onPointerDown={(event) => startDragging(event, index)}
+              onClick={() => onSelectBand(index)}
+            />
+            <text
+              className="pointer-events-none fill-black text-[10px] font-black"
+              x={xForFrequency(band.frequencyHz)}
+              y={yForGain(clamp(handleGain, minimumGain, maximumGain)) + 4}
+              textAnchor="middle"
+            >
+              {index + 1}
+            </text>
+          </g>
+        );
+      })}
     </svg>
   );
 }
