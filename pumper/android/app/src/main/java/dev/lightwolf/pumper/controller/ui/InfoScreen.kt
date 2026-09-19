@@ -100,8 +100,8 @@ fun InfoScreen(
         ),
         InfoAction(
             icon = Icons.Outlined.SystemUpdateAlt,
-            label = "Enter BOOTSEL",
-            supporting = "Expose the RP2350 drive for a UF2 copy",
+            label = "Upgrade firmware",
+            supporting = "Expose the RP2350 drive for upgrading firmware",
             onClick = controller::requestBootsel,
             enabled = !state.busy,
         ),

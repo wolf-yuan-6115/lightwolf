@@ -5,6 +5,8 @@ import android.content.Intent
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import dev.lightwolf.pumper.controller.protocol.DefaultEqConfig
+import dev.lightwolf.pumper.controller.protocol.CrossfeedConfig
+import dev.lightwolf.pumper.controller.protocol.CrossfeedState
 import dev.lightwolf.pumper.controller.protocol.EqBand
 import dev.lightwolf.pumper.controller.protocol.EqConfig
 import dev.lightwolf.pumper.controller.protocol.EqMath
@@ -54,6 +56,10 @@ class PumperControllerViewModel(application: Application) : AndroidViewModel(app
     private var pendingGlobal: EqConfig? = null
     private val pendingBands = mutableMapOf<Int, EqBand>()
     private var previewJob: Job? = null
+    private var pendingCrossfeed: CrossfeedConfig? = null
+    private var crossfeedPreviewJob: Job? = null
+    private var crossfeedRevision = 0L
+    private var sessionRevision = 0L
     private var submittedPreampDb = DefaultEqConfig.preampDb
     private var foreground = false
 
@@ -111,6 +117,7 @@ class PumperControllerViewModel(application: Application) : AndroidViewModel(app
                 _state.update {
                     it.copy(connection = ConnectionState.Connected, productName = nextClient.productName)
                 }
+                sessionRevision++
                 readDevice(knownStoredProfile = false)
                 startSessionTasks(scope, nextClient)
             } catch (error: Throwable) {
@@ -136,6 +143,9 @@ class PumperControllerViewModel(application: Application) : AndroidViewModel(app
                     connection = ConnectionState.Disconnected,
                     productName = null,
                     status = null,
+                    audioControls = null,
+                    crossfeed = null,
+                    crossfeedSaving = false,
                     busy = false,
                     confirmation = null,
                 )
@@ -262,6 +272,53 @@ class PumperControllerViewModel(application: Application) : AndroidViewModel(app
         _state.update { it.copy(error = null) }
     }
 
+    fun updateCrossfeed(config: CrossfeedConfig) {
+        val current = _state.value
+        if (!current.connected || current.crossfeedSaving || current.status?.supportsAudioControls != true) return
+        val verified = runCatching {
+            PumperProtocol.decodeCrossfeed(PumperProtocol.encodeCrossfeed(config))
+        }.getOrElse { error ->
+            _state.update { it.copy(error = error.message ?: "Invalid crossfeed settings.") }
+            return
+        }
+        val state = current.crossfeed ?: return
+        crossfeedRevision++
+        pendingCrossfeed = verified
+        _state.update {
+            it.copy(
+                crossfeed = state.copy(live = verified, dirty = verified != state.saved),
+                message = null,
+                error = null,
+            )
+        }
+        scheduleCrossfeedPreview()
+    }
+
+    fun saveCrossfeed() {
+        val current = _state.value
+        if (!current.connected || current.crossfeedSaving || current.crossfeed?.dirty != true) return
+        viewModelScope.launch {
+            _state.update { it.copy(crossfeedSaving = true, error = null, message = null) }
+            try {
+                crossfeedPreviewJob?.cancel()
+                crossfeedPreviewJob = null
+                pendingCrossfeed = _state.value.crossfeed?.live
+                flushCrossfeedPreview(throwOnFailure = true)
+                val activeClient = requireNotNull(client)
+                val verified = PumperProtocol.decodeCrossfeedState(
+                    activeClient.request(Opcode.SaveCrossfeed, timeoutMs = 8_000).payload,
+                )
+                crossfeedRevision++
+                _state.update { it.copy(crossfeed = verified, message = "Crossfeed saved for power-on.") }
+            } catch (error: Throwable) {
+                rereadCrossfeed()
+                _state.update { it.copy(error = error.message ?: "The DAC could not save crossfeed.") }
+            } finally {
+                _state.update { it.copy(crossfeedSaving = false) }
+            }
+        }
+    }
+
     private fun requestConfirmation(confirmation: Confirmation) {
         if (!_state.value.connected || _state.value.busy) return
         _state.update { it.copy(confirmation = confirmation) }
@@ -284,6 +341,12 @@ class PumperControllerViewModel(application: Application) : AndroidViewModel(app
     private suspend fun readDevice(knownStoredProfile: Boolean) {
         val activeClient = client ?: return
         val nextStatus = PumperProtocol.decodeStatus(activeClient.request(Opcode.Hello).payload)
+        val nextAudio = if (nextStatus.supportsAudioControls && _state.value.audioControls == null) {
+            PumperProtocol.decodeAudioControls(activeClient.request(Opcode.GetAudioControls).payload)
+        } else _state.value.audioControls
+        val nextCrossfeed = if (nextStatus.supportsAudioControls && _state.value.crossfeed == null) {
+            PumperProtocol.decodeCrossfeedState(activeClient.request(Opcode.GetCrossfeed).payload)
+        } else _state.value.crossfeed
         val (enabled, preampDb) = PumperProtocol.decodeGlobal(activeClient.request(Opcode.GetGlobal).payload)
         val nextProfiles = PumperProtocol.decodeProfileState(activeClient.request(Opcode.GetProfiles).payload)
         val bands = List(nextStatus.bandCount) { index ->
@@ -304,6 +367,8 @@ class PumperControllerViewModel(application: Application) : AndroidViewModel(app
             it.copy(
                 config = next,
                 status = nextStatus,
+                audioControls = nextAudio,
+                crossfeed = nextCrossfeed,
                 profiles = nextProfiles,
                 selectedProfile = nextProfiles.activeProfile,
                 selectedBand = min(it.selectedBand, max(0, bands.lastIndex)),
@@ -325,6 +390,9 @@ class PumperControllerViewModel(application: Application) : AndroidViewModel(app
                         connection = ConnectionState.Disconnected,
                         productName = null,
                         status = null,
+                        audioControls = null,
+                        crossfeed = null,
+                        crossfeedSaving = false,
                         busy = false,
                         error = "Pumper disconnected.",
                     )
@@ -365,6 +433,7 @@ class PumperControllerViewModel(application: Application) : AndroidViewModel(app
                             pendingGlobal = next
                             schedulePreview()
                         }
+                        if (status.supportsAudioControls) refreshAudioState(activeClient)
                     }
             }
         }
@@ -416,6 +485,76 @@ class PumperControllerViewModel(application: Application) : AndroidViewModel(app
         previewJob = null
         pendingGlobal = null
         pendingBands.clear()
+    }
+
+    private fun scheduleCrossfeedPreview() {
+        if (!_state.value.connected || crossfeedPreviewJob?.isActive == true) return
+        crossfeedPreviewJob = viewModelScope.launch {
+            delay(LIVE_PREVIEW_INTERVAL_MS)
+            crossfeedPreviewJob = null
+            flushCrossfeedPreview()
+        }
+    }
+
+    private suspend fun flushCrossfeedPreview(throwOnFailure: Boolean = false): Boolean {
+        val activeClient = client ?: return false
+        val config = pendingCrossfeed ?: return true
+        pendingCrossfeed = null
+        val editRevision = crossfeedRevision
+        val activeSession = sessionRevision
+        try {
+            val verified = PumperProtocol.decodeCrossfeedState(
+                activeClient.request(Opcode.SetCrossfeed, PumperProtocol.encodeCrossfeed(config)).payload,
+            )
+            if (activeSession == sessionRevision && editRevision == crossfeedRevision) {
+                _state.update { it.copy(crossfeed = verified) }
+            }
+            return true
+        } catch (error: Throwable) {
+            if (!throwOnFailure && activeSession == sessionRevision && editRevision == crossfeedRevision) {
+                rereadCrossfeed()
+                _state.update { it.copy(error = error.message ?: "The DAC rejected the crossfeed preview.") }
+            }
+            if (throwOnFailure) throw error
+            return false
+        } finally {
+            if (pendingCrossfeed != null) scheduleCrossfeedPreview()
+        }
+    }
+
+    private suspend fun refreshAudioState(activeClient: PumperClient) {
+        val editRevision = crossfeedRevision
+        runCatching {
+            PumperProtocol.decodeAudioControls(activeClient.request(Opcode.GetAudioControls).payload)
+        }.onSuccess { audio ->
+            _state.update { it.copy(audioControls = audio) }
+        }
+        if (pendingCrossfeed != null || _state.value.crossfeedSaving) return
+        runCatching {
+            PumperProtocol.decodeCrossfeedState(activeClient.request(Opcode.GetCrossfeed).payload)
+        }.onSuccess { crossfeed ->
+            if (editRevision == crossfeedRevision && pendingCrossfeed == null) {
+                _state.update { it.copy(crossfeed = crossfeed) }
+            }
+        }
+    }
+
+    private suspend fun rereadCrossfeed() {
+        val activeClient = client ?: return
+        val verified = runCatching {
+            PumperProtocol.decodeCrossfeedState(activeClient.request(Opcode.GetCrossfeed).payload)
+        }.getOrNull() ?: return
+        crossfeedRevision++
+        pendingCrossfeed = null
+        _state.update { it.copy(crossfeed = verified) }
+    }
+
+    private fun clearPendingCrossfeed() {
+        crossfeedPreviewJob?.cancel()
+        crossfeedPreviewJob = null
+        pendingCrossfeed = null
+        crossfeedRevision++
+        sessionRevision++
     }
 
     private suspend fun saveProfile() {
@@ -474,6 +613,7 @@ class PumperControllerViewModel(application: Application) : AndroidViewModel(app
 
     private suspend fun closeSession() {
         clearPendingPreview()
+        clearPendingCrossfeed()
         val activeClient = client
         client = null
         val activeScope = sessionScope

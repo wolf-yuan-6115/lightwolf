@@ -19,14 +19,18 @@ enum class Opcode(val value: Int) {
     GetGlobal(0x03),
     GetBand(0x04),
     GetProfiles(0x05),
+    GetAudioControls(0x06),
+    GetCrossfeed(0x07),
     SetGlobal(0x10),
     SetBand(0x11),
+    SetCrossfeed(0x12),
     WriteFlash(0x20),
     RestoreDefaults(0x21),
     LoadProfile(0x22),
     SaveProfile(0x23),
     SetDefaultProfile(0x24),
     DeleteProfile(0x25),
+    SaveCrossfeed(0x26),
     MeterStart(0x30),
     MeterKeepalive(0x31),
     MeterStop(0x32),
@@ -107,7 +111,45 @@ data class DeviceStatus(
 ) {
     val firmwareVersion: String get() = "$firmwareMajor.$firmwareMinor"
     val supportsDeviceReset: Boolean get() = firmwareMajor > 1 || (firmwareMajor == 1 && firmwareMinor >= 7)
+    val supportsAudioControls: Boolean get() = firmwareMajor > 2 || (firmwareMajor == 2 && firmwareMinor >= 2)
 }
+
+data class AudioChannelControl(
+    val volumeDb: Double,
+    val muted: Boolean,
+)
+
+data class AudioControls(
+    val master: AudioChannelControl,
+    val left: AudioChannelControl,
+    val right: AudioChannelControl,
+)
+
+enum class CrossfeedMode(val value: Int) {
+    Off(0),
+    Low(1),
+    Medium(2),
+    High(3),
+    Custom(4);
+
+    companion object {
+        fun from(value: Int): CrossfeedMode = entries.firstOrNull { it.value == value }
+            ?: throw ProtocolException("Unsupported crossfeed mode")
+    }
+}
+
+data class CrossfeedConfig(
+    val mode: CrossfeedMode,
+    val strengthPercent: Double,
+    val cutoffHz: Int,
+    val delayMs: Double,
+)
+
+data class CrossfeedState(
+    val live: CrossfeedConfig,
+    val saved: CrossfeedConfig,
+    val dirty: Boolean,
+)
 
 data class StereoMeterLevel(
     val leftPeak: Int,
@@ -273,6 +315,83 @@ object PumperProtocol {
         )
     }
 
+    @Throws(ProtocolException::class)
+    fun decodeAudioControls(payload: ByteArray): AudioControls {
+        if (payload.size != 9) throw ProtocolException("Invalid USB audio response")
+        val volumes = List(3) { index -> payload.i16(index * 2) / 256.0 }
+        val mutes = List(3) { index ->
+            val value = payload.u8(6 + index)
+            if (value !in 0..1) throw ProtocolException("Invalid USB audio mute value")
+            value == 1
+        }
+        if (volumes.any { it !in -50.0..0.0 }) throw ProtocolException("Invalid USB audio volume")
+        return AudioControls(
+            master = AudioChannelControl(volumes[0], mutes[0]),
+            left = AudioChannelControl(volumes[1], mutes[1]),
+            right = AudioChannelControl(volumes[2], mutes[2]),
+        )
+    }
+
+    fun encodeAudioControls(controls: AudioControls): ByteArray {
+        val channels = listOf(controls.master, controls.left, controls.right)
+        if (channels.any { it.volumeDb !in -50.0..0.0 }) throw ProtocolException("Invalid USB audio volume")
+        return ByteArray(9).also { payload ->
+            channels.forEachIndexed { index, channel ->
+                payload.putI16(index * 2, (channel.volumeDb * 256.0).roundToInt())
+                payload[6 + index] = if (channel.muted) 1 else 0
+            }
+        }
+    }
+
+    fun encodeCrossfeed(config: CrossfeedConfig): ByteArray {
+        validateCrossfeed(config)
+        return ByteArray(8).also { payload ->
+            payload[0] = config.mode.value.toByte()
+            payload.putU16(2, (config.strengthPercent * 100.0).roundToInt())
+            payload.putU16(4, config.cutoffHz)
+            payload.putU16(6, (config.delayMs * 1000.0).roundToInt())
+        }
+    }
+
+    @Throws(ProtocolException::class)
+    fun decodeCrossfeed(payload: ByteArray): CrossfeedConfig {
+        if (payload.size != 8) throw ProtocolException("Invalid crossfeed response")
+        if (payload.u8(1) != 0) throw ProtocolException("Invalid crossfeed reserved field")
+        return CrossfeedConfig(
+            mode = CrossfeedMode.from(payload.u8(0)),
+            strengthPercent = payload.u16(2) / 100.0,
+            cutoffHz = payload.u16(4),
+            delayMs = payload.u16(6) / 1000.0,
+        ).also(::validateCrossfeed)
+    }
+
+    @Throws(ProtocolException::class)
+    fun decodeCrossfeedState(payload: ByteArray): CrossfeedState {
+        if (payload.size != 17) throw ProtocolException("Invalid crossfeed state response")
+        val dirty = payload.u8(16)
+        if (dirty !in 0..1) throw ProtocolException("Invalid crossfeed dirty state")
+        return CrossfeedState(
+            live = decodeCrossfeed(payload.copyOfRange(0, 8)),
+            saved = decodeCrossfeed(payload.copyOfRange(8, 16)),
+            dirty = dirty == 1,
+        )
+    }
+
+    fun encodeCrossfeedState(state: CrossfeedState): ByteArray = ByteArray(17).also { payload ->
+        encodeCrossfeed(state.live).copyInto(payload, 0)
+        encodeCrossfeed(state.saved).copyInto(payload, 8)
+        payload[16] = if (state.dirty) 1 else 0
+    }
+
+    private fun validateCrossfeed(config: CrossfeedConfig) {
+        if (config.strengthPercent !in 0.0..40.0 ||
+            config.cutoffHz !in 300..2_000 ||
+            config.delayMs !in 0.0..0.6
+        ) {
+            throw ProtocolException("Crossfeed values are out of range")
+        }
+    }
+
     private fun statusLabel(response: ResponsePacket): String = when (response.status) {
         ProtocolStatus.Ok -> "OK"
         ProtocolStatus.InvalidPacket -> "The device rejected the packet"
@@ -305,6 +424,21 @@ val DefaultEqConfig = EqConfig(
     ),
 )
 
+val DefaultCrossfeedConfig = CrossfeedConfig(
+    mode = CrossfeedMode.Off,
+    strengthPercent = 20.0,
+    cutoffHz = 700,
+    delayMs = 0.25,
+)
+
+fun CrossfeedMode.displayConfig(retainedCustom: CrossfeedConfig = DefaultCrossfeedConfig): CrossfeedConfig = when (this) {
+    CrossfeedMode.Off -> retainedCustom.copy(mode = this, strengthPercent = 0.0, delayMs = 0.0)
+    CrossfeedMode.Low -> retainedCustom.copy(mode = this, strengthPercent = 10.0, cutoffHz = 700, delayMs = 0.20)
+    CrossfeedMode.Medium -> retainedCustom.copy(mode = this, strengthPercent = 20.0, cutoffHz = 700, delayMs = 0.25)
+    CrossfeedMode.High -> retainedCustom.copy(mode = this, strengthPercent = 30.0, cutoffHz = 700, delayMs = 0.30)
+    CrossfeedMode.Custom -> retainedCustom.copy(mode = this)
+}
+
 private fun defaultBand(type: FilterType, frequencyHz: Double, q: Double, bandwidth: Double) = EqBand(
     enabled = true,
     type = type,
@@ -318,7 +452,9 @@ private fun defaultBand(type: FilterType, frequencyHz: Double, q: Double, bandwi
 private fun ByteArray.buffer(): ByteBuffer = ByteBuffer.wrap(this).order(ByteOrder.LITTLE_ENDIAN)
 private fun ByteArray.u8(offset: Int): Int = this[offset].toInt() and 0xff
 private fun ByteArray.u16(offset: Int): Int = buffer().getShort(offset).toInt() and 0xffff
+private fun ByteArray.i16(offset: Int): Int = buffer().getShort(offset).toInt()
 private fun ByteArray.u32(offset: Int): Long = buffer().getInt(offset).toLong() and 0xffff_ffffL
 private fun ByteArray.i32(offset: Int): Int = buffer().getInt(offset)
 private fun ByteArray.putU16(offset: Int, value: Int) { buffer().putShort(offset, value.toShort()) }
+private fun ByteArray.putI16(offset: Int, value: Int) { buffer().putShort(offset, value.toShort()) }
 private fun ByteArray.putI32(offset: Int, value: Int) { buffer().putInt(offset, value) }

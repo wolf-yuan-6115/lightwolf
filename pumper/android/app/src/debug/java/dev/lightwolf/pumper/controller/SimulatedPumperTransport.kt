@@ -1,6 +1,10 @@
 package dev.lightwolf.pumper.controller
 
 import dev.lightwolf.pumper.controller.protocol.DefaultEqConfig
+import dev.lightwolf.pumper.controller.protocol.AudioChannelControl
+import dev.lightwolf.pumper.controller.protocol.AudioControls
+import dev.lightwolf.pumper.controller.protocol.CrossfeedState
+import dev.lightwolf.pumper.controller.protocol.DefaultCrossfeedConfig
 import dev.lightwolf.pumper.controller.protocol.EqBand
 import dev.lightwolf.pumper.controller.protocol.EqConfig
 import dev.lightwolf.pumper.controller.protocol.FilterType
@@ -38,6 +42,13 @@ internal class SimulatedPumperTransport : PumperTransport {
     private var configGeneration = 1L
     private var savedGeneration = 1L
     private var bankGeneration = 1L
+    private val audioControls = AudioControls(
+        master = AudioChannelControl(-10.0, false),
+        left = AudioChannelControl(0.0, false),
+        right = AudioChannelControl(0.0, false),
+    )
+    private var liveCrossfeed = DefaultCrossfeedConfig
+    private var savedCrossfeed = DefaultCrossfeedConfig
     private var meterJob: Job? = null
     private var meterIntervalMs = 20L
     private var meterSequence = 0L
@@ -95,6 +106,8 @@ internal class SimulatedPumperTransport : PumperTransport {
         Opcode.GetGlobal -> PumperProtocol.encodeGlobal(config)
         Opcode.GetBand -> PumperProtocol.encodeBand(payload.u8(0), config.bands[payload.u8(0)])
         Opcode.GetProfiles -> encodeProfiles()
+        Opcode.GetAudioControls -> PumperProtocol.encodeAudioControls(audioControls)
+        Opcode.GetCrossfeed -> encodeCrossfeedState()
         Opcode.SetGlobal -> {
             val (enabled, preampDb) = PumperProtocol.decodeGlobal(payload)
             config = config.copy(enabled = enabled, preampDb = preampDb)
@@ -106,6 +119,10 @@ internal class SimulatedPumperTransport : PumperTransport {
             config = config.copy(bands = config.bands.toMutableList().also { it[index] = band })
             configGeneration++
             byteArrayOf()
+        }
+        Opcode.SetCrossfeed -> {
+            liveCrossfeed = PumperProtocol.decodeCrossfeed(payload)
+            encodeCrossfeedState()
         }
         Opcode.LoadProfile -> {
             val index = payload.u8(0)
@@ -132,6 +149,11 @@ internal class SimulatedPumperTransport : PumperTransport {
             storedProfiles.remove(payload.u8(0))
             bankGeneration++
             encodeProfiles()
+        }
+        Opcode.SaveCrossfeed -> {
+            savedCrossfeed = liveCrossfeed
+            bankGeneration++
+            encodeCrossfeedState()
         }
         Opcode.RestoreDefaults -> {
             config = DefaultEqConfig
@@ -165,8 +187,8 @@ internal class SimulatedPumperTransport : PumperTransport {
     }
 
     private fun encodeStatus(): ByteArray = ByteArray(44).also { payload ->
-        payload[0] = 1
-        payload[1] = 9
+        payload[0] = 2
+        payload[1] = 3
         payload[2] = config.bands.size.toByte()
         var flags = 0x01
         if (config != storedProfiles[activeProfile]) flags = flags or 0x02
@@ -192,6 +214,14 @@ internal class SimulatedPumperTransport : PumperTransport {
         payload.putU16(4, mask)
         payload.putU32(8, bankGeneration)
     }
+
+    private fun encodeCrossfeedState(): ByteArray = PumperProtocol.encodeCrossfeedState(
+        CrossfeedState(
+            live = liveCrossfeed,
+            saved = savedCrossfeed,
+            dirty = liveCrossfeed != savedCrossfeed,
+        ),
+    )
 
     private fun encodeMeter(): ByteArray = ByteArray(28).also { payload ->
         val phase = meterSequence / 18.0

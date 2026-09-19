@@ -19,9 +19,11 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Equalizer
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Headphones
 import androidx.compose.material.icons.outlined.Equalizer
 import androidx.compose.material.icons.outlined.FolderOpen
 import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material.icons.outlined.Headphones
 import androidx.compose.material.icons.outlined.PowerSettingsNew
 import androidx.compose.material.icons.outlined.Save
 import androidx.compose.material.icons.outlined.Usb
@@ -67,6 +69,7 @@ private data class DestinationItem(
 
 private val Destinations = listOf(
     DestinationItem(AppDestination.Equalizer, "EQ", Icons.Outlined.Equalizer, Icons.Filled.Equalizer),
+    DestinationItem(AppDestination.Audio, "Audio", Icons.Outlined.Headphones, Icons.Filled.Headphones),
     DestinationItem(AppDestination.Info, "Info", Icons.Outlined.Info, Icons.Filled.Info),
 )
 
@@ -172,6 +175,11 @@ fun PumperApp(
                     ) { destination ->
                         when (destination) {
                             AppDestination.Equalizer -> EqualizerScreen(state, controller)
+                            AppDestination.Audio -> AudioScreen(
+                                state = state,
+                                onCrossfeedChange = controller::updateCrossfeed,
+                                onSaveCrossfeed = controller::saveCrossfeed,
+                            )
                             AppDestination.Info -> InfoScreen(state, controller, themeMode, onThemeMode)
                         }
                     }

@@ -1,6 +1,8 @@
 package dev.lightwolf.pumper.controller
 
 import dev.lightwolf.pumper.controller.protocol.DefaultEqConfig
+import dev.lightwolf.pumper.controller.protocol.AudioControls
+import dev.lightwolf.pumper.controller.protocol.CrossfeedState
 import dev.lightwolf.pumper.controller.protocol.DeviceStatus
 import dev.lightwolf.pumper.controller.protocol.EqConfig
 import dev.lightwolf.pumper.controller.protocol.ProfileState
@@ -8,7 +10,7 @@ import dev.lightwolf.pumper.controller.transport.PumperDevice
 
 enum class ConnectionState { Disconnected, Connecting, Connected }
 
-enum class AppDestination { Equalizer, Info }
+enum class AppDestination { Equalizer, Audio, Info }
 
 sealed interface Confirmation {
     data object SaveProfile : Confirmation
@@ -24,6 +26,9 @@ data class ControllerUiState(
     val productName: String? = null,
     val config: EqConfig = DefaultEqConfig,
     val status: DeviceStatus? = null,
+    val audioControls: AudioControls? = null,
+    val crossfeed: CrossfeedState? = null,
+    val crossfeedSaving: Boolean = false,
     val profiles: ProfileState = ProfileState(10, 0, 0, 0, 0),
     val selectedBand: Int = 0,
     val selectedProfile: Int = 0,

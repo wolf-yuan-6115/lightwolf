@@ -12,6 +12,14 @@ import java.nio.ByteOrder
 
 class PumperProtocolTest {
     @Test
+    fun `audio and crossfeed opcodes match firmware contract`() {
+        assertEquals(0x06, Opcode.GetAudioControls.value)
+        assertEquals(0x07, Opcode.GetCrossfeed.value)
+        assertEquals(0x12, Opcode.SetCrossfeed.value)
+        assertEquals(0x26, Opcode.SaveCrossfeed.value)
+    }
+
+    @Test
     fun `builds fixed-size little-endian request`() {
         val report = PumperProtocol.createRequest(Opcode.GetBand, 0x1234, byteArrayOf(7))
         assertEquals(REPORT_SIZE, report.size)
@@ -49,6 +57,10 @@ class PumperProtocolTest {
         assertEquals(180.0, current.systemClockMHz!!, 0.0001)
         assertEquals(417L, current.maxDspBlockUs)
         assertTrue(current.supportsDeviceReset)
+        assertFalse(current.supportsAudioControls)
+        payload[0] = 2
+        payload[1] = 2
+        assertTrue(PumperProtocol.decodeStatus(payload).supportsAudioControls)
         assertNull(PumperProtocol.decodeStatus(payload.copyOf(28)).temperatureC)
         assertThrows(ProtocolException::class.java) { PumperProtocol.decodeStatus(ByteArray(30)) }
     }
@@ -88,5 +100,68 @@ class PumperProtocolTest {
         assertEquals(1, state.persistedProfile)
         assertTrue(state.isPresent(9))
         assertFalse(state.isPresent(8))
+    }
+
+    @Test
+    fun `audio controls use signed little-endian Q8 8 values`() {
+        val controls = AudioControls(
+            master = AudioChannelControl(-12.5, false),
+            left = AudioChannelControl(-3.0, true),
+            right = AudioChannelControl(0.0, false),
+        )
+        val payload = PumperProtocol.encodeAudioControls(controls)
+        assertArrayEquals(
+            byteArrayOf(0x80.toByte(), 0xf3.toByte(), 0x00, 0xfd.toByte(), 0, 0, 0, 1, 0),
+            payload,
+        )
+        assertEquals(controls, PumperProtocol.decodeAudioControls(payload))
+        assertThrows(ProtocolException::class.java) { PumperProtocol.decodeAudioControls(ByteArray(8)) }
+        assertThrows(ProtocolException::class.java) {
+            PumperProtocol.decodeAudioControls(payload.copyOf().also { it[7] = 2 })
+        }
+        assertThrows(ProtocolException::class.java) {
+            PumperProtocol.decodeAudioControls(payload.copyOf().also { it[0] = 0; it[1] = 1 })
+        }
+    }
+
+    @Test
+    fun `crossfeed record and dirty state round trip`() {
+        val live = CrossfeedConfig(CrossfeedMode.Custom, 21.25, 1_230, 0.37)
+        val saved = CrossfeedConfig(CrossfeedMode.Medium, 20.0, 700, 0.25)
+        val record = PumperProtocol.encodeCrossfeed(live)
+        assertArrayEquals(
+            byteArrayOf(4, 0, 0x4d, 0x08, 0xce.toByte(), 0x04, 0x72, 0x01),
+            record,
+        )
+        assertEquals(live, PumperProtocol.decodeCrossfeed(record))
+
+        val state = CrossfeedState(live, saved, true)
+        assertEquals(state, PumperProtocol.decodeCrossfeedState(PumperProtocol.encodeCrossfeedState(state)))
+    }
+
+    @Test
+    fun `crossfeed rejects malformed and out of range records`() {
+        val valid = PumperProtocol.encodeCrossfeed(DefaultCrossfeedConfig)
+        assertThrows(ProtocolException::class.java) { PumperProtocol.decodeCrossfeed(ByteArray(7)) }
+        assertThrows(ProtocolException::class.java) {
+            PumperProtocol.decodeCrossfeed(valid.copyOf().also { it[1] = 1 })
+        }
+        assertThrows(ProtocolException::class.java) {
+            PumperProtocol.decodeCrossfeed(valid.copyOf().also { it[0] = 5 })
+        }
+        assertThrows(ProtocolException::class.java) {
+            PumperProtocol.encodeCrossfeed(DefaultCrossfeedConfig.copy(strengthPercent = 40.01))
+        }
+        assertThrows(ProtocolException::class.java) {
+            PumperProtocol.encodeCrossfeed(DefaultCrossfeedConfig.copy(cutoffHz = 2_010))
+        }
+        assertThrows(ProtocolException::class.java) {
+            PumperProtocol.encodeCrossfeed(DefaultCrossfeedConfig.copy(delayMs = 0.61))
+        }
+        assertThrows(ProtocolException::class.java) {
+            PumperProtocol.decodeCrossfeedState(PumperProtocol.encodeCrossfeedState(
+                CrossfeedState(DefaultCrossfeedConfig, DefaultCrossfeedConfig, false),
+            ).also { it[16] = 2 })
+        }
     }
 }
