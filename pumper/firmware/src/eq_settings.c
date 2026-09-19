@@ -10,13 +10,15 @@
 
 #define PROFILE_BANK_MAGIC 0x32424c50u
 #define PROFILE_RECORD_MAGIC 0x32465250u
-#define PROFILE_SCHEMA_VERSION 3u
+#define PROFILE_SCHEMA_VERSION 4u
 #define CROSSFEED_PAGE_OFFSET ((EQ_PROFILE_COUNT + 1u) * FLASH_PAGE_SIZE)
 #define CROSSFEED_MAGIC 0x33464350u
+#define OUTPUT_PAGE_OFFSET ((EQ_PROFILE_COUNT + 2u) * FLASH_PAGE_SIZE)
+#define OUTPUT_MAGIC 0x3454554fu
 #define PROFILE_BANK_COUNT 2u
 #define PROFILE_CONFIG_OFFSET 32u
 #define PROFILE_PRESENT_MARKER 0xa5u
-#define PROFILE_BANK_USED_SIZE ((EQ_PROFILE_COUNT + 2u) * FLASH_PAGE_SIZE)
+#define PROFILE_BANK_USED_SIZE ((EQ_PROFILE_COUNT + 3u) * FLASH_PAGE_SIZE)
 #define PROFILE_STORAGE_SIZE (PROFILE_BANK_COUNT * FLASH_SECTOR_SIZE)
 #define PROFILE_STORAGE_OFFSET (PICO_FLASH_SIZE_BYTES - PROFILE_STORAGE_SIZE)
 
@@ -47,12 +49,14 @@ typedef struct {
   bool valid;
   uint16_t schema;
   crossfeed_config_t crossfeed;
+  output_processing_config_t output;
   uint8_t default_profile;
   uint16_t present_mask;
   uint32_t generation;
 } bank_header_t;
 
 static crossfeed_config_t s_crossfeed;
+static output_processing_config_t s_output_processing;
 static profile_slot_t s_profiles[EQ_PROFILE_COUNT];
 static uint8_t s_default_profile = 0u;
 static uint32_t s_bank_generation = 0u;
@@ -107,8 +111,8 @@ static bank_header_t read_bank_header(uint8_t bank) {
   bank_header_t result = {0};
   uint8_t const *header = flash_pointer(bank_flash_offset(bank));
   if (eq_protocol_read_u32(header) != PROFILE_BANK_MAGIC ||
-      (eq_protocol_read_u16(header + 4u) != 2u &&
-       eq_protocol_read_u16(header + 4u) != PROFILE_SCHEMA_VERSION) ||
+      (eq_protocol_read_u16(header + 4u) < 2u ||
+       eq_protocol_read_u16(header + 4u) > PROFILE_SCHEMA_VERSION) ||
       header[6] != EQ_PROFILE_COUNT || header[7] >= EQ_PROFILE_COUNT || header[14] != 0u ||
       header[15] != 0u ||
       (eq_protocol_read_u16(header + 12u) & ~((1u << EQ_PROFILE_COUNT) - 1u)) != 0u ||
@@ -117,11 +121,19 @@ static bank_header_t read_bank_header(uint8_t bank) {
   }
   result.schema = eq_protocol_read_u16(header + 4u);
   result.crossfeed = k_crossfeed_default;
-  if (result.schema == 3u) {
+  result.output = k_output_processing_default;
+  if (result.schema >= 3u) {
     uint8_t const *record = header + CROSSFEED_PAGE_OFFSET;
     if (eq_protocol_read_u32(record) != CROSSFEED_MAGIC ||
         eq_protocol_read_u32(record + 12u) != crc32(record, 12u) ||
         !crossfeed_decode(record + 4u, CROSSFEED_RECORD_SIZE, &result.crossfeed))
+      return result;
+  }
+  if (result.schema >= 4u) {
+    uint8_t const *record = header + OUTPUT_PAGE_OFFSET;
+    if (eq_protocol_read_u32(record) != OUTPUT_MAGIC ||
+        eq_protocol_read_u32(record + 12u) != crc32(record, 12u) ||
+        !output_processing_decode(record + 4u, OUTPUT_PROCESSING_RECORD_SIZE, &result.output))
       return result;
   }
   result.valid = true;
@@ -182,6 +194,7 @@ static bool load_profile_bank(void) {
     }
   }
   s_crossfeed = header->crossfeed;
+  s_output_processing = header->output;
   s_current_bank = selected;
   s_bank_generation = header->generation;
   s_default_profile = header->default_profile;
@@ -240,6 +253,10 @@ static void build_bank_image(uint8_t default_profile, uint32_t bank_generation) 
   eq_protocol_write_u32(crossfeed, CROSSFEED_MAGIC);
   crossfeed_encode(crossfeed + 4u, &s_crossfeed);
   eq_protocol_write_u32(crossfeed + 12u, crc32(crossfeed, 12u));
+  uint8_t *output = s_flash_image + OUTPUT_PAGE_OFFSET;
+  eq_protocol_write_u32(output, OUTPUT_MAGIC);
+  output_processing_encode(output + 4u, &s_output_processing);
+  eq_protocol_write_u32(output + 12u, crc32(output, 12u));
   uint8_t *header = s_flash_image;
   eq_protocol_write_u32(header, PROFILE_BANK_MAGIC);
   eq_protocol_write_u16(header + 4u, PROFILE_SCHEMA_VERSION);
@@ -256,7 +273,7 @@ static void flash_write_callback(void *param) {
   flash_write_params_t const *params = (flash_write_params_t const *)param;
   flash_range_erase(params->offset, FLASH_SECTOR_SIZE);
   flash_range_program(params->offset + FLASH_PAGE_SIZE, params->image + FLASH_PAGE_SIZE,
-                      (EQ_PROFILE_COUNT + 1u) * FLASH_PAGE_SIZE);
+                      (EQ_PROFILE_COUNT + 2u) * FLASH_PAGE_SIZE);
   flash_range_program(params->offset, params->image, FLASH_PAGE_SIZE);
 }
 
@@ -271,6 +288,7 @@ bool eq_settings_load(eq_config_t *config, uint32_t *generation) {
   s_bank_generation = 0u;
   s_default_profile = 0u;
   s_crossfeed = k_crossfeed_default;
+  s_output_processing = k_output_processing_default;
   if (!load_profile_bank() && !load_legacy_profile()) return false;
   if (!s_profiles[s_default_profile].present)
     return false;
@@ -381,6 +399,21 @@ bool eq_settings_save_crossfeed(crossfeed_config_t const *config) {
   s_crossfeed = *config;
   if (!write_profile_bank(s_default_profile)) {
     s_crossfeed = previous;
+    return false;
+  }
+  return true;
+}
+
+void eq_settings_get_output_processing(output_processing_config_t *config) {
+  if (config) *config = s_output_processing;
+}
+
+bool eq_settings_save_output_processing(output_processing_config_t const *config) {
+  if (!output_processing_validate(config)) return false;
+  output_processing_config_t previous = s_output_processing;
+  s_output_processing = *config;
+  if (!write_profile_bank(s_default_profile)) {
+    s_output_processing = previous;
     return false;
   }
   return true;

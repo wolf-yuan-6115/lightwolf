@@ -37,18 +37,20 @@ bool eq_config_validate(eq_config_t const *config) {
 
   for (uint32_t i = 0; i < EQ_NUM_FILTERS; i++) {
     eq_filter_config_t const *filter = &config->filters[i];
-    if ((uint32_t)filter->type > EQ_FILTER_HIGH_SHELF) {
+    if ((uint32_t)filter->type > EQ_FILTER_BAND_PASS) {
       return false;
     }
     if ((uint32_t)filter->width_mode > EQ_WIDTH_BANDWIDTH) {
       return false;
     }
+    if (filter->type >= EQ_FILTER_LOW_PASS && filter->width_mode != EQ_WIDTH_Q) return false;
     if (!finite_in_range(filter->frequency_hz, EQ_FREQUENCY_MIN_HZ, EQ_FREQUENCY_MAX_HZ) ||
         !finite_in_range(filter->gain_db, EQ_GAIN_MIN_DB, EQ_GAIN_MAX_DB) ||
         !finite_in_range(filter->bw_octaves, EQ_BANDWIDTH_MIN_OCTAVES, EQ_BANDWIDTH_MAX_OCTAVES)) {
       return false;
     }
-    float q_max = filter->type == EQ_FILTER_PEAKING ? EQ_Q_MAX : EQ_SHELF_SLOPE_MAX;
+    bool shelf = filter->type == EQ_FILTER_LOW_SHELF || filter->type == EQ_FILTER_HIGH_SHELF;
+    float q_max = shelf ? EQ_SHELF_SLOPE_MAX : EQ_Q_MAX;
     if (!finite_in_range(filter->q, EQ_Q_MIN, q_max)) {
       return false;
     }

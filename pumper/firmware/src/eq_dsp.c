@@ -58,25 +58,22 @@ static float db_to_linear(float gain_db) {
   return powf(10.0f, gain_db / 20.0f);
 }
 
-static float process_one(float x, eq_biquad_t *band, bool right_channel) {
-  float z1 = right_channel ? band->z1_r : band->z1_l;
-  float z2 = right_channel ? band->z2_r : band->z2_l;
-  float y = band->current.b0 * x + z1;
-  float new_z1 = band->current.b1 * x - band->current.a1 * y + z2;
-  float new_z2 = band->current.b2 * x - band->current.a2 * y;
-
-  if (right_channel) {
-    band->z1_r = new_z1;
-    band->z2_r = new_z2;
-  } else {
-    band->z1_l = new_z1;
-    band->z2_l = new_z2;
-  }
-  return y;
+static void process_stereo(float *left, float *right, eq_biquad_t *band) {
+  eq_coefficients_t c = band->current;
+  float out_l = c.b0 * *left + band->z1_l;
+  float out_r = c.b0 * *right + band->z1_r;
+  band->z1_l = c.b1 * *left - c.a1 * out_l + band->z2_l;
+  band->z1_r = c.b1 * *right - c.a1 * out_r + band->z2_r;
+  band->z2_l = c.b2 * *left - c.a2 * out_l;
+  band->z2_r = c.b2 * *right - c.a2 * out_r;
+  *left = out_l;
+  *right = out_r;
 }
 
 static bool build_coefficients(eq_coefficients_t *out, eq_filter_config_t const *cfg, float fs) {
-  if (!cfg->enabled || fabsf(cfg->gain_db) < 0.0001f || cfg->frequency_hz >= fs * 0.5f) {
+  bool gain_filter = cfg->type <= EQ_FILTER_HIGH_SHELF;
+  if (!cfg->enabled || (gain_filter && fabsf(cfg->gain_db) < 0.0001f) ||
+      cfg->frequency_hz >= fs * 0.5f) {
     *out = k_identity;
     return true;
   }
@@ -106,7 +103,7 @@ static bool build_coefficients(eq_coefficients_t *out, eq_filter_config_t const 
     a0 = 1.0f + alpha / a;
     a1 = -2.0f * cos_w0;
     a2 = 1.0f - alpha / a;
-  } else {
+  } else if (cfg->type == EQ_FILTER_LOW_SHELF || cfg->type == EQ_FILTER_HIGH_SHELF) {
     float slope = cfg->q;
     float alpha = sin_w0 * 0.5f * sqrtf((a + (1.0f / a)) * ((1.0f / slope) - 1.0f) + 2.0f);
     float two_sqrt_a_alpha = 2.0f * sqrtf(a) * alpha;
@@ -124,6 +121,28 @@ static bool build_coefficients(eq_coefficients_t *out, eq_filter_config_t const 
       a0 = (a + 1.0f) - (a - 1.0f) * cos_w0 + two_sqrt_a_alpha;
       a1 = 2.0f * ((a - 1.0f) - (a + 1.0f) * cos_w0);
       a2 = (a + 1.0f) - (a - 1.0f) * cos_w0 - two_sqrt_a_alpha;
+    }
+  } else {
+    float alpha = sin_w0 / (2.0f * cfg->q);
+    a0 = 1.0f + alpha;
+    a1 = -2.0f * cos_w0;
+    a2 = 1.0f - alpha;
+    if (cfg->type == EQ_FILTER_LOW_PASS) {
+      b0 = (1.0f - cos_w0) * 0.5f;
+      b1 = 1.0f - cos_w0;
+      b2 = b0;
+    } else if (cfg->type == EQ_FILTER_HIGH_PASS) {
+      b0 = (1.0f + cos_w0) * 0.5f;
+      b1 = -(1.0f + cos_w0);
+      b2 = b0;
+    } else if (cfg->type == EQ_FILTER_NOTCH) {
+      b0 = 1.0f;
+      b1 = -2.0f * cos_w0;
+      b2 = 1.0f;
+    } else {
+      b0 = alpha;
+      b1 = 0.0f;
+      b2 = -alpha;
     }
   }
 
@@ -224,17 +243,20 @@ void eq_set_sample_rate(uint32_t sample_rate_hz) {
   reset_states();
 }
 
+void eq_reset_state(void) { reset_states(); }
+
 bool eq_set_config(eq_config_t const *config) {
   if (!eq_config_validate(config)) return false;
   return rebuild_targets(config, false);
 }
 
-static uint32_t sample_magnitude(int16_t sample) {
-  int32_t value = sample;
-  return (uint32_t)(value < 0 ? -value : value);
+static uint32_t sample_magnitude(float sample) {
+  float magnitude = fabsf(sample);
+  if (magnitude >= 32768.0f) return 32768u;
+  return (uint32_t)(magnitude + 0.5f);
 }
 
-static void measure_pair(eq_level_metrics_t *level, int16_t left, int16_t right, bool measure_rms) {
+static void measure_pair(eq_level_metrics_t *level, float left, float right, bool measure_rms) {
   uint32_t left_magnitude = sample_magnitude(left);
   uint32_t right_magnitude = sample_magnitude(right);
   if (left_magnitude > level->left_peak) level->left_peak = (uint16_t)left_magnitude;
@@ -245,46 +267,39 @@ static void measure_pair(eq_level_metrics_t *level, int16_t left, int16_t right,
   }
 }
 
-static int16_t saturating_round(float sample) {
-  if (sample >= 32767.0f) return 32767;
-  if (sample <= -32768.0f) return -32768;
-  return (int16_t)(sample < 0.0f ? sample - 0.5f : sample + 0.5f);
-}
-
-void eq_process_interleaved_stereo16(int16_t *interleaved, size_t frame_count,
-                                     eq_block_metrics_t *metrics, bool measure_rms) {
+void eq_process_interleaved_stereo(float *restrict interleaved, size_t frame_count,
+                                   eq_block_metrics_t *metrics, bool measure_rms) {
   if (interleaved == NULL || frame_count == 0u) return;
   if (metrics != NULL) memset(metrics, 0, sizeof(*metrics));
 
-  if (s_active_band_count == 0u && s_transition_remaining == 0u &&
-      s_preamp_current == 1.0f && audio_controls_bypassed()) {
-    if (metrics != NULL) {
-      for (size_t frame = 0u; frame < frame_count; frame++) {
-        measure_pair(&metrics->pre_eq, interleaved[frame * 2u],
-                     interleaved[frame * 2u + 1u], measure_rms);
-      }
-      metrics->post_eq = metrics->pre_eq;
-    }
-    return;
-  }
-
-  for (size_t frame = 0; frame < frame_count; frame++) {
-    int16_t input_left = interleaved[frame * 2u];
-    int16_t input_right = interleaved[frame * 2u + 1u];
-    if (metrics != NULL) measure_pair(&metrics->pre_eq, input_left, input_right, measure_rms);
+  size_t transitioning = s_transition_remaining < frame_count ? s_transition_remaining : frame_count;
+  for (size_t frame = 0; frame < transitioning; frame++) {
     advance_transition();
-    float left = (float)input_left * s_preamp_current;
-    float right = (float)input_right * s_preamp_current;
+    float input_left = interleaved[frame * 2u];
+    float input_right = interleaved[frame * 2u + 1u];
+    if (metrics != NULL) measure_pair(&metrics->pre_eq, input_left, input_right, measure_rms);
+    float left = input_left * s_preamp_current;
+    float right = input_right * s_preamp_current;
     for (uint8_t active = 0u; active < s_active_band_count; active++) {
       eq_biquad_t *band = &s_bands[s_active_bands[active]];
-      left = process_one(left, band, false);
-      right = process_one(right, band, true);
+      process_stereo(&left, &right, band);
     }
     audio_controls_process(&left, &right);
-    int16_t output_left = saturating_round(left);
-    int16_t output_right = saturating_round(right);
-    interleaved[frame * 2u] = output_left;
-    interleaved[frame * 2u + 1u] = output_right;
-    if (metrics != NULL) measure_pair(&metrics->post_eq, output_left, output_right, measure_rms);
+    interleaved[frame * 2u] = left;
+    interleaved[frame * 2u + 1u] = right;
+    if (metrics != NULL) measure_pair(&metrics->post_eq, left, right, measure_rms);
+  }
+  for (size_t frame = transitioning; frame < frame_count; frame++) {
+    float input_left = interleaved[frame * 2u];
+    float input_right = interleaved[frame * 2u + 1u];
+    if (metrics != NULL) measure_pair(&metrics->pre_eq, input_left, input_right, measure_rms);
+    float left = input_left * s_preamp_current;
+    float right = input_right * s_preamp_current;
+    for (uint8_t active = 0u; active < s_active_band_count; active++)
+      process_stereo(&left, &right, &s_bands[s_active_bands[active]]);
+    audio_controls_process(&left, &right);
+    interleaved[frame * 2u] = left;
+    interleaved[frame * 2u + 1u] = right;
+    if (metrics != NULL) measure_pair(&metrics->post_eq, left, right, measure_rms);
   }
 }

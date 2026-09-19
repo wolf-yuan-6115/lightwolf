@@ -53,7 +53,27 @@ target_include_directories(audio_controls_tests PRIVATE ../src)
 target_compile_options(audio_controls_tests PRIVATE -Wall -Wextra -Werror)
 target_link_libraries(audio_controls_tests PRIVATE m)
 add_test(NAME audio_controls_tests COMMAND audio_controls_tests)
+
+add_executable(audio_format_tests test_audio_format.c ../src/audio_format.c)
+target_include_directories(audio_format_tests PRIVATE ../src)
+target_compile_options(audio_format_tests PRIVATE -Wall -Wextra -Werror)
+target_link_libraries(audio_format_tests PRIVATE m)
+add_test(NAME audio_format_tests COMMAND audio_format_tests)
+
+add_executable(audio_block_queue_tests test_audio_block_queue.c ../src/audio_block_queue.c)
+target_include_directories(audio_block_queue_tests PRIVATE ../src)
+target_compile_options(audio_block_queue_tests PRIVATE -Wall -Wextra -Werror)
+add_test(NAME audio_block_queue_tests COMMAND audio_block_queue_tests)
+
 add_executable(hid_activity_tests test_hid_activity.c ../src/hid_activity.c)
 target_include_directories(hid_activity_tests PRIVATE ../src)
 target_compile_options(hid_activity_tests PRIVATE -Wall -Wextra -Werror)
 add_test(NAME hid_activity_tests COMMAND hid_activity_tests)
+
+add_test(NAME resource_report_tests
+  COMMAND ${CMAKE_COMMAND}
+    -DREPORT_SCRIPT=${CMAKE_CURRENT_LIST_DIR}/../cmake/report_firmware_usage.cmake
+    -DCHECK_SCRIPT=${CMAKE_CURRENT_LIST_DIR}/../cmake/check_firmware_size.cmake
+    -DTEST_DIRECTORY=${CMAKE_CURRENT_BINARY_DIR}/resource-report-test
+    -P ${CMAKE_CURRENT_LIST_DIR}/test_resource_report.cmake
+)

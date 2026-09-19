@@ -1,78 +1,61 @@
 # Pumper firmware
 
-The firmware enumerates as a composite USB Audio Class 2 and vendor HID device. Core 0 services TinyUSB and core 1 processes EQ/preamp, headphone crossfeed, and USB gain/mute before audio enters the ping-pong PIO/DMA I2S ring. Pre-EQ input and saturated final output stereo peak/RMS metering is streamed over HID only while the controller's heartbeat remains active. Device status also reports the RP2350's approximate junction temperature, current system clock, worst DSP block time, and I2S low-water mark. The system runs at 180 MHz while an audio stream is open and returns to 150 MHz when it closes.
+The firmware enumerates as a composite USB Audio Class 2 and vendor HID device. Core 0 services TinyUSB while core 1 runs the floating-point audio chain and hands completed blocks directly to ping-pong PIO/DMA. Pre-EQ input and final-output stereo peak/RMS metering is streamed over HID only while the controller's heartbeat remains active. Device status also reports the RP2350's approximate junction temperature, current system clock, worst DSP block time, and I2S low-water mark. The system runs at 180 MHz while an audio stream is open and returns to 150 MHz when it closes.
 
 Ten numbered EQ profiles use the final two 4 KiB flash sectors as alternating banks. A bank is committed only after all profile pages have been programmed, so an interrupted save leaves the previous bank available. Live editing and profile loading do not erase flash. Save Profile writes a slot without changing the power-on selection; Set Default explicitly chooses which stored profile loads at boot; Delete Profile empties a slot. Deleting the default promotes the lowest-numbered remaining profile, while deleting the last profile restores the flat compiled fallback on the next boot. The first saved profile becomes the default when no profile exists. The previous single-profile record is imported into Profile 1 on first boot and migrated on the next save. The compiled fallback and Restore Defaults configuration are flat: 0 dB preamp and 0 dB filter gains.
 
-## Firmware 2.3 audio controls and HID activity
+## Firmware 3.0 audio path and controls
 
-The host's UAC2 Feature Unit exposes one stereo master volume and mute control.
-Volume ranges from -50 to 0 dB in 1 dB steps; both channels inherit the same
-master gain and mute. Per-channel USB requests are rejected. Firmware 2.3 removes
-the separate channel controls so Linux does not leave an additional hidden master
-attenuation outside the system volume slider. The HID layout remains compatible:
-channel slots report 0 dB/unmuted, and the web UI derives effective values from master.
-Changes ramp over 10 ms to exact zero or unity. These settings boot at 0 dB,
-unmuted, remain volatile, and never enter flash. No PCM5102A mute-pin connection
-is needed. The downstream physical volume slider remains independent.
+The UAC2 streaming interface offers 16-bit stereo PCM at 44.1, 48, 88.2, 96,
+176.4, and 192 kHz, plus packed 24-bit stereo PCM at 44.1, 48, 88.2, and 96 kHz.
+The 24-bit alternate cannot be selected at 176.4 or 192 kHz. I2S uses two 16-bit
+slots for 16-bit input and two 32-bit slots with left-aligned 24-bit samples for
+24-bit input.
 
-Headphone crossfeed works independently of EQ enable and profile selection.
-Defaults are Off, with retained Custom parameters of 20%, 700 Hz, and 0.25 ms.
-Low/Medium/High use 10/20/30% strength, 700 Hz cutoff, and 0.20/0.25/0.30 ms delay.
-Custom accepts 0–40% strength, 300–2,000 Hz cutoff, and 0–0.6 ms delay. Each ear
-receives a quiet first-order low-pass-filtered, fractionally delayed copy of the
-original opposite channel, normalized by the fixed factor `1 / (1 + strength)`.
-Changes crossfade between processing states over 10 ms; updates during a fade
-coalesce into the next target without interrupting the active fade. Stream
-restarts and sample-rate changes clear history. Static delay buffers cover all
-four advertised rates, including 192 kHz.
+Six aligned blocks move by ownership from USB decoding on core 0 to DSP on core 1
+and then directly to ping-pong DMA. Output primes about 2 ms before playback; an
+underrun emits silence and returns to priming. The TinyUSB receive buffer is 4 KiB.
+Configuration is published through immutable snapshots, and the HID meter swaps
+accumulators without holding a spinlock in the audio path.
 
-Processing retains floating-point samples through EQ, crossfeed, and USB gain.
-Only the final output is saturated and rounded to 16 bits, then metered immediately
-before I2S. Fully bypassed processing preserves exact PCM pass-through. No limiter,
-clipping protection, or adaptive loudness is added; the existing web Auto Preamp
-remains unchanged.
+Processing order is EQ, crossfeed, USB volume/mute, global output processing,
+limiter, then final PCM quantization. The always-on stereo-linked sample-peak
+limiter has immediate attack, a -1 dBFS soft knee, and a 50 ms release. It has no
+lookahead, true-peak oversampling, dither, or user toggle. Output processing adds
+swap, independent polarity inversion, mono, 0–200% stereo width, and -100% to
++100% balance. Changes ramp over 10 ms and remain global rather than profile-bound.
 
-The blue LED uses the larger left/right final output peak from the same DSP block
-metrics as the HID Output meter, with no additional sample scan. It reflects EQ,
-crossfeed, and USB attenuation/mute; exact mute turns it off after the gain ramp.
-Peak metrics remain available without HID, while RMS calculation is enabled only
-when the HID meter is active. The downstream physical slider cannot be measured.
+The ten EQ bands additionally accept RBJ low-pass, high-pass, notch, and
+constant-0-dB-peak band-pass filters. These types use frequency and Q; gain is
+ignored and bandwidth mode is rejected.
 
-Storage schema 3 adds one crossfeed page to each existing alternating 4 KiB bank.
-The final 8 KiB reservation and firmware-size check remain unchanged. Version-2
-banks and legacy records import crossfeed Off without writing flash; migration
-occurs on an explicit write. Save Crossfeed preserves stored EQ profiles, and EQ
-save/default/delete actions carry forward saved crossfeed, never live unsaved
-edits. A crossfeed-only bank is valid: boot uses compiled EQ defaults plus saved
-crossfeed. CRC and range validation reject corrupted crossfeed records and fall
-back to the previous bank. All data pages precede the final commit-header write.
-Failed writes retain the previous in-memory saved state.
+Storage schema 4 adds a global output-processing page to each alternating bank.
+Older banks import neutral output settings without writing flash and migrate only
+on an explicit save. Data pages are programmed before the commit header, so CRC
+validation can fall back to the previous complete bank after an interrupted write.
 
-The red LED remains on while streaming and off while idle. All received HID output
-reports (including malformed or rejected reports) and completed HID input
-transfers trigger an inverted 25 ms pulse, followed by at least 25 ms at baseline.
+The red LED remains on while streaming and fully off while idle. While streaming,
+received HID output reports (including malformed or rejected reports) and completed
+HID input transfers trigger an inverted 25 ms pulse, followed by at least 25 ms at baseline.
 Additional traffic coalesces into one pending pulse, so continuous polling and
 meter traffic visibly blink at up to 20 Hz. Audio packets and UAC2 controls do
 not count. The non-blocking core-0 LED task owns runtime red output, preserves
 active-low PWM and its brightness cap, tolerates timer wraparound, and resets
 activity on USB unmount.
 
-HID framing stays at 64 bytes with protocol version 1. Added commands are
-GetAudioControls (`0x06`), GetCrossfeed (`0x07`), SetCrossfeed (`0x12`), and
-SaveCrossfeed (`0x26`). See [the controller contract](../web/README.md#firmware-22-hid-additions)
-for byte layouts. Set Crossfeed previews only; Save Crossfeed explicitly persists
-and returns the verified live/saved/dirty state.
+HID framing stays at 64 bytes with protocol version 1. Firmware 3.0 adds
+GetOutputProcessing (`0x08`), SetOutputProcessing (`0x13`), and
+SaveOutputProcessing (`0x27`). Their 8-byte config contains flags, signed balance
+basis points, width basis points, and zeroed reserved fields. Responses include
+live config, saved config, and dirty state.
 
 ### Board verification
 
-After flashing, verify host master volume and mute, preset/Custom
-crossfeed, persistence across power cycles, and independent EQ profile actions.
-Run all ten EQ bands plus crossfeed at 192 kHz and check worst DSP block time,
-I2S low-water mark, and sustained underruns in DAC info. Verify red baseline with
-HID traffic absent, RX/TX pulses while streaming and idle, and visible blinking
-under continuous meter traffic. Portable tests cannot establish board DSP margin
-or replace these USB/audio/listening checks.
+After flashing, verify every advertised host format, both I2S slot layouts, rate
+switching, output controls, persistence, and invalid 24-bit high-rate rejection.
+Sustain the maximum 16-bit and 24-bit modes with all DSP active and confirm there
+are no post-startup underruns. Portable tests cannot establish board DSP margin or
+replace USB, logic-analyzer, and listening checks.
 
 ## Prerequisites
 
@@ -145,7 +128,7 @@ The main output is:
 firmware/build/rp2350_usb_dac.uf2
 ```
 
-The build also creates `.elf`, `.bin`, `.hex`, and disassembly files. A post-build check reserves the final 8 KiB of flash for the two alternating EQ profile banks and fails if the firmware grows into that area.
+The build also creates `.elf`, `.bin`, `.hex`, and disassembly files. A post-build check reserves the final 8 KiB of flash for the two alternating EQ profile banks and fails if the firmware grows into that area. The following console-only resource report summarizes the ELF flash/SRAM sections, configured stacks and heap, peripheral use, remaining capacity, and warns at 80% utilization. CPU utilization still requires measurement on hardware.
 
 For normal source changes, only the build command is needed:
 

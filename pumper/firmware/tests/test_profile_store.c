@@ -207,6 +207,50 @@ static void test_crossfeed_storage(void) {
   eq_settings_get_crossfeed(&saved);
   assert(saved.mode == 1);
 }
+
+static void test_output_processing_storage(void) {
+  memset(g_fake_flash, 0xff, sizeof(g_fake_flash));
+  eq_config_t loaded;
+  uint32_t generation;
+  assert(!eq_settings_load(&loaded, &generation));
+  output_processing_config_t output = {
+      OUTPUT_PROCESSING_SWAP | OUTPUT_PROCESSING_INVERT_RIGHT, -2500, 15000};
+  assert(eq_settings_save_output_processing(&output));
+  output_processing_config_t saved;
+  eq_settings_get_output_processing(&saved);
+  assert(output_processing_equal(&output, &saved));
+  assert(!eq_settings_load(&loaded, &generation));
+  eq_settings_get_output_processing(&saved);
+  assert(output_processing_equal(&output, &saved));
+
+  output.width_bp = 20001u;
+  assert(!eq_settings_save_output_processing(&output));
+  eq_settings_get_output_processing(&saved);
+  assert(saved.width_bp == 15000u);
+
+  output.width_bp = 10000u;
+  fail_execute = true;
+  assert(!eq_settings_save_output_processing(&output));
+  fail_execute = false;
+  eq_settings_get_output_processing(&saved);
+  assert(saved.width_bp == 15000u);
+}
+
+static void test_corrupt_output_fallback(void) {
+  memset(g_fake_flash, 0xff, sizeof(g_fake_flash));
+  eq_config_t loaded;
+  uint32_t generation;
+  assert(!eq_settings_load(&loaded, &generation));
+  assert(eq_settings_save_profile(0u, &k_eq_default_config, 12u));
+  output_processing_config_t output = {OUTPUT_PROCESSING_MONO, 0, 10000u};
+  assert(eq_settings_save_output_processing(&output));
+  uint8_t *newest_output = g_fake_flash + PROFILE_STORAGE_OFFSET + FLASH_SECTOR_SIZE +
+                           12u * FLASH_PAGE_SIZE;
+  newest_output[4] ^= 1u;
+  assert(eq_settings_load(&loaded, &generation));
+  eq_settings_get_output_processing(&output);
+  assert(output_processing_equal(&output, &k_output_processing_default));
+}
 static void test_version_two_migration(void) {
   memset(g_fake_flash, 0xff, sizeof(g_fake_flash));
   eq_config_t loaded;
@@ -219,7 +263,7 @@ static void test_version_two_migration(void) {
   eq_protocol_write_u16(header + 4, 2);
   eq_protocol_write_u32(header + 16, test_crc32(header, 16));
   eq_protocol_write_u16(header + 3 * FLASH_PAGE_SIZE + 4, 2);
-  memset(header + 11 * FLASH_PAGE_SIZE, 0xff, FLASH_PAGE_SIZE);
+  memset(header + 11 * FLASH_PAGE_SIZE, 0xff, 2 * FLASH_PAGE_SIZE);
   unsigned calls = program_calls;
   assert(eq_settings_load(&loaded, &generation));
   assert(generation == 9 && eq_config_equal(&eq, &loaded));
@@ -229,7 +273,7 @@ static void test_version_two_migration(void) {
   assert(program_calls == calls); // Read-only import never migrates flash.
   c.mode = 2;
   assert(eq_settings_save_crossfeed(&c));
-  assert(eq_protocol_read_u16(g_fake_flash + LEGACY_STORAGE_OFFSET + 4) == 3);
+  assert(eq_protocol_read_u16(g_fake_flash + LEGACY_STORAGE_OFFSET + 4) == 4);
   assert(eq_settings_load(&loaded, &generation));
   assert(eq_config_equal(&eq, &loaded));
   eq_settings_get_crossfeed(&c);
@@ -277,8 +321,8 @@ static void test_interrupted_writes(void) {
   assert(eq_settings_save_crossfeed(&c));
   memcpy(previous, g_fake_flash + PROFILE_STORAGE_OFFSET, sizeof(previous));
   // Interrupt each page boundary and midway through a page, including the final commit header.
-  for (size_t attempt = 0; attempt < 26; attempt++) {
-    size_t cut = attempt < 23 ? attempt * 128 : 11 * FLASH_PAGE_SIZE + (attempt - 23) * 8;
+  for (size_t attempt = 0; attempt < 28; attempt++) {
+    size_t cut = attempt < 25 ? attempt * 128 : 12 * FLASH_PAGE_SIZE + (attempt - 25) * 8;
     memcpy(g_fake_flash + PROFILE_STORAGE_OFFSET, previous, sizeof(previous));
     assert(eq_settings_load(&loaded, &generation));
     c.mode = 3;
@@ -298,6 +342,8 @@ int main(void) {
   test_legacy_profile_migration();
   test_profile_deletion();
   test_crossfeed_storage();
+  test_output_processing_storage();
+  test_corrupt_output_fallback();
   test_version_two_migration();
   test_corrupt_crossfeed_fallback();
   test_interrupted_writes();

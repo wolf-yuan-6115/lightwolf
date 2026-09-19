@@ -8,6 +8,10 @@ typedef enum {
   EQ_FILTER_LOW_SHELF = 0,
   EQ_FILTER_PEAKING = 1,
   EQ_FILTER_HIGH_SHELF = 2,
+  EQ_FILTER_LOW_PASS = 3,
+  EQ_FILTER_HIGH_PASS = 4,
+  EQ_FILTER_NOTCH = 5,
+  EQ_FILTER_BAND_PASS = 6,
 } eq_filter_type_t;
 
 typedef enum {

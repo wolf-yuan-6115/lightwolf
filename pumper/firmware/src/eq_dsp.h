@@ -20,8 +20,9 @@ typedef struct {
 
 void eq_init(uint32_t sample_rate_hz, eq_config_t const *config);
 void eq_set_sample_rate(uint32_t sample_rate_hz);
+void eq_reset_state(void);
 bool eq_set_config(eq_config_t const *config);
-void eq_process_interleaved_stereo16(int16_t *interleaved, size_t frame_count,
-                                     eq_block_metrics_t *metrics, bool measure_rms);
+void eq_process_interleaved_stereo(float *restrict interleaved, size_t frame_count,
+                                   eq_block_metrics_t *metrics, bool measure_rms);
 
 #endif

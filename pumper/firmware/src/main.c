@@ -1,18 +1,3 @@
-// Pumper USB DAC — main application entry point.
-//
-// This firmware implements a USB Audio Class 2 (UAC2) device on the RP2350.
-// The host (PC, phone, …) streams 16-bit stereo PCM audio over USB; the
-// firmware forwards it to a connected I2S DAC chip via the PIO-based I2S
-// driver (i2s_out.c/audio_i2s.pio).
-//
-// Features:
-//   • Supports 44.1 / 48 / 96 / 192 kHz sample rates (host-selectable)
-//   • Stereo master mute and volume control via UAC2 Feature Unit
-//   • Red LED indicates streaming with an activity overlay for all HID traffic
-//   • Independent headphone crossfeed with explicit power-on configuration saves
-//   • Blue LED shares the HID output peak, capped at its maximum brightness
-//   • Runtime-configurable ten-band parametric EQ controlled over WebHID
-
 #include <stdbool.h>
 #include <math.h>
 #include <stdint.h>
@@ -25,13 +10,13 @@
 #include "hardware/vreg.h"
 #include "hardware/watchdog.h"
 #include "pico/bootrom.h"
-#include "pico/critical_section.h"
 #include "pico/multicore.h"
 #include "pico/stdlib.h"
 #include "pico/util/queue.h"
 #include "tusb.h"
 
 #include "audio_feedback.h"
+#include "audio_format.h"
 #include "eq_config.h"
 #include "eq_dsp.h"
 #include "audio_controls.h"
@@ -42,9 +27,8 @@
 #include "quirk_os_guessing.h"
 #include "usb_descriptors.h"
 
-#define AUDIO_CHANNELS   2u   // Stereo: left + right
-#define AUDIO_FRAME_BYTES 4u  // 2 bytes/sample × 2 channels = 4 bytes per stereo frame
-#define AUDIO_BLOCK_COUNT 8u
+#define AUDIO_CHANNELS 2u
+#define AUDIO_BLOCK_COUNT I2S_AUDIO_BLOCK_COUNT
 #define METER_REPORT_INTERVAL_MIN_MS 20u
 #define METER_REPORT_INTERVAL_MAX_MS 250u
 #define METER_TIMEOUT_MIN_MS 250u
@@ -70,9 +54,7 @@
 #define LED_RED_MAX_BRIGHTNESS   ((LED_PWM_WRAP * 40u) / 100u)
 #define LED_BLUE_MAX_BRIGHTNESS  ((LED_PWM_WRAP * 60u) / 100u)
 
-// Sample rates advertised to the host via the Clock Source range descriptor.
-// The host picks one and sets it via tud_audio_set_req_entity_cb().
-static uint32_t const sample_rates[] = {44100u, 48000u, 96000u, 192000u};
+static uint32_t const sample_rates[] = {44100u, 48000u, 88200u, 96000u, 176400u, 192000u};
 #define N_SAMPLE_RATES TU_ARRAY_SIZE(sample_rates)
 
 // Host controls only the stereo master (index 0). Channel slots stay zero
@@ -83,27 +65,18 @@ static int8_t s_mute[AUDIO_CHANNELS + 1];
 // Range advertised: -50 dB (–12800) to 0 dB, in 1 dB (256) steps.
 static int16_t s_volume_q8[AUDIO_CHANNELS + 1];
 
-// Currently active sample rate; updated when the host sends a SET_CUR request
-// to the Clock Source entity.
 static volatile uint32_t s_sample_rate_hz = 48000u;
 
 // Fixed pool passed from core 0 (USB) to core 1 (DSP) without allocating.
-typedef struct {
-  uint16_t frames;
-  uint32_t stream_generation;
-  int16_t samples[CFG_TUD_AUDIO_FUNC_1_EP_OUT_SZ_MAX / sizeof(int16_t)];
-} audio_block_t;
-
+typedef i2s_audio_block_t audio_block_t;
 static audio_block_t s_audio_blocks[AUDIO_BLOCK_COUNT];
+static uint8_t s_usb_packet[CFG_TUD_AUDIO_FUNC_1_EP_OUT_SZ_MAX];
 static queue_t s_free_audio_blocks;
 static queue_t s_pending_audio_blocks;
 
-static critical_section_t s_config_lock;
 static crossfeed_config_t s_crossfeed_live, s_crossfeed_saved;
-static float s_usb_gains[2] = {1, 1};
-static volatile uint32_t s_audio_controls_generation = 1u;
+static output_processing_config_t s_output_live, s_output_saved;
 static hid_activity_t s_hid_activity;
-static eq_config_t s_desired_config;
 static eq_config_t s_saved_config;
 static volatile uint32_t s_config_generation = 1u;
 static volatile uint32_t s_applied_generation = 0u;
@@ -111,6 +84,7 @@ static volatile uint32_t s_saved_generation = 0u;
 static volatile uint32_t s_backpressure_events = 0u;
 static volatile bool s_streaming_active = false;
 static volatile uint32_t s_stream_generation = 0u;
+static volatile audio_sample_format_t s_audio_format = AUDIO_FORMAT_PCM16;
 static volatile bool s_dsp_core_ready = false;
 static volatile uint32_t s_dsp_max_block_us = 0u;
 static uint8_t s_active_profile = 0u;
@@ -122,8 +96,28 @@ typedef struct {
   uint32_t frame_count;
 } meter_accumulator_t;
 
-static critical_section_t s_meter_lock;
-static meter_accumulator_t s_meter_accumulator;
+typedef struct {
+  volatile uint32_t sequence;
+  eq_config_t config;
+  uint32_t generation;
+} config_snapshot_t;
+
+typedef struct {
+  volatile uint32_t sequence;
+  crossfeed_config_t crossfeed;
+  output_processing_config_t output;
+  float gains[2];
+  uint32_t generation;
+} controls_snapshot_t;
+
+static config_snapshot_t s_config_snapshots[2];
+static controls_snapshot_t s_controls_snapshots[2];
+static volatile uint32_t s_config_snapshot_index;
+static volatile uint32_t s_controls_snapshot_index;
+static volatile uint32_t s_audio_controls_generation = 1u;
+static meter_accumulator_t s_meter_accumulators[2];
+static volatile uint32_t s_meter_accumulator_index;
+static volatile uint32_t s_meter_writers[2];
 static bool s_meter_configured = false;
 static volatile bool s_meter_active = false;
 static uint16_t s_meter_report_interval_ms = 40u;
@@ -150,6 +144,7 @@ typedef enum {
   FLASH_ACTION_SET_DEFAULT_PROFILE,
   FLASH_ACTION_DELETE_PROFILE,
   FLASH_ACTION_SAVE_CROSSFEED,
+  FLASH_ACTION_SAVE_OUTPUT_PROCESSING,
 } flash_action_t;
 static bool s_flash_write_pending = false;
 static flash_action_t s_flash_action = FLASH_ACTION_SAVE_PROFILE;
@@ -157,9 +152,6 @@ static uint8_t s_flash_request_opcode = 0u;
 static uint16_t s_flash_request_id = 0u;
 static uint8_t s_flash_profile_index = 0u;
 
-// Initialise a GPIO pin as a PWM-driven LED output.
-// The PWM counter runs 0–255; polarity is inverted because the LEDs are
-// active-low (connected between the GPIO and VCC).
 static void led_pwm_init(uint pin) {
   gpio_set_function(pin, GPIO_FUNC_PWM);
   uint slice = pwm_gpio_to_slice_num(pin);
@@ -177,14 +169,12 @@ static void led_pwm_init(uint pin) {
   pwm_set_enabled(slice, true);
 }
 
-// Set the red streaming indicator to its fixed maximum brightness or fully off.
 static void red_led_set(bool on) {
   uint slice = pwm_gpio_to_slice_num(LED_RED_PIN);
   uint channel = pwm_gpio_to_channel(LED_RED_PIN);
   pwm_set_chan_level(slice, channel, on ? LED_RED_MAX_BRIGHTNESS : 0);
 }
 
-// Set a LED to an arbitrary brightness level (0 = off, LED_PWM_WRAP = full).
 static void led_set_level(uint pin, uint16_t level) {
   uint slice = pwm_gpio_to_slice_num(pin);
   uint channel = pwm_gpio_to_channel(pin);
@@ -201,7 +191,7 @@ static void set_performance_clock(bool streaming) {
     set_sys_clock_khz(IDLE_SYS_CLOCK_KHZ, true);
     vreg_set_voltage(VREG_VOLTAGE_1_10);
   }
-  i2s_out_set_sample_rate(s_sample_rate_hz);
+  i2s_out_set_format(s_sample_rate_hz, s_audio_format);
 }
 
 static void set_streaming_state(bool streaming) {
@@ -215,6 +205,9 @@ static void set_streaming_state(bool streaming) {
   s_dsp_max_block_us = 0u;
   i2s_out_set_streaming(streaming);
   if (!streaming) {
+    audio_block_t *block;
+    while (queue_try_remove(&s_pending_audio_blocks, &block))
+      queue_add_blocking(&s_free_audio_blocks, &block);
     led_set_level(LED_BLUE_PIN, 0u);
     set_performance_clock(false);
   }
@@ -239,7 +232,6 @@ static bool send_zero_control(uint8_t rhport, tusb_control_request_t const *p_re
   return tud_control_xfer(rhport, p_request, (void *) zero_buf, len);
 }
 
-// Apply a host-requested sample rate change and reconfigure the I2S bit clock.
 static bool sample_rate_supported(uint32_t sample_rate_hz) {
   for (uint8_t i = 0; i < N_SAMPLE_RATES; i++) {
     if (sample_rates[i] == sample_rate_hz) return true;
@@ -248,45 +240,74 @@ static bool sample_rate_supported(uint32_t sample_rate_hz) {
 }
 
 static bool handle_sample_rate_change(uint32_t new_rate_hz) {
-  if (!sample_rate_supported(new_rate_hz)) return false;
+  if (!sample_rate_supported(new_rate_hz) || !audio_format_rate_valid(s_audio_format, new_rate_hz)) return false;
+  bool resume = s_streaming_active;
+  if (resume) set_streaming_state(false);
+  if (resume) tud_audio_clear_ep_out_ff();
   s_sample_rate_hz = new_rate_hz;
   s_feedback_initialized = false;
-  i2s_out_set_sample_rate(s_sample_rate_hz);
+  i2s_out_set_format(s_sample_rate_hz, s_audio_format);
+  if (resume) set_streaming_state(true);
   return true;
 }
 
 static eq_config_t config_snapshot(uint32_t *generation) {
-  critical_section_enter_blocking(&s_config_lock);
-  eq_config_t config = s_desired_config;
-  if (generation != NULL) *generation = s_config_generation;
-  critical_section_exit(&s_config_lock);
-  return config;
+  for (;;) {
+    uint32_t index = __atomic_load_n(&s_config_snapshot_index, __ATOMIC_ACQUIRE);
+    config_snapshot_t const *snapshot = &s_config_snapshots[index];
+    uint32_t before = __atomic_load_n(&snapshot->sequence, __ATOMIC_ACQUIRE);
+    if (before & 1u) continue;
+    eq_config_t config = snapshot->config;
+    uint32_t value = snapshot->generation;
+    __atomic_thread_fence(__ATOMIC_ACQUIRE);
+    if (before == __atomic_load_n(&snapshot->sequence, __ATOMIC_RELAXED) &&
+        index == __atomic_load_n(&s_config_snapshot_index, __ATOMIC_RELAXED)) {
+      if (generation) *generation = value;
+      return config;
+    }
+  }
 }
 
 static void publish_config(eq_config_t const *config) {
-  critical_section_enter_blocking(&s_config_lock);
-  s_desired_config = *config;
-  s_config_generation++;
-  critical_section_exit(&s_config_lock);
+  uint32_t index = __atomic_load_n(&s_config_snapshot_index, __ATOMIC_RELAXED) ^ 1u;
+  config_snapshot_t *snapshot = &s_config_snapshots[index];
+  __atomic_add_fetch(&snapshot->sequence, 1u, __ATOMIC_RELAXED);
+  snapshot->config = *config;
+  snapshot->generation = ++s_config_generation;
+  __atomic_add_fetch(&snapshot->sequence, 1u, __ATOMIC_RELEASE);
+  __atomic_store_n(&s_config_snapshot_index, index, __ATOMIC_RELEASE);
+}
+
+static controls_snapshot_t controls_snapshot(void) {
+  for (;;) {
+    uint32_t index = __atomic_load_n(&s_controls_snapshot_index, __ATOMIC_ACQUIRE);
+    controls_snapshot_t const *snapshot = &s_controls_snapshots[index];
+    uint32_t before = __atomic_load_n(&snapshot->sequence, __ATOMIC_ACQUIRE);
+    if (before & 1u) continue;
+    controls_snapshot_t copy = *snapshot;
+    __atomic_thread_fence(__ATOMIC_ACQUIRE);
+    if (before == __atomic_load_n(&snapshot->sequence, __ATOMIC_RELAXED) &&
+        index == __atomic_load_n(&s_controls_snapshot_index, __ATOMIC_RELAXED)) return copy;
+  }
 }
 
 static void publish_audio_controls(void) {
-  float gains[2];
-  audio_effective_gains(s_volume_q8, s_mute, gains);
-  critical_section_enter_blocking(&s_config_lock);
-  s_usb_gains[0] = gains[0];
-  s_usb_gains[1] = gains[1];
-  s_audio_controls_generation++;
-  critical_section_exit(&s_config_lock);
+  uint32_t index = __atomic_load_n(&s_controls_snapshot_index, __ATOMIC_RELAXED) ^ 1u;
+  controls_snapshot_t *snapshot = &s_controls_snapshots[index];
+  __atomic_add_fetch(&snapshot->sequence, 1u, __ATOMIC_RELAXED);
+  snapshot->crossfeed = s_crossfeed_live;
+  snapshot->output = s_output_live;
+  audio_effective_gains(s_volume_q8, s_mute, snapshot->gains);
+  snapshot->generation = ++s_audio_controls_generation;
+  __atomic_add_fetch(&snapshot->sequence, 1u, __ATOMIC_RELEASE);
+  __atomic_store_n(&s_controls_snapshot_index, index, __ATOMIC_RELEASE);
 }
 static void apply_audio_controls(uint32_t *generation) {
-  critical_section_enter_blocking(&s_config_lock);
-  crossfeed_config_t crossfeed = s_crossfeed_live;
-  float gains[2] = {s_usb_gains[0], s_usb_gains[1]};
-  *generation = s_audio_controls_generation;
-  critical_section_exit(&s_config_lock);
-  audio_controls_set_crossfeed(&crossfeed);
-  audio_controls_set_gains(gains);
+  controls_snapshot_t snapshot = controls_snapshot();
+  *generation = snapshot.generation;
+  audio_controls_set_crossfeed(&snapshot.crossfeed);
+  audio_controls_set_output_processing(&snapshot.output);
+  audio_controls_set_gains(snapshot.gains);
 }
 
 static bool config_is_dirty(void) {
@@ -295,9 +316,12 @@ static bool config_is_dirty(void) {
 }
 
 static void meter_reset(void) {
-  critical_section_enter_blocking(&s_meter_lock);
-  memset(&s_meter_accumulator, 0, sizeof(s_meter_accumulator));
-  critical_section_exit(&s_meter_lock);
+  uint32_t old = __atomic_load_n(&s_meter_accumulator_index, __ATOMIC_RELAXED);
+  uint32_t next = old ^ 1u;
+  memset(&s_meter_accumulators[next], 0, sizeof(s_meter_accumulators[next]));
+  __atomic_store_n(&s_meter_accumulator_index, next, __ATOMIC_RELEASE);
+  while (__atomic_load_n(&s_meter_writers[old], __ATOMIC_ACQUIRE)) tight_loop_contents();
+  memset(&s_meter_accumulators[old], 0, sizeof(s_meter_accumulators[old]));
 }
 
 static void meter_merge_level(eq_level_metrics_t *accumulator,
@@ -310,13 +334,30 @@ static void meter_merge_level(eq_level_metrics_t *accumulator,
 
 static void meter_accumulate(eq_level_metrics_t const *pre_eq,
                              eq_level_metrics_t const *post_eq, uint16_t frames) {
-  critical_section_enter_blocking(&s_meter_lock);
-  if (s_meter_active) {
-    meter_merge_level(&s_meter_accumulator.pre_eq, pre_eq);
-    meter_merge_level(&s_meter_accumulator.post_eq, post_eq);
-    s_meter_accumulator.frame_count += frames;
+  if (!s_meter_active) return;
+  for (;;) {
+    uint32_t index = __atomic_load_n(&s_meter_accumulator_index, __ATOMIC_ACQUIRE);
+    __atomic_add_fetch(&s_meter_writers[index], 1u, __ATOMIC_ACQUIRE);
+    if (index == __atomic_load_n(&s_meter_accumulator_index, __ATOMIC_RELAXED)) {
+      meter_merge_level(&s_meter_accumulators[index].pre_eq, pre_eq);
+      meter_merge_level(&s_meter_accumulators[index].post_eq, post_eq);
+      s_meter_accumulators[index].frame_count += frames;
+      __atomic_sub_fetch(&s_meter_writers[index], 1u, __ATOMIC_RELEASE);
+      return;
+    }
+    __atomic_sub_fetch(&s_meter_writers[index], 1u, __ATOMIC_RELEASE);
   }
-  critical_section_exit(&s_meter_lock);
+}
+
+static meter_accumulator_t meter_take(void) {
+  uint32_t old = __atomic_load_n(&s_meter_accumulator_index, __ATOMIC_RELAXED);
+  uint32_t next = old ^ 1u;
+  memset(&s_meter_accumulators[next], 0, sizeof(s_meter_accumulators[next]));
+  __atomic_store_n(&s_meter_accumulator_index, next, __ATOMIC_RELEASE);
+  while (__atomic_load_n(&s_meter_writers[old], __ATOMIC_ACQUIRE)) tight_loop_contents();
+  meter_accumulator_t result = s_meter_accumulators[old];
+  memset(&s_meter_accumulators[old], 0, sizeof(s_meter_accumulators[old]));
+  return result;
 }
 
 static void meter_keepalive(void) {
@@ -330,9 +371,10 @@ static void dsp_core_main(void) {
   eq_settings_core_init();
   uint32_t local_generation;
   eq_config_t local_config = config_snapshot(&local_generation);
+  controls_snapshot_t initial_controls = controls_snapshot();
   uint32_t local_sample_rate = s_sample_rate_hz;
   eq_init(local_sample_rate, &local_config);
-  audio_controls_init(local_sample_rate, &s_crossfeed_live);
+  audio_controls_init(local_sample_rate, &initial_controls.crossfeed, &initial_controls.output);
   uint32_t local_controls_generation = 0u;
   uint32_t local_stream_generation = s_stream_generation;
   apply_audio_controls(&local_controls_generation);
@@ -352,6 +394,7 @@ static void dsp_core_main(void) {
       apply_audio_controls(&local_controls_generation);
     if (local_stream_generation != block->stream_generation) {
       local_stream_generation = block->stream_generation;
+      eq_reset_state();
       audio_controls_reset(local_sample_rate);
     }
     if (s_config_generation != local_generation) {
@@ -367,7 +410,7 @@ static void dsp_core_main(void) {
       bool const measure_block = s_meter_active;
       eq_block_metrics_t metrics;
       uint32_t started_us = time_us_32();
-      eq_process_interleaved_stereo16(block->samples, block->frames, &metrics, measure_block);
+      eq_process_interleaved_stereo(block->data.samples, block->frames, &metrics, measure_block);
       uint32_t elapsed_us = time_us_32() - started_us;
       if (elapsed_us > s_dsp_max_block_us) s_dsp_max_block_us = elapsed_us;
 
@@ -377,26 +420,19 @@ static void dsp_core_main(void) {
       led_set_level(LED_BLUE_PIN, (uint16_t)((peak * LED_BLUE_MAX_BRIGHTNESS) / 32768u));
       if (measure_block) meter_accumulate(&metrics.pre_eq, &metrics.post_eq, block->frames);
 
-      size_t written = 0u;
-      while (written < block->frames && s_streaming_active && block->stream_generation == s_stream_generation) {
-        written += i2s_out_write_stereo16(block->samples + written * AUDIO_CHANNELS, block->frames - written);
-        if (written < block->frames) tight_loop_contents();
-      }
+      block->word_count = (uint16_t)audio_format_pack_i2s(
+          block->data.words, block->data.samples, block->frames, block->format);
+      if (i2s_out_submit(block)) block = NULL;
     }
-    queue_add_blocking(&s_free_audio_blocks, &block);
+    if (block) queue_add_blocking(&s_free_audio_blocks, &block);
   }
 }
 
-// Main audio processing task — called every iteration of the main loop.
-//
-// Drains received USB audio data from the TinyUSB software receive buffer,
-// queues samples for EQ processing on core 1 and forwarding to the I2S ring.
-//
 // Backpressure is retained in TinyUSB's software buffer when all audio blocks
 // are in flight.
 static void audio_task(void) {
   static bool backpressure_latched = false;
-  while (tud_audio_available() >= AUDIO_FRAME_BYTES) {
+  while (tud_audio_available() >= audio_format_frame_bytes(s_audio_format)) {
     audio_block_t *block;
     if (!queue_try_remove(&s_free_audio_blocks, &block)) {
       if (!backpressure_latched) {
@@ -407,16 +443,18 @@ static void audio_task(void) {
     }
     backpressure_latched = false;
 
+    size_t frame_bytes = audio_format_frame_bytes(s_audio_format);
     uint16_t to_read = tud_audio_available();
-    if (to_read > sizeof(block->samples)) to_read = sizeof(block->samples);
-    to_read = (uint16_t) (to_read & ~(AUDIO_FRAME_BYTES - 1u));
+    if (to_read > sizeof(s_usb_packet)) to_read = sizeof(s_usb_packet);
+    to_read = (uint16_t)(to_read - to_read % frame_bytes);
     if (to_read == 0) {
       queue_add_blocking(&s_free_audio_blocks, &block);
       break;
     }
 
-    uint16_t got = tud_audio_read(block->samples, to_read);
-    uint16_t frames = (uint16_t) (got / AUDIO_FRAME_BYTES);
+    uint16_t got = tud_audio_read(s_usb_packet, to_read);
+    uint16_t frames = (uint16_t)audio_format_decode(
+        block->data.samples, I2S_AUDIO_BLOCK_MAX_FRAMES, s_usb_packet, got, s_audio_format);
 
     if (frames == 0u || !s_streaming_active) {
       queue_add_blocking(&s_free_audio_blocks, &block);
@@ -424,6 +462,7 @@ static void audio_task(void) {
     }
     block->frames = frames;
     block->stream_generation = s_stream_generation;
+    block->format = s_audio_format;
     queue_add_blocking(&s_pending_audio_blocks, &block);
   }
 }
@@ -476,11 +515,6 @@ static bool tud_audio_clock_get_request(uint8_t rhport, audio_control_request_t 
   return false;
 }
 
-// Handle UAC2 GET requests directed at the Feature Unit (mute + volume).
-//
-// MUTE CUR   — return current mute state for the requested channel.
-// VOLUME CUR — return current volume in Q8.8 dB for the requested channel.
-// VOLUME RANGE — return the supported volume range: -50 dB to 0 dB, 1 dB steps.
 static bool tud_audio_feature_unit_get_request(uint8_t rhport, audio_control_request_t const *request) {
   TU_VERIFY(request->bChannelNumber == 0u);
   uint16_t length = tu_le16toh(request->wLength);
@@ -507,8 +541,6 @@ static bool tud_audio_feature_unit_get_request(uint8_t rhport, audio_control_req
   return false;
 }
 
-// Handle UAC2 SET requests directed at the Feature Unit.
-// SET_CUR publishes a complete software gain snapshot to the audio core.
 static bool tud_audio_feature_unit_set_request(audio_control_request_t const *request, uint8_t const *buf) {
   TU_VERIFY(request->bRequest == AUDIO_CS_REQ_CUR);
   TU_VERIFY(audio_host_control_set(request->bChannelNumber, request->bControlSelector, buf,
@@ -517,7 +549,6 @@ static bool tud_audio_feature_unit_set_request(audio_control_request_t const *re
   return true;
 }
 
-// TinyUSB callback: dispatch GET control requests to the appropriate entity handler.
 bool tud_audio_get_req_entity_cb(uint8_t rhport, tusb_control_request_t const *p_request) {
   audio_control_request_t const *request = (audio_control_request_t const *) p_request;
   if (request->bEntityID == UAC2_ENTITY_CLOCK) return tud_audio_clock_get_request(rhport, request);
@@ -525,8 +556,6 @@ bool tud_audio_get_req_entity_cb(uint8_t rhport, tusb_control_request_t const *p
   return send_zero_control(rhport, p_request);
 }
 
-// TinyUSB callback: dispatch SET control requests to the appropriate entity handler.
-// Handles sample-rate changes on the Clock entity and mute/volume on the Feature Unit.
 // Both 3-byte (legacy UAC1-style) and 4-byte (UAC2) sample-rate encodings are accepted.
 bool tud_audio_set_req_entity_cb(uint8_t rhport, tusb_control_request_t const *p_request, uint8_t *buf) {
   (void) rhport;
@@ -548,8 +577,6 @@ bool tud_audio_set_req_entity_cb(uint8_t rhport, tusb_control_request_t const *p
   return true;
 }
 
-// TinyUSB callback: called when the host closes the audio streaming interface
-// (switches to alternate setting 0).  Turn off the red streaming indicator LED.
 bool tud_audio_set_itf_close_EP_cb(uint8_t rhport, tusb_control_request_t const *p_request) {
   (void) rhport;
   uint8_t const itf = tu_u16_low(tu_le16toh(p_request->wIndex));
@@ -560,21 +587,31 @@ bool tud_audio_set_itf_close_EP_cb(uint8_t rhport, tusb_control_request_t const 
   return true;
 }
 
-// TinyUSB callback: called when the host selects an alternate setting on the
-// audio streaming interface.  Alternate 0 = idle (no bandwidth), alternate 1 =
-// active streaming. Turn the red LED on/off accordingly.
+// Alternate 0 is idle, 1 is 16-bit PCM, and 2 is packed 24-bit PCM.
 bool tud_audio_set_itf_cb(uint8_t rhport, tusb_control_request_t const *p_request) {
   (void) rhport;
   uint8_t const itf = tu_u16_low(tu_le16toh(p_request->wIndex));
   uint8_t const alt = tu_u16_low(tu_le16toh(p_request->wValue));
   if (itf == ITF_NUM_AUDIO_STREAMING) {
-    set_streaming_state(alt != 0u);
+    if (alt > 2u) return false;
+    if (alt == 0u) {
+      set_streaming_state(false);
+      return true;
+    }
+    audio_sample_format_t format = alt == 2u ? AUDIO_FORMAT_PCM24 : AUDIO_FORMAT_PCM16;
+    if (!audio_format_rate_valid(format, s_sample_rate_hz)) return false;
+    if (format != s_audio_format) {
+      set_streaming_state(false);
+      tud_audio_clear_ep_out_ff();
+      s_audio_format = format;
+      s_stream_generation++;
+      i2s_out_set_format(s_sample_rate_hz, format);
+    }
+    set_streaming_state(true);
   }
   return true;
 }
 
-// TinyUSB callback: called just before audio data is read from the USB buffer.
-// Packet draining is handled by audio_task() using tud_audio_available().
 bool tud_audio_rx_done_pre_read_cb(uint8_t rhport, uint16_t n_bytes_received, uint8_t func_id, uint8_t ep_out, uint8_t cur_alt_setting) {
   (void) rhport;
   (void) func_id;
@@ -602,8 +639,6 @@ bool tud_audio_set_req_ep_cb(uint8_t rhport, tusb_control_request_t const *p_req
   return false;
 }
 
-// TinyUSB callback: GET control request on the audio data endpoint.
-// Returns the current sample rate (CUR) or the list of supported rates (RANGE).
 bool tud_audio_get_req_ep_cb(uint8_t rhport, tusb_control_request_t const *p_request) {
   uint16_t const w_length = tu_le16toh(p_request->wLength);
 
@@ -644,8 +679,8 @@ static void hid_response_status(uint8_t opcode, uint16_t request_id) {
   eq_config_t config = config_snapshot(NULL);
   hid_response_prepare(opcode, request_id, EQ_STATUS_OK, EQ_PROTOCOL_STATUS_PAYLOAD_SIZE);
   uint8_t *payload = &s_hid_response[EQ_PROTOCOL_HEADER_SIZE];
-  payload[0] = 2u;  // Firmware major version.
-  payload[1] = 3u;  // Firmware minor version.
+  payload[0] = 3u;
+  payload[1] = 0u;
   payload[2] = EQ_NUM_FILTERS;
   payload[3] = (s_streaming_active ? 0x01u : 0u) | (config_is_dirty() ? 0x02u : 0u) |
                (config.enabled ? 0x04u : 0u);
@@ -665,6 +700,12 @@ static void hid_response_crossfeed(uint8_t opcode, uint16_t request_id) {
   hid_response_prepare(opcode, request_id, EQ_STATUS_OK, CROSSFEED_STATE_SIZE);
   uint8_t *p = s_hid_response + EQ_PROTOCOL_HEADER_SIZE;
   crossfeed_state_encode(p, &s_crossfeed_live, &s_crossfeed_saved);
+}
+
+static void hid_response_output_processing(uint8_t opcode, uint16_t request_id) {
+  hid_response_prepare(opcode, request_id, EQ_STATUS_OK, OUTPUT_PROCESSING_STATE_SIZE);
+  output_processing_state_encode(s_hid_response + EQ_PROTOCOL_HEADER_SIZE,
+                                 &s_output_live, &s_output_saved);
 }
 
 static void hid_process_command(eq_protocol_packet_t const *packet) {
@@ -699,6 +740,12 @@ static void hid_process_command(eq_protocol_packet_t const *packet) {
       else
         hid_response_crossfeed(packet->opcode, packet->request_id);
       break;
+    case EQ_OPCODE_GET_OUTPUT_PROCESSING:
+      if (packet->payload_length)
+        hid_response_prepare(packet->opcode, packet->request_id, EQ_STATUS_INVALID_LENGTH, 0u);
+      else
+        hid_response_output_processing(packet->opcode, packet->request_id);
+      break;
     case EQ_OPCODE_SET_CROSSFEED: {
       crossfeed_config_t config;
       if (packet->payload_length != CROSSFEED_RECORD_SIZE) {
@@ -706,10 +753,8 @@ static void hid_process_command(eq_protocol_packet_t const *packet) {
       } else if (!crossfeed_decode(packet->payload, packet->payload_length, &config)) {
         hid_response_prepare(packet->opcode, packet->request_id, EQ_STATUS_OUT_OF_RANGE, 0u);
       } else {
-        critical_section_enter_blocking(&s_config_lock);
         s_crossfeed_live = config;
-        s_audio_controls_generation++;
-        critical_section_exit(&s_config_lock);
+        publish_audio_controls();
         hid_response_crossfeed(packet->opcode, packet->request_id);
       }
       break;
@@ -721,6 +766,31 @@ static void hid_process_command(eq_protocol_packet_t const *packet) {
         hid_response_prepare(packet->opcode, packet->request_id, EQ_STATUS_BUSY, 0u);
       else {
         s_flash_action = FLASH_ACTION_SAVE_CROSSFEED;
+        s_flash_request_opcode = packet->opcode;
+        s_flash_request_id = packet->request_id;
+        s_flash_write_pending = true;
+      }
+      break;
+    case EQ_OPCODE_SET_OUTPUT_PROCESSING: {
+      output_processing_config_t config;
+      if (packet->payload_length != OUTPUT_PROCESSING_RECORD_SIZE) {
+        hid_response_prepare(packet->opcode, packet->request_id, EQ_STATUS_INVALID_LENGTH, 0u);
+      } else if (!output_processing_decode(packet->payload, packet->payload_length, &config)) {
+        hid_response_prepare(packet->opcode, packet->request_id, EQ_STATUS_OUT_OF_RANGE, 0u);
+      } else {
+        s_output_live = config;
+        publish_audio_controls();
+        hid_response_output_processing(packet->opcode, packet->request_id);
+      }
+      break;
+    }
+    case EQ_OPCODE_SAVE_OUTPUT_PROCESSING:
+      if (packet->payload_length)
+        hid_response_prepare(packet->opcode, packet->request_id, EQ_STATUS_INVALID_LENGTH, 0u);
+      else if (s_flash_write_pending)
+        hid_response_prepare(packet->opcode, packet->request_id, EQ_STATUS_BUSY, 0u);
+      else {
+        s_flash_action = FLASH_ACTION_SAVE_OUTPUT_PROCESSING;
         s_flash_request_opcode = packet->opcode;
         s_flash_request_id = packet->request_id;
         s_flash_write_pending = true;
@@ -1026,6 +1096,9 @@ static void hid_control_task(void) {
       s_streaming_active = false;
       s_feedback_initialized = false;
       i2s_out_set_streaming(false);
+      audio_block_t *block;
+      while (queue_try_remove(&s_pending_audio_blocks, &block))
+        queue_add_blocking(&s_free_audio_blocks, &block);
       led_set_level(LED_BLUE_PIN, 0u);
     }
 
@@ -1040,6 +1113,9 @@ static void hid_control_task(void) {
       succeeded = eq_settings_save_crossfeed(&s_crossfeed_live);
       if (succeeded)
         eq_settings_get_crossfeed(&s_crossfeed_saved);
+    } else if (s_flash_action == FLASH_ACTION_SAVE_OUTPUT_PROCESSING) {
+      succeeded = eq_settings_save_output_processing(&s_output_live);
+      if (succeeded) eq_settings_get_output_processing(&s_output_saved);
     } else {
       succeeded = eq_settings_delete_profile(s_flash_profile_index);
     }
@@ -1067,6 +1143,8 @@ static void hid_control_task(void) {
                          succeeded ? EQ_PROTOCOL_PROFILE_RESULT_PAYLOAD_SIZE : 0u);
     if (succeeded && s_flash_action == FLASH_ACTION_SAVE_CROSSFEED) {
       hid_response_crossfeed(s_flash_request_opcode, s_flash_request_id);
+    } else if (succeeded && s_flash_action == FLASH_ACTION_SAVE_OUTPUT_PROCESSING) {
+      hid_response_output_processing(s_flash_request_opcode, s_flash_request_id);
     } else if (succeeded) {
       eq_profile_state_t state;
       eq_settings_get_profile_state(&state);
@@ -1130,11 +1208,7 @@ static void meter_stream_task(void) {
   }
   if (now < s_meter_next_report_us || s_hid_response_pending || !tud_hid_ready()) return;
 
-  meter_accumulator_t meter;
-  critical_section_enter_blocking(&s_meter_lock);
-  meter = s_meter_accumulator;
-  memset(&s_meter_accumulator, 0, sizeof(s_meter_accumulator));
-  critical_section_exit(&s_meter_lock);
+  meter_accumulator_t meter = meter_take();
 
   uint32_t pre_eq_left_mean_square = 0u;
   uint32_t pre_eq_right_mean_square = 0u;
@@ -1195,6 +1269,11 @@ static void audio_feedback_task(void) {
   s_feedback_next_update_us = now + 1000u;
 }
 
+static void audio_block_release(i2s_audio_block_t *block) {
+  bool added = queue_try_add(&s_free_audio_blocks, &block);
+  hard_assert(added);
+}
+
 int main(void) {
   board_init();
 
@@ -1202,8 +1281,6 @@ int main(void) {
   adc_set_temp_sensor_enabled(true);
   adc_select_input(ADC_TEMPERATURE_CHANNEL_NUM);
 
-  critical_section_init(&s_config_lock);
-  critical_section_init(&s_meter_lock);
   queue_init(&s_free_audio_blocks, sizeof(audio_block_t *), AUDIO_BLOCK_COUNT);
   queue_init(&s_pending_audio_blocks, sizeof(audio_block_t *), AUDIO_BLOCK_COUNT);
   for (uint32_t i = 0; i < AUDIO_BLOCK_COUNT; i++) {
@@ -1213,13 +1290,16 @@ int main(void) {
 
   eq_settings_core_init();
   uint32_t loaded_generation = 1u;
-  if (!eq_settings_load(&s_desired_config, &loaded_generation)) {
-    eq_config_set_defaults(&s_desired_config);
+  eq_config_t initial_config;
+  if (!eq_settings_load(&initial_config, &loaded_generation)) {
+    eq_config_set_defaults(&initial_config);
     loaded_generation = 1u;
   }
   eq_settings_get_crossfeed(&s_crossfeed_live);
   s_crossfeed_saved = s_crossfeed_live;
-  s_saved_config = s_desired_config;
+  eq_settings_get_output_processing(&s_output_live);
+  s_output_saved = s_output_live;
+  s_saved_config = initial_config;
   s_config_generation = loaded_generation;
   s_saved_generation = loaded_generation;
   eq_profile_state_t profile_state;
@@ -1227,34 +1307,39 @@ int main(void) {
   s_active_profile = profile_state.default_profile;
   s_persisted_profile = profile_state.default_profile;
 
+  for (uint32_t i = 0; i < 2u; ++i) {
+    s_config_snapshots[i].config = initial_config;
+    s_config_snapshots[i].generation = loaded_generation;
+    s_controls_snapshots[i].crossfeed = s_crossfeed_live;
+    s_controls_snapshots[i].output = s_output_live;
+    s_controls_snapshots[i].gains[0] = 1.0f;
+    s_controls_snapshots[i].gains[1] = 1.0f;
+    s_controls_snapshots[i].generation = s_audio_controls_generation;
+  }
+
   multicore_launch_core1(dsp_core_main);
   while (!s_dsp_core_ready) tight_loop_contents();
 
-  // Initialise both status LEDs and ensure they start off.
   led_pwm_init(LED_RED_PIN);
   led_pwm_init(LED_BLUE_PIN);
   red_led_set(false);
   led_set_level(LED_BLUE_PIN, 0u);
 
-  // Start the I2S output driver (plays silence until USB audio arrives).
-  i2s_out_init(s_sample_rate_hz);
+  i2s_out_init(s_sample_rate_hz, s_audio_format, audio_block_release);
 
-  // Initialise the TinyUSB device stack and any post-TinyUSB board peripherals.
   tud_init(BOARD_TUD_RHPORT);
   board_init_after_tusb();
 
-  // Clear mute and volume state (no mute, 0 dB).
   memset(s_mute, 0, sizeof(s_mute));
   memset(s_volume_q8, 0, sizeof(s_volume_q8));
 
-  // Main loop: process USB events then forward any received audio to I2S.
   while (true) {
-    tud_task();    // TinyUSB internal event pump (must be called regularly)
+    tud_task();
     device_reset_task();
     hid_control_task();
     meter_stream_task();
     red_led_set(hid_activity_level(&s_hid_activity, time_us_32(), s_streaming_active));
-    audio_task();  // Drain USB receive buffer → I2S ring buffer
+    audio_task();
     audio_feedback_task();
   }
 }
