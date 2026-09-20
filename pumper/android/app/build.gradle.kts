@@ -4,7 +4,7 @@ plugins {
 }
 
 android {
-    namespace = "dev.lightwolf.pumper.controller"
+    namespace = "dev.wolf.yuan.pumper"
     compileSdk {
         version = release(37) {
             minorApiLevel = 1
@@ -12,11 +12,11 @@ android {
     }
 
     defaultConfig {
-        applicationId = "dev.lightwolf.pumper.controller"
+        applicationId = "dev.wolf.yuan.pumper"
         minSdk = 34
         targetSdk = 37
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = 2
+        versionName = "1.3.2"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true

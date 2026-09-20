@@ -139,6 +139,10 @@ Do not vendor or commit the patched SDK into Pumper.
 - The Android app targets `minSdk 34` and uses JDK 17, Gradle, Kotlin, and
   Jetpack Compose/Material 3. Keep debug-only simulator code out of release
   builds.
+- Set the Android `versionName` to `1.<firmware major>.<firmware minor>` for
+  the newest firmware version it supports (currently `1.3.2` for firmware
+  3.2). Update it when supported firmware changes, and increment `versionCode`
+  for every release.
 - Use the same fixed-size HID protocol and persistence semantics as the web
   controller. Crossfeed, output processing, and EQ profile saves remain
   independent operations.
