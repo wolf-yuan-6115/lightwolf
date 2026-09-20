@@ -30,6 +30,20 @@ static uint32_t silence[SILENCE_MAX_WORDS];
 static critical_section_t lock;
 static i2s_block_release_fn release_block;
 
+static void configure_normal_dma(void) {
+  for (uint32_t i = 0; i < DMA_COUNT; i++) {
+    dma_channel_config cfg = dma_channel_get_default_config((uint)dma_chan[i]);
+    channel_config_set_transfer_data_size(&cfg, DMA_SIZE_32);
+    channel_config_set_read_increment(&cfg, true);
+    channel_config_set_write_increment(&cfg, false);
+    channel_config_set_dreq(&cfg, pio_get_dreq(pio, sm, true));
+    channel_config_set_chain_to(&cfg, (uint)dma_chan[i ^ 1u]);
+    dma_channel_configure((uint)dma_chan[i], &cfg, &pio->txf[sm], silence,
+                          dma_encode_transfer_count(1u), false);
+    dma_channel_set_irq0_enabled((uint)dma_chan[i], true);
+  }
+}
+
 static uint32_t next_silence_frames(void) {
   uint32_t frames = rate_hz / 1000u;
   silence_phase += rate_hz % 1000u;
@@ -68,6 +82,7 @@ static void restart_dma(void) {
     dma_channel_abort((uint)dma_chan[i]);
     dma_channel_acknowledge_irq0((uint)dma_chan[i]);
   }
+  configure_normal_dma();
   silence_phase = 0u;
   prepare_dma(0u);
   prepare_dma(1u);
@@ -129,16 +144,7 @@ void i2s_out_init(uint32_t sample_rate_hz, audio_sample_format_t format,
   audio_block_queue_reset(&block_queue, rate_hz, false);
   configure_pio();
   for (uint32_t i = 0; i < DMA_COUNT; i++) dma_chan[i] = dma_claim_unused_channel(true);
-  for (uint32_t i = 0; i < DMA_COUNT; i++) {
-    dma_channel_config cfg = dma_channel_get_default_config((uint)dma_chan[i]);
-    channel_config_set_transfer_data_size(&cfg, DMA_SIZE_32);
-    channel_config_set_read_increment(&cfg, true);
-    channel_config_set_write_increment(&cfg, false);
-    channel_config_set_dreq(&cfg, pio_get_dreq(pio, sm, true));
-    channel_config_set_chain_to(&cfg, (uint)dma_chan[i ^ 1u]);
-    dma_channel_configure((uint)dma_chan[i], &cfg, &pio->txf[sm], silence, 1u, false);
-    dma_channel_set_irq0_enabled((uint)dma_chan[i], true);
-  }
+  configure_normal_dma();
   irq_set_exclusive_handler(DMA_IRQ_0, i2s_dma_irq_handler);
   irq_set_enabled(DMA_IRQ_0, true);
   restart_dma();
@@ -186,6 +192,51 @@ void i2s_out_set_streaming(bool enabled) {
   critical_section_exit(&lock);
   for (size_t i = 0; i < count; i++) release_block(reclaim[i]);
   if (dma_chan[0] >= 0) restart_dma();
+}
+
+void i2s_out_enter_flash_mute(void) {
+  i2s_audio_block_t *reclaim[I2S_AUDIO_BLOCK_COUNT + DMA_COUNT];
+  void *queued[I2S_AUDIO_BLOCK_COUNT];
+  size_t count = 0u;
+
+  irq_set_enabled(DMA_IRQ_0, false);
+  for (uint32_t i = 0; i < DMA_COUNT; i++) {
+    dma_channel_set_irq0_enabled((uint)dma_chan[i], false);
+    dma_channel_abort((uint)dma_chan[i]);
+    dma_channel_acknowledge_irq0((uint)dma_chan[i]);
+  }
+
+  dma_channel_config cfg = dma_channel_get_default_config((uint)dma_chan[0]);
+  channel_config_set_transfer_data_size(&cfg, DMA_SIZE_32);
+  channel_config_set_read_increment(&cfg, false);
+  channel_config_set_write_increment(&cfg, false);
+  channel_config_set_dreq(&cfg, pio_get_dreq(pio, sm, true));
+  channel_config_set_chain_to(&cfg, (uint)dma_chan[0]);
+  dma_channel_configure((uint)dma_chan[0], &cfg, &pio->txf[sm], silence,
+                        dma_encode_endless_transfer_count(), true);
+
+  critical_section_enter_blocking(&lock);
+  size_t queued_count = audio_block_queue_drain(&block_queue, queued, I2S_AUDIO_BLOCK_COUNT);
+  for (size_t i = 0; i < queued_count; i++)
+    reclaim[count++] = (i2s_audio_block_t *)queued[i];
+  for (uint32_t i = 0; i < DMA_COUNT; i++) {
+    if (active[i]) reclaim[count++] = active[i];
+    active[i] = NULL;
+  }
+  audio_block_queue_reset(&block_queue, rate_hz, false);
+  low_water_frames = UINT32_MAX;
+  critical_section_exit(&lock);
+
+  for (size_t i = 0; i < count; i++) release_block(reclaim[i]);
+}
+
+void i2s_out_exit_flash_mute(bool streaming) {
+  dma_channel_abort((uint)dma_chan[0]);
+  dma_channel_acknowledge_irq0((uint)dma_chan[0]);
+  critical_section_enter_blocking(&lock);
+  audio_block_queue_reset(&block_queue, rate_hz, streaming);
+  critical_section_exit(&lock);
+  restart_dma();
 }
 
 uint32_t i2s_out_buffered_frames(void) {

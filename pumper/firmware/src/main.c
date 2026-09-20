@@ -680,7 +680,7 @@ static void hid_response_status(uint8_t opcode, uint16_t request_id) {
   hid_response_prepare(opcode, request_id, EQ_STATUS_OK, EQ_PROTOCOL_STATUS_PAYLOAD_SIZE);
   uint8_t *payload = &s_hid_response[EQ_PROTOCOL_HEADER_SIZE];
   payload[0] = 3u;
-  payload[1] = 1u;
+  payload[1] = 2u;
   payload[2] = EQ_NUM_FILTERS;
   payload[3] = (s_streaming_active ? 0x01u : 0u) | (config_is_dirty() ? 0x02u : 0u) |
                (config.enabled ? 0x04u : 0u);
@@ -1096,12 +1096,12 @@ static void hid_control_task(void) {
       s_stream_generation++;
       s_streaming_active = false;
       s_feedback_initialized = false;
-      i2s_out_set_streaming(false);
-      audio_block_t *block;
-      while (queue_try_remove(&s_pending_audio_blocks, &block))
-        queue_add_blocking(&s_free_audio_blocks, &block);
-      led_set_level(LED_BLUE_PIN, 0u);
     }
+    i2s_out_enter_flash_mute();
+    audio_block_t *block;
+    while (queue_try_remove(&s_pending_audio_blocks, &block))
+      queue_add_blocking(&s_free_audio_blocks, &block);
+    led_set_level(LED_BLUE_PIN, 0u);
 
     uint32_t generation;
     eq_config_t config = config_snapshot(&generation);
@@ -1134,10 +1134,10 @@ static void hid_control_task(void) {
     if (resume_stream) {
       tud_audio_clear_ep_out_ff();
       s_stream_generation++;
-      i2s_out_set_streaming(true);
       s_streaming_active = true;
       s_feedback_next_update_us = 0u;
     }
+    i2s_out_exit_flash_mute(resume_stream);
 
     hid_response_prepare(s_flash_request_opcode, s_flash_request_id,
                          succeeded ? EQ_STATUS_OK : EQ_STATUS_STORAGE_ERROR,

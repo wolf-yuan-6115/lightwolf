@@ -28,6 +28,8 @@ void i2s_out_init(uint32_t sample_rate_hz, audio_sample_format_t format,
 void i2s_out_set_format(uint32_t sample_rate_hz, audio_sample_format_t format);
 bool i2s_out_submit(i2s_audio_block_t *block);
 void i2s_out_set_streaming(bool streaming);
+void i2s_out_enter_flash_mute(void);
+void i2s_out_exit_flash_mute(bool streaming);
 uint32_t i2s_out_buffered_frames(void);
 uint32_t i2s_out_underrun_frames(void);
 uint32_t i2s_out_low_water_frames(void);
