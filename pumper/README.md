@@ -10,6 +10,62 @@ be controlled from either the React WebHID controller or the native Android
 controller. Both controllers preview edits live and save persistent settings
 only through explicit save actions.
 
+## Supported audio formats
+
+Pumper accepts stereo PCM over USB Audio Class 2 in the following formats:
+
+| Sample rate | 16-bit stereo | Packed 24-bit stereo |
+| ----------- | ------------- | -------------------- |
+| 44.1 kHz    | Yes           | Yes                  |
+| 48 kHz      | Yes           | Yes                  |
+| 88.2 kHz    | Yes           | Yes                  |
+| 96 kHz      | Yes           | Yes                  |
+| 176.4 kHz   | Yes           | No                   |
+| 192 kHz     | Yes           | No                   |
+
+## Audio processing and hardware path
+
+Audio packets cross from the USB-facing core into the real-time DSP core
+through a fixed block pool. After processing, ping-pong DMA feeds the PIO I2S
+transmitter; the analog stages then filter, buffer, attenuate, and drive the
+headphone output.
+
+```mermaid
+flowchart LR
+    HOST[USB host<br/>UAC2 stereo PCM]
+
+    subgraph DIGITAL[Digital audio path]
+        direction LR
+        USB[TinyUSB on RP2354 core 0<br/>receive and decode USB packets]
+        QUEUE[Fixed audio-block queue<br/>core 0 to core 1]
+        EQ[Preamp and<br/>10-band parametric EQ]
+        XF[Headphone crossfeed]
+        HOSTCTL[USB host<br/>gain and mute]
+        OUTPROC[Output processing<br/>balance, mono, and width]
+        LIMIT[Always-on<br/>stereo limiter]
+        PACK[Final PCM quantization<br/>and I2S packing]
+        I2S[Ping-pong DMA and PIO<br/>I2S transmitter]
+        DAC[PCM5102A<br/>I2S DAC]
+
+        USB --> QUEUE --> EQ --> XF --> HOSTCTL --> OUTPROC --> LIMIT --> PACK --> I2S --> DAC
+    end
+
+    subgraph ANALOG[Analog audio path]
+        direction LR
+        FILTER[Passive output filters]
+        BUFFER[OPA1652<br/>stereo buffer]
+        VOLUME[Dual-gang analog<br/>volume control]
+        DRIVER[OPA1622<br/>headphone driver]
+        PROTECT[Output ESD protection]
+        JACK[3.5 mm TRRS<br/>analog output]
+
+        FILTER --> BUFFER --> VOLUME --> DRIVER --> PROTECT --> JACK
+    end
+
+    HOST --> USB
+    DAC --> FILTER
+```
+
 ## Repository layout
 
 - [`firmware/`](firmware/) — RP2354 firmware and portable host tests.
