@@ -59,7 +59,7 @@ extern "C" {
 #define CFG_TUD_AUDIO_FUNC_1_MAX_SAMPLE_RATE     192000  // Highest advertised sample rate (Hz)
 #define CFG_TUD_AUDIO_FUNC_1_DESC_LEN            196
 #define CFG_TUD_AUDIO_FUNC_1_N_AS_INT            1       // Number of Audio Streaming interfaces
-#define CFG_TUD_AUDIO_FUNC_1_CTRL_BUF_SZ        64      // Buffer for audio control requests (bytes)
+#define CFG_TUD_AUDIO_FUNC_1_CTRL_BUF_SZ        74      // Buffer for audio control requests (bytes)
 
 // Maximum OUT endpoint packet size for 192 kHz / 16-bit stereo:
 //   ceil(192000 / 1000) + 1 extra packet = 193 frames × 2 ch × 2 bytes = 772 bytes.
