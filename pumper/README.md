@@ -31,7 +31,7 @@ transmitter; the analog stages then filter, buffer, attenuate, and drive the
 headphone output.
 
 ```mermaid
-flowchart LR
+flowchart TB
     HOST[USB host<br/>UAC2 stereo PCM]
 
     subgraph DIGITAL[Digital audio path]
