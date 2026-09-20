@@ -680,7 +680,7 @@ static void hid_response_status(uint8_t opcode, uint16_t request_id) {
   hid_response_prepare(opcode, request_id, EQ_STATUS_OK, EQ_PROTOCOL_STATUS_PAYLOAD_SIZE);
   uint8_t *payload = &s_hid_response[EQ_PROTOCOL_HEADER_SIZE];
   payload[0] = 3u;
-  payload[1] = 0u;
+  payload[1] = 1u;
   payload[2] = EQ_NUM_FILTERS;
   payload[3] = (s_streaming_active ? 0x01u : 0u) | (config_is_dirty() ? 0x02u : 0u) |
                (config.enabled ? 0x04u : 0u);
@@ -694,6 +694,7 @@ static void hid_response_status(uint8_t opcode, uint16_t request_id) {
   eq_protocol_write_u32(payload + 32u, clock_get_hz(clk_sys));
   eq_protocol_write_u32(payload + 36u, s_dsp_max_block_us);
   eq_protocol_write_u32(payload + 40u, i2s_out_low_water_frames());
+  payload[44] = s_audio_format == AUDIO_FORMAT_PCM24 ? 24u : 16u;
 }
 
 static void hid_response_crossfeed(uint8_t opcode, uint16_t request_id) {
