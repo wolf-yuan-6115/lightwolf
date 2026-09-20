@@ -7,6 +7,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.assertDoesNotExist
 import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
@@ -21,6 +22,8 @@ import dev.lightwolf.pumper.controller.protocol.CrossfeedConfig
 import dev.lightwolf.pumper.controller.protocol.CrossfeedMode
 import dev.lightwolf.pumper.controller.protocol.CrossfeedState
 import dev.lightwolf.pumper.controller.protocol.DeviceStatus
+import dev.lightwolf.pumper.controller.protocol.DefaultOutputProcessingConfig
+import dev.lightwolf.pumper.controller.protocol.OutputProcessingState
 import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
@@ -40,11 +43,14 @@ class AudioScreenComposeTest {
                     ),
                     onCrossfeedChange = {},
                     onSaveCrossfeed = {},
+                    onOutputProcessingChange = {},
+                    onSaveOutputProcessing = {},
                 )
             }
         }
 
         assertEquals(2, composeRule.onAllNodesWithText("Requires firmware 2.2").fetchSemanticsNodes().size)
+        assertEquals(1, composeRule.onAllNodesWithText("Requires firmware 3.0").fetchSemanticsNodes().size)
     }
 
     @Test
@@ -59,11 +65,15 @@ class AudioScreenComposeTest {
                         state = state.copy(crossfeed = current.copy(live = config, dirty = config != current.saved))
                     },
                     onSaveCrossfeed = {},
+                    onOutputProcessingChange = {},
+                    onSaveOutputProcessing = {},
                 )
             }
         }
 
         composeRule.onNodeWithText("Master volume").assertExists()
+        composeRule.onNodeWithText("Bit depth").assertExists()
+        composeRule.onNodeWithText("16-bit").assertExists()
         composeRule.onNodeWithText("Muted · −12 dB").assertExists()
         composeRule.onNodeWithText("Medium").performClick()
         composeRule.onNodeWithTag("crossfeed-strength").assertIsNotEnabled()
@@ -72,23 +82,69 @@ class AudioScreenComposeTest {
         composeRule.onNodeWithText("Unsaved").assertExists()
         composeRule.onNodeWithTag("save-crossfeed").assertIsEnabled()
     }
+
+    @Test
+    fun legacyStatusOmitsBitDepth() {
+        composeRule.setContent {
+            MaterialTheme {
+                AudioScreen(
+                    state = supportedState(bitDepth = null),
+                    onCrossfeedChange = {},
+                    onSaveCrossfeed = {},
+                    onOutputProcessingChange = {},
+                    onSaveOutputProcessing = {},
+                )
+            }
+        }
+
+        composeRule.onNodeWithText("Bit depth").assertDoesNotExist()
+    }
+
+    @Test
+    fun firmware3OutputControlsAreIndependentAndMonoPreservesWidth() {
+        composeRule.setContent {
+            var state by remember { mutableStateOf(supportedState(3, 0)) }
+            MaterialTheme {
+                AudioScreen(
+                    state = state,
+                    onCrossfeedChange = {},
+                    onSaveCrossfeed = {},
+                    onOutputProcessingChange = { config ->
+                        val current = requireNotNull(state.outputProcessing)
+                        state = state.copy(outputProcessing = current.copy(live = config, dirty = config != current.saved))
+                    },
+                    onSaveOutputProcessing = {},
+                )
+            }
+        }
+
+        composeRule.onNodeWithTag("output-processing-card").assertExists()
+        composeRule.onNodeWithTag("output-width").assertIsEnabled()
+        composeRule.onNodeWithTag("output-mono").performClick()
+        composeRule.onNodeWithTag("output-width").assertIsNotEnabled()
+        composeRule.onNodeWithTag("save-output-processing").assertIsEnabled()
+        composeRule.onNodeWithText("Unsaved").assertExists()
+    }
 }
 
-private fun supportedState(): ControllerUiState {
+private fun supportedState(major: Int = 2, minor: Int = 3, bitDepth: Int? = 16): ControllerUiState {
     val crossfeed = CrossfeedConfig(CrossfeedMode.Medium, 20.0, 700, 0.25)
     return ControllerUiState(
         connection = ConnectionState.Connected,
-        status = deviceStatus(2, 3),
+        status = deviceStatus(major, minor, bitDepth),
         audioControls = AudioControls(
             master = AudioChannelControl(-12.0, true),
             left = AudioChannelControl(0.0, false),
             right = AudioChannelControl(0.0, false),
         ),
         crossfeed = CrossfeedState(crossfeed, crossfeed, false),
+        outputProcessing = if (major >= 3) {
+            OutputProcessingState(DefaultOutputProcessingConfig, DefaultOutputProcessingConfig, false)
+        } else null,
     )
 }
 
-private fun deviceStatus(major: Int, minor: Int) = DeviceStatus(
+private fun deviceStatus(major: Int, minor: Int, bitDepth: Int? = null) = DeviceStatus(
     firmwareMajor = major,
     firmwareMinor = minor,
     bandCount = 10,
@@ -96,6 +152,7 @@ private fun deviceStatus(major: Int, minor: Int) = DeviceStatus(
     dirty = false,
     eqEnabled = true,
     sampleRateHz = 48_000,
+    bitDepth = bitDepth,
     configGeneration = 1,
     savedGeneration = 1,
     appliedGeneration = 1,

@@ -12,11 +12,15 @@ import java.nio.ByteOrder
 
 class PumperProtocolTest {
     @Test
-    fun `audio and crossfeed opcodes match firmware contract`() {
+    fun `audio processing opcodes and filter values match firmware contract`() {
         assertEquals(0x06, Opcode.GetAudioControls.value)
         assertEquals(0x07, Opcode.GetCrossfeed.value)
         assertEquals(0x12, Opcode.SetCrossfeed.value)
         assertEquals(0x26, Opcode.SaveCrossfeed.value)
+        assertEquals(0x08, Opcode.GetOutputProcessing.value)
+        assertEquals(0x13, Opcode.SetOutputProcessing.value)
+        assertEquals(0x27, Opcode.SaveOutputProcessing.value)
+        assertEquals(listOf(3, 4, 5, 6), listOf(FilterType.LowPass, FilterType.HighPass, FilterType.Notch, FilterType.BandPass).map { it.value })
     }
 
     @Test
@@ -39,7 +43,7 @@ class PumperProtocolTest {
 
     @Test
     fun `decodes status variants`() {
-        val payload = ByteArray(44)
+        val payload = ByteArray(48)
         val view = ByteBuffer.wrap(payload).order(ByteOrder.LITTLE_ENDIAN)
         payload[0] = 1
         payload[1] = 9
@@ -50,19 +54,28 @@ class PumperProtocolTest {
         view.putInt(32, 180000000)
         view.putInt(36, 417)
         view.putInt(40, 322)
+        payload[44] = 24
 
         val current = PumperProtocol.decodeStatus(payload)
         assertEquals("1.9", current.firmwareVersion)
         assertEquals(42.375, current.temperatureC!!, 0.0001)
         assertEquals(180.0, current.systemClockMHz!!, 0.0001)
         assertEquals(417L, current.maxDspBlockUs)
+        assertEquals(24, current.bitDepth)
         assertTrue(current.supportsDeviceReset)
         assertFalse(current.supportsAudioControls)
         payload[0] = 2
         payload[1] = 2
         assertTrue(PumperProtocol.decodeStatus(payload).supportsAudioControls)
+        assertFalse(PumperProtocol.decodeStatus(payload).supportsFirmware3Controls)
+        payload[0] = 3
+        payload[1] = 0
+        assertTrue(PumperProtocol.decodeStatus(payload).supportsFirmware3Controls)
+        assertNull(PumperProtocol.decodeStatus(payload.copyOf(44)).bitDepth)
         assertNull(PumperProtocol.decodeStatus(payload.copyOf(28)).temperatureC)
         assertThrows(ProtocolException::class.java) { PumperProtocol.decodeStatus(ByteArray(30)) }
+        payload[44] = 20
+        assertThrows(ProtocolException::class.java) { PumperProtocol.decodeStatus(payload) }
     }
 
     @Test
@@ -162,6 +175,55 @@ class PumperProtocolTest {
             PumperProtocol.decodeCrossfeedState(PumperProtocol.encodeCrossfeedState(
                 CrossfeedState(DefaultCrossfeedConfig, DefaultCrossfeedConfig, false),
             ).also { it[16] = 2 })
+        }
+    }
+
+    @Test
+    fun `output processing record and dirty state round trip`() {
+        val live = OutputProcessingConfig(true, true, true, true, -37.0, 142.0)
+        val saved = DefaultOutputProcessingConfig
+        val record = PumperProtocol.encodeOutputProcessing(live)
+        assertArrayEquals(byteArrayOf(0x0f, 0, 0x8c.toByte(), 0xf1.toByte(), 0x78, 0x37, 0, 0), record)
+        assertEquals(live, PumperProtocol.decodeOutputProcessing(record))
+
+        val state = OutputProcessingState(live, saved, true)
+        assertEquals(state, PumperProtocol.decodeOutputProcessingState(PumperProtocol.encodeOutputProcessingState(state)))
+        assertEquals(DefaultOutputProcessingConfig, PumperProtocol.decodeOutputProcessing(PumperProtocol.encodeOutputProcessing(DefaultOutputProcessingConfig)))
+        assertEquals(
+            DefaultOutputProcessingConfig.copy(balancePercent = 12.35, widthPercent = 99.99),
+            PumperProtocol.decodeOutputProcessing(
+                PumperProtocol.encodeOutputProcessing(
+                    DefaultOutputProcessingConfig.copy(balancePercent = 12.345, widthPercent = 99.994),
+                ),
+            ),
+        )
+    }
+
+    @Test
+    fun `output processing rejects malformed reserved flags and bounds`() {
+        val valid = PumperProtocol.encodeOutputProcessing(DefaultOutputProcessingConfig)
+        assertThrows(ProtocolException::class.java) { PumperProtocol.decodeOutputProcessing(ByteArray(7)) }
+        listOf(1, 6, 7).forEach { offset ->
+            assertThrows(ProtocolException::class.java) {
+                PumperProtocol.decodeOutputProcessing(valid.copyOf().also { it[offset] = 1 })
+            }
+        }
+        assertThrows(ProtocolException::class.java) {
+            PumperProtocol.decodeOutputProcessing(valid.copyOf().also { it[0] = 0x10 })
+        }
+        assertThrows(ProtocolException::class.java) {
+            PumperProtocol.encodeOutputProcessing(DefaultOutputProcessingConfig.copy(balancePercent = -100.01))
+        }
+        assertThrows(ProtocolException::class.java) {
+            PumperProtocol.encodeOutputProcessing(DefaultOutputProcessingConfig.copy(widthPercent = 200.01))
+        }
+        assertThrows(ProtocolException::class.java) { PumperProtocol.decodeOutputProcessingState(ByteArray(16)) }
+        assertThrows(ProtocolException::class.java) {
+            PumperProtocol.decodeOutputProcessingState(
+                PumperProtocol.encodeOutputProcessingState(
+                    OutputProcessingState(DefaultOutputProcessingConfig, DefaultOutputProcessingConfig, false),
+                ).also { it[16] = 2 },
+            )
         }
     }
 }

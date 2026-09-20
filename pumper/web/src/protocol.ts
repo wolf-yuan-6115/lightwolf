@@ -303,6 +303,7 @@ export interface DeviceStatus {
   dirty: boolean;
   eqEnabled: boolean;
   sampleRateHz: number;
+  bitDepth: number | null;
   configGeneration: number;
   savedGeneration: number;
   appliedGeneration: number;
@@ -447,11 +448,15 @@ export function decodeBand(payload: Uint8Array): { index: number; band: EqBand }
 }
 
 export function decodeStatus(payload: Uint8Array): DeviceStatus {
-  if (payload.length !== 28 && payload.length !== 32 && payload.length !== 44) {
+  if (payload.length !== 28 && payload.length !== 32 && payload.length !== 44 && payload.length !== 48) {
     throw new Error("Invalid status response");
   }
   const view = viewFor(payload);
   const flags = payload[3];
+  const bitDepth = payload.length >= 48 ? payload[44] : null;
+  if (bitDepth !== null && bitDepth !== 16 && bitDepth !== 24) {
+    throw new Error("Invalid status bit depth");
+  }
   return {
     firmwareVersion: `${payload[0]}.${payload[1]}`,
     bandCount: payload[2],
@@ -459,6 +464,7 @@ export function decodeStatus(payload: Uint8Array): DeviceStatus {
     dirty: (flags & 0x02) !== 0,
     eqEnabled: (flags & 0x04) !== 0,
     sampleRateHz: view.getUint32(4, true),
+    bitDepth,
     configGeneration: view.getUint32(8, true),
     savedGeneration: view.getUint32(12, true),
     appliedGeneration: view.getUint32(16, true),

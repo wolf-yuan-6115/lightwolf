@@ -1,4 +1,4 @@
-import { Activity, Clock3, Headphones, Save, SlidersHorizontal, Usb, Volume2, VolumeX } from "lucide-react";
+import { Activity, AudioLines, Clock3, Headphones, Save, SlidersHorizontal, Usb, Volume2, VolumeX } from "lucide-react";
 import { NumericInput } from "./NumericInput";
 import { SelectMenu } from "./SelectMenu";
 import { SaveStateBadge } from "./SaveStateBadge";
@@ -33,7 +33,7 @@ interface Props {
   onError: (message: string) => void;
 }
 
-export function UsbAudioState({ settings, connected, busy, sampleRateHz, streaming }: Omit<Props, "onError"> & { sampleRateHz: number; streaming: boolean }) {
+export function UsbAudioState({ settings, connected, busy, sampleRateHz, bitDepth, streaming }: Omit<Props, "onError"> & { sampleRateHz: number; bitDepth: number | null; streaming: boolean }) {
   const { audio, supported } = settings;
   const unavailable = !connected ? "Connect DAC to view audio settings" : !supported ? "Requires firmware 2.2" : null;
   return (
@@ -44,6 +44,10 @@ export function UsbAudioState({ settings, connected, busy, sampleRateHz, streami
           <dt className="flex items-center gap-2 text-sm text-base-content/65"><Clock3 size={16} aria-hidden="true" />Sample rate</dt>
           <dd className="text-sm font-semibold tabular-nums">{(sampleRateHz / 1000).toFixed(sampleRateHz % 1000 ? 1 : 0)} kHz</dd>
         </div>
+        {bitDepth !== null && <div className="flex min-w-0 items-center justify-between gap-3 rounded-box bg-base-200 px-3 py-2.5">
+          <dt className="flex items-center gap-2 text-sm text-base-content/65"><AudioLines size={16} aria-hidden="true" />Bit depth</dt>
+          <dd className="text-sm font-semibold tabular-nums">{bitDepth}-bit</dd>
+        </div>}
         <div className="flex min-w-0 items-center justify-between gap-3 rounded-box bg-base-200 px-3 py-2.5">
           <dt className="flex items-center gap-2 text-sm text-base-content/65"><Activity size={16} aria-hidden="true" />Stream state</dt>
           <dd className="text-sm font-semibold">{streaming ? "Streaming" : "Idle"}</dd>

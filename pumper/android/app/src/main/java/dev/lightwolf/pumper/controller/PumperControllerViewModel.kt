@@ -17,7 +17,10 @@ import dev.lightwolf.pumper.controller.protocol.METER_REPORT_INTERVAL_MS
 import dev.lightwolf.pumper.controller.protocol.METER_TIMEOUT_MS
 import dev.lightwolf.pumper.controller.protocol.MeterLevel
 import dev.lightwolf.pumper.controller.protocol.Opcode
+import dev.lightwolf.pumper.controller.protocol.OutputProcessingConfig
+import dev.lightwolf.pumper.controller.protocol.OutputProcessingState
 import dev.lightwolf.pumper.controller.protocol.PumperProtocol
+import dev.lightwolf.pumper.controller.protocol.WidthMode
 import dev.lightwolf.pumper.controller.transport.PumperClient
 import dev.lightwolf.pumper.controller.transport.PumperDevice
 import dev.lightwolf.pumper.controller.transport.PumperTransport
@@ -59,6 +62,9 @@ class PumperControllerViewModel(application: Application) : AndroidViewModel(app
     private var pendingCrossfeed: CrossfeedConfig? = null
     private var crossfeedPreviewJob: Job? = null
     private var crossfeedRevision = 0L
+    private var pendingOutputProcessing: OutputProcessingConfig? = null
+    private var outputProcessingPreviewJob: Job? = null
+    private var outputProcessingRevision = 0L
     private var sessionRevision = 0L
     private var submittedPreampDb = DefaultEqConfig.preampDb
     private var foreground = false
@@ -146,6 +152,8 @@ class PumperControllerViewModel(application: Application) : AndroidViewModel(app
                     audioControls = null,
                     crossfeed = null,
                     crossfeedSaving = false,
+                    outputProcessing = null,
+                    outputProcessingSaving = false,
                     busy = false,
                     confirmation = null,
                 )
@@ -166,7 +174,9 @@ class PumperControllerViewModel(application: Application) : AndroidViewModel(app
         val current = _state.value.config
         val oldBand = current.bands.getOrNull(index) ?: return
         var newBand = transform(oldBand)
-        if (newBand.type != FilterType.Peaking) newBand = newBand.copy(q = newBand.q.coerceIn(0.1, 1.0))
+        val shelf = newBand.type == FilterType.LowShelf || newBand.type == FilterType.HighShelf
+        if (shelf) newBand = newBand.copy(q = newBand.q.coerceIn(0.1, 1.0))
+        if (newBand.type.value >= FilterType.LowPass.value) newBand = newBand.copy(widthMode = WidthMode.Q)
         EqValidation.band(newBand, index)?.let {
             _state.update { state -> state.copy(error = it) }
             return
@@ -319,13 +329,63 @@ class PumperControllerViewModel(application: Application) : AndroidViewModel(app
         }
     }
 
+    fun updateOutputProcessing(config: OutputProcessingConfig) {
+        val current = _state.value
+        if (!current.connected || current.outputProcessingSaving || current.status?.supportsFirmware3Controls != true) return
+        val verified = runCatching {
+            PumperProtocol.decodeOutputProcessing(PumperProtocol.encodeOutputProcessing(config))
+        }.getOrElse { error ->
+            _state.update { it.copy(error = error.message ?: "Invalid output processing settings.") }
+            return
+        }
+        val state = current.outputProcessing ?: return
+        outputProcessingRevision++
+        pendingOutputProcessing = verified
+        _state.update {
+            it.copy(
+                outputProcessing = state.copy(live = verified, dirty = verified != state.saved),
+                message = null,
+                error = null,
+            )
+        }
+        scheduleOutputProcessingPreview()
+    }
+
+    fun saveOutputProcessing() {
+        val current = _state.value
+        if (!current.connected || current.outputProcessingSaving || current.outputProcessing?.dirty != true) return
+        viewModelScope.launch {
+            val activeSession = sessionRevision
+            _state.update { it.copy(outputProcessingSaving = true, error = null, message = null) }
+            try {
+                outputProcessingPreviewJob?.cancel()
+                outputProcessingPreviewJob = null
+                pendingOutputProcessing = _state.value.outputProcessing?.live
+                flushOutputProcessingPreview(throwOnFailure = true)
+                val verified = PumperProtocol.decodeOutputProcessingState(
+                    requireNotNull(client).request(Opcode.SaveOutputProcessing, timeoutMs = 8_000).payload,
+                )
+                if (activeSession != sessionRevision) return@launch
+                outputProcessingRevision++
+                _state.update { it.copy(outputProcessing = verified, message = "Output processing saved for power-on.") }
+            } catch (error: Throwable) {
+                if (activeSession == sessionRevision) {
+                    rereadOutputProcessing()
+                    _state.update { it.copy(error = error.message ?: "The DAC could not save output processing.") }
+                }
+            } finally {
+                if (activeSession == sessionRevision) _state.update { it.copy(outputProcessingSaving = false) }
+            }
+        }
+    }
+
     private fun requestConfirmation(confirmation: Confirmation) {
-        if (!_state.value.connected || _state.value.busy) return
+        if (!_state.value.connected || _state.value.deviceOperationBusy) return
         _state.update { it.copy(confirmation = confirmation) }
     }
 
     private fun runBusy(block: suspend () -> Unit) {
-        if (!_state.value.connected || _state.value.busy) return
+        if (!_state.value.connected || _state.value.deviceOperationBusy) return
         viewModelScope.launch {
             _state.update { it.copy(busy = true, error = null, message = null) }
             try {
@@ -347,6 +407,9 @@ class PumperControllerViewModel(application: Application) : AndroidViewModel(app
         val nextCrossfeed = if (nextStatus.supportsAudioControls && _state.value.crossfeed == null) {
             PumperProtocol.decodeCrossfeedState(activeClient.request(Opcode.GetCrossfeed).payload)
         } else _state.value.crossfeed
+        val nextOutputProcessing = if (nextStatus.supportsFirmware3Controls && _state.value.outputProcessing == null) {
+            PumperProtocol.decodeOutputProcessingState(activeClient.request(Opcode.GetOutputProcessing).payload)
+        } else _state.value.outputProcessing
         val (enabled, preampDb) = PumperProtocol.decodeGlobal(activeClient.request(Opcode.GetGlobal).payload)
         val nextProfiles = PumperProtocol.decodeProfileState(activeClient.request(Opcode.GetProfiles).payload)
         val bands = List(nextStatus.bandCount) { index ->
@@ -369,6 +432,7 @@ class PumperControllerViewModel(application: Application) : AndroidViewModel(app
                 status = nextStatus,
                 audioControls = nextAudio,
                 crossfeed = nextCrossfeed,
+                outputProcessing = nextOutputProcessing,
                 profiles = nextProfiles,
                 selectedProfile = nextProfiles.activeProfile,
                 selectedBand = min(it.selectedBand, max(0, bands.lastIndex)),
@@ -393,6 +457,8 @@ class PumperControllerViewModel(application: Application) : AndroidViewModel(app
                         audioControls = null,
                         crossfeed = null,
                         crossfeedSaving = false,
+                        outputProcessing = null,
+                        outputProcessingSaving = false,
                         busy = false,
                         error = "Pumper disconnected.",
                     )
@@ -423,7 +489,15 @@ class PumperControllerViewModel(application: Application) : AndroidViewModel(app
                 delay(1_000)
                 runCatching { PumperProtocol.decodeStatus(activeClient.request(Opcode.GetStatus).payload) }
                     .onSuccess { status ->
+                        val oldStatus = _state.value.status
                         val oldRate = _state.value.status?.sampleRateHz
+                        if (oldStatus != null &&
+                            (oldStatus.firmwareMajor != status.firmwareMajor || oldStatus.firmwareMinor != status.firmwareMinor) &&
+                            !status.supportsFirmware3Controls
+                        ) {
+                            clearPendingOutputProcessing()
+                            _state.update { it.copy(outputProcessing = null, outputProcessingSaving = false) }
+                        }
                         _state.update { it.copy(status = status) }
                         if (_state.value.autoPreamp && oldRate != status.sampleRateHz) {
                             val next = _state.value.config.copy(
@@ -496,6 +570,41 @@ class PumperControllerViewModel(application: Application) : AndroidViewModel(app
         }
     }
 
+    private fun scheduleOutputProcessingPreview() {
+        if (!_state.value.connected || outputProcessingPreviewJob?.isActive == true) return
+        outputProcessingPreviewJob = viewModelScope.launch {
+            delay(LIVE_PREVIEW_INTERVAL_MS)
+            outputProcessingPreviewJob = null
+            flushOutputProcessingPreview()
+        }
+    }
+
+    private suspend fun flushOutputProcessingPreview(throwOnFailure: Boolean = false): Boolean {
+        val activeClient = client ?: return false
+        val config = pendingOutputProcessing ?: return true
+        pendingOutputProcessing = null
+        val editRevision = outputProcessingRevision
+        val activeSession = sessionRevision
+        try {
+            val verified = PumperProtocol.decodeOutputProcessingState(
+                activeClient.request(Opcode.SetOutputProcessing, PumperProtocol.encodeOutputProcessing(config)).payload,
+            )
+            if (activeSession == sessionRevision && editRevision == outputProcessingRevision) {
+                _state.update { it.copy(outputProcessing = verified) }
+            }
+            return true
+        } catch (error: Throwable) {
+            if (!throwOnFailure && activeSession == sessionRevision && editRevision == outputProcessingRevision) {
+                rereadOutputProcessing(editRevision)
+                _state.update { it.copy(error = error.message ?: "The DAC rejected the output processing preview.") }
+            }
+            if (throwOnFailure) throw error
+            return false
+        } finally {
+            if (pendingOutputProcessing != null) scheduleOutputProcessingPreview()
+        }
+    }
+
     private suspend fun flushCrossfeedPreview(throwOnFailure: Boolean = false): Boolean {
         val activeClient = client ?: return false
         val config = pendingCrossfeed ?: return true
@@ -524,17 +633,30 @@ class PumperControllerViewModel(application: Application) : AndroidViewModel(app
 
     private suspend fun refreshAudioState(activeClient: PumperClient) {
         val editRevision = crossfeedRevision
+        val outputEditRevision = outputProcessingRevision
         runCatching {
             PumperProtocol.decodeAudioControls(activeClient.request(Opcode.GetAudioControls).payload)
         }.onSuccess { audio ->
             _state.update { it.copy(audioControls = audio) }
         }
-        if (pendingCrossfeed != null || _state.value.crossfeedSaving) return
-        runCatching {
-            PumperProtocol.decodeCrossfeedState(activeClient.request(Opcode.GetCrossfeed).payload)
-        }.onSuccess { crossfeed ->
-            if (editRevision == crossfeedRevision && pendingCrossfeed == null) {
-                _state.update { it.copy(crossfeed = crossfeed) }
+        if (pendingCrossfeed == null && !_state.value.crossfeedSaving) {
+            runCatching {
+                PumperProtocol.decodeCrossfeedState(activeClient.request(Opcode.GetCrossfeed).payload)
+            }.onSuccess { crossfeed ->
+                if (editRevision == crossfeedRevision && pendingCrossfeed == null) {
+                    _state.update { it.copy(crossfeed = crossfeed) }
+                }
+            }
+        }
+        if (_state.value.status?.supportsFirmware3Controls == true &&
+            pendingOutputProcessing == null && !_state.value.outputProcessingSaving
+        ) {
+            runCatching {
+                PumperProtocol.decodeOutputProcessingState(activeClient.request(Opcode.GetOutputProcessing).payload)
+            }.onSuccess { output ->
+                if (outputEditRevision == outputProcessingRevision && pendingOutputProcessing == null) {
+                    _state.update { it.copy(outputProcessing = output) }
+                }
             }
         }
     }
@@ -554,6 +676,28 @@ class PumperControllerViewModel(application: Application) : AndroidViewModel(app
         crossfeedPreviewJob = null
         pendingCrossfeed = null
         crossfeedRevision++
+        sessionRevision++
+    }
+
+    private suspend fun rereadOutputProcessing(expectedRevision: Long? = null) {
+        val activeClient = client ?: return
+        val activeSession = sessionRevision
+        val verified = runCatching {
+            PumperProtocol.decodeOutputProcessingState(activeClient.request(Opcode.GetOutputProcessing).payload)
+        }.getOrNull() ?: return
+        if (activeSession != sessionRevision ||
+            (expectedRevision != null && expectedRevision != outputProcessingRevision)
+        ) return
+        outputProcessingRevision++
+        pendingOutputProcessing = null
+        _state.update { it.copy(outputProcessing = verified) }
+    }
+
+    private fun clearPendingOutputProcessing() {
+        outputProcessingPreviewJob?.cancel()
+        outputProcessingPreviewJob = null
+        pendingOutputProcessing = null
+        outputProcessingRevision++
         sessionRevision++
     }
 
@@ -605,6 +749,8 @@ class PumperControllerViewModel(application: Application) : AndroidViewModel(app
 
     private suspend fun resetDevice(opcode: Opcode, message: String) {
         clearPendingPreview()
+        clearPendingCrossfeed()
+        clearPendingOutputProcessing()
         requireNotNull(client).request(opcode)
         _state.update { it.copy(message = message) }
     }
@@ -614,6 +760,7 @@ class PumperControllerViewModel(application: Application) : AndroidViewModel(app
     private suspend fun closeSession() {
         clearPendingPreview()
         clearPendingCrossfeed()
+        clearPendingOutputProcessing()
         val activeClient = client
         client = null
         val activeScope = sessionScope

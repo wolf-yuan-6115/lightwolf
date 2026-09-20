@@ -24,6 +24,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -34,6 +35,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.foundation.text.KeyboardActions
@@ -44,6 +47,8 @@ import dev.lightwolf.pumper.controller.ControllerUiState
 import dev.lightwolf.pumper.controller.protocol.CrossfeedConfig
 import dev.lightwolf.pumper.controller.protocol.CrossfeedMode
 import dev.lightwolf.pumper.controller.protocol.DefaultCrossfeedConfig
+import dev.lightwolf.pumper.controller.protocol.DefaultOutputProcessingConfig
+import dev.lightwolf.pumper.controller.protocol.OutputProcessingConfig
 import dev.lightwolf.pumper.controller.protocol.displayConfig
 import java.text.DecimalFormat
 import java.text.DecimalFormatSymbols
@@ -56,33 +61,42 @@ fun AudioScreen(
     state: ControllerUiState,
     onCrossfeedChange: (CrossfeedConfig) -> Unit,
     onSaveCrossfeed: () -> Unit,
+    onOutputProcessingChange: (OutputProcessingConfig) -> Unit,
+    onSaveOutputProcessing: () -> Unit,
 ) {
     BoxWithConstraints(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
         val padding = if (maxWidth >= 600.dp) PumperSpacing.large else PumperSpacing.medium
         val expanded = maxWidth >= 840.dp
         val supported = state.status?.supportsAudioControls == true
-        if (expanded) {
-            Row(
-                Modifier.widthIn(max = PumperMaxContentWidth).fillMaxWidth()
-                    .verticalScroll(rememberScrollState()).padding(padding),
-                horizontalArrangement = Arrangement.spacedBy(PumperSpacing.medium),
-            ) {
-                UsbAudioCard(state, supported, Modifier.weight(1f))
-                CrossfeedCard(
-                    state = state,
-                    supported = supported,
-                    onChange = onCrossfeedChange,
-                    onSave = onSaveCrossfeed,
-                    modifier = Modifier.weight(1f),
-                )
-            }
-        } else {
-            Column(
-                Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(padding),
-                verticalArrangement = Arrangement.spacedBy(PumperSpacing.medium),
-            ) {
-                UsbAudioCard(state, supported)
+        Column(
+            Modifier.widthIn(max = PumperMaxContentWidth).fillMaxWidth()
+                .verticalScroll(rememberScrollState()).padding(padding),
+            verticalArrangement = Arrangement.spacedBy(PumperSpacing.medium),
+        ) {
+            UsbAudioCard(state, supported)
+            if (expanded) {
+                Row(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(PumperSpacing.medium),
+                    verticalAlignment = Alignment.Top,
+                ) {
+                    CrossfeedCard(state, supported, onCrossfeedChange, onSaveCrossfeed, Modifier.weight(1f))
+                    OutputProcessingCard(
+                        state,
+                        state.status?.supportsFirmware3Controls == true,
+                        onOutputProcessingChange,
+                        onSaveOutputProcessing,
+                        Modifier.weight(1f),
+                    )
+                }
+            } else {
                 CrossfeedCard(state, supported, onCrossfeedChange, onSaveCrossfeed)
+                OutputProcessingCard(
+                    state,
+                    state.status?.supportsFirmware3Controls == true,
+                    onOutputProcessingChange,
+                    onSaveOutputProcessing,
+                )
             }
         }
     }
@@ -93,7 +107,7 @@ private fun UsbAudioCard(state: ControllerUiState, supported: Boolean, modifier:
     AudioCard(modifier.testTag("usb-audio-card")) {
         CardTitle("USB audio")
         if (!supported) {
-            RequirementNotice()
+            RequirementNotice("2.2")
             return@AudioCard
         }
         val status = state.status
@@ -102,6 +116,12 @@ private fun UsbAudioCard(state: ControllerUiState, supported: Boolean, modifier:
             label = "Sample rate",
             value = status?.sampleRateHz?.let(::formatSampleRate) ?: "-",
         )
+        status?.bitDepth?.let { bitDepth ->
+            AudioValueRow(
+                label = "Bit depth",
+                value = "$bitDepth-bit",
+            )
+        }
         AudioValueRow(
             label = "Stream state",
             value = if (status?.streaming == true) "Active" else "Idle",
@@ -131,7 +151,7 @@ private fun CrossfeedCard(
             if (supported) SavedPill(state.crossfeed?.dirty == true)
         }
         if (!supported) {
-            RequirementNotice()
+            RequirementNotice("2.2")
             return@AudioCard
         }
         val retained = state.crossfeed?.live ?: DefaultCrossfeedConfig
@@ -154,7 +174,7 @@ private fun CrossfeedCard(
             }
         }
         val editable = retained.mode == CrossfeedMode.Custom && !state.crossfeedSaving && !state.busy
-        CrossfeedSlider(
+        AudioSlider(
             label = "Strength",
             value = display.strengthPercent,
             range = 0.0..40.0,
@@ -162,8 +182,9 @@ private fun CrossfeedCard(
             suffix = "%",
             enabled = editable,
             onValue = { onChange(retained.copy(strengthPercent = it)) },
+            testTag = "crossfeed-strength",
         )
-        CrossfeedSlider(
+        AudioSlider(
             label = "Cutoff",
             value = display.cutoffHz.toDouble(),
             range = 300.0..2_000.0,
@@ -171,8 +192,9 @@ private fun CrossfeedCard(
             suffix = "Hz",
             enabled = editable,
             onValue = { onChange(retained.copy(cutoffHz = it.toInt())) },
+            testTag = "crossfeed-cutoff",
         )
-        CrossfeedSlider(
+        AudioSlider(
             label = "Delay",
             value = display.delayMs,
             range = 0.0..0.6,
@@ -181,6 +203,7 @@ private fun CrossfeedCard(
             enabled = editable,
             decimals = 2,
             onValue = { onChange(retained.copy(delayMs = it)) },
+            testTag = "crossfeed-delay",
         )
         Button(
             onClick = {
@@ -195,6 +218,89 @@ private fun CrossfeedCard(
             Spacer(Modifier.width(PumperSpacing.small))
             Text(if (state.crossfeedSaving) "Saving" else "Save crossfeed")
         }
+    }
+}
+
+@Composable
+private fun OutputProcessingCard(
+    state: ControllerUiState,
+    supported: Boolean,
+    onChange: (OutputProcessingConfig) -> Unit,
+    onSave: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val haptics = rememberPumperHaptics()
+    AudioCard(modifier.testTag("output-processing-card")) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            CardTitle("Output processing", Modifier.weight(1f))
+            if (supported) SavedPill(state.outputProcessing?.dirty == true)
+        }
+        if (!supported) {
+            RequirementNotice("3.0")
+            return@AudioCard
+        }
+        val config = state.outputProcessing?.live ?: DefaultOutputProcessingConfig
+        val editable = !state.outputProcessingSaving && !state.busy
+        OutputSwitch("Mono", "output-mono", config.mono, editable) {
+            haptics.toggle(it)
+            onChange(config.copy(mono = it))
+        }
+        OutputSwitch("Swap channels", "output-swap", config.swap, editable) {
+            haptics.toggle(it)
+            onChange(config.copy(swap = it))
+        }
+        OutputSwitch("Invert left polarity", "output-invert-left", config.invertLeft, editable) {
+            haptics.toggle(it)
+            onChange(config.copy(invertLeft = it))
+        }
+        OutputSwitch("Invert right polarity", "output-invert-right", config.invertRight, editable) {
+            haptics.toggle(it)
+            onChange(config.copy(invertRight = it))
+        }
+        AudioSlider(
+            label = "Balance",
+            value = config.balancePercent,
+            range = -100.0..100.0,
+            step = 1.0,
+            suffix = "%",
+            enabled = editable,
+            onValue = { onChange(config.copy(balancePercent = it)) },
+            testTag = "output-balance",
+            allowNegative = true,
+        )
+        AudioSlider(
+            label = "Stereo width",
+            value = config.widthPercent,
+            range = 0.0..200.0,
+            step = 1.0,
+            suffix = "%",
+            enabled = editable && !config.mono,
+            onValue = { onChange(config.copy(widthPercent = it)) },
+            testTag = "output-width",
+        )
+        Button(
+            onClick = { haptics.confirm(); onSave() },
+            enabled = state.outputProcessing?.dirty == true && editable,
+            shapes = ButtonDefaults.shapes(),
+            modifier = Modifier.align(Alignment.End).testTag("save-output-processing"),
+        ) {
+            Icon(Icons.Outlined.Save, contentDescription = null)
+            Spacer(Modifier.width(PumperSpacing.small))
+            Text(if (state.outputProcessingSaving) "Saving" else "Save output")
+        }
+    }
+}
+
+@Composable
+private fun OutputSwitch(label: String, testTag: String, checked: Boolean, enabled: Boolean, onChecked: (Boolean) -> Unit) {
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Text(label, Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge)
+        Switch(
+            checked = checked,
+            onCheckedChange = onChecked,
+            enabled = enabled,
+            modifier = Modifier.testTag(testTag).semantics { contentDescription = label },
+        )
     }
 }
 
@@ -247,10 +353,10 @@ private fun SavedPill(dirty: Boolean) {
 }
 
 @Composable
-private fun RequirementNotice() {
+private fun RequirementNotice(version: String) {
     Surface(shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.surfaceContainer) {
         Text(
-            "Requires firmware 2.2",
+            "Requires firmware $version",
             Modifier.fillMaxWidth().padding(PumperSpacing.medium),
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -258,7 +364,7 @@ private fun RequirementNotice() {
 }
 
 @Composable
-private fun CrossfeedSlider(
+private fun AudioSlider(
     label: String,
     value: Double,
     range: ClosedFloatingPointRange<Double>,
@@ -267,6 +373,8 @@ private fun CrossfeedSlider(
     enabled: Boolean,
     decimals: Int = 0,
     onValue: (Double) -> Unit,
+    testTag: String,
+    allowNegative: Boolean = false,
 ) {
     var editing by remember { mutableStateOf(false) }
     val sliderHaptics = rememberSliderHaptics(((range.endInclusive - range.start) / step).toInt())
@@ -287,17 +395,18 @@ private fun CrossfeedSlider(
             onValueChangeFinished = sliderHaptics::finish,
             valueRange = range.start.toFloat()..range.endInclusive.toFloat(),
             enabled = enabled,
-            modifier = Modifier.testTag("crossfeed-${label.lowercase()}")
+            modifier = Modifier.testTag(testTag),
         )
     }
     if (editing) {
-        CrossfeedNumberDialog(
+        AudioNumberDialog(
             label = label,
             value = value,
             range = range,
             step = step,
             suffix = suffix,
             decimals = decimals,
+            allowNegative = allowNegative,
             onDismiss = { editing = false },
             onValue = {
                 onValue(it)
@@ -308,13 +417,14 @@ private fun CrossfeedSlider(
 }
 
 @Composable
-private fun CrossfeedNumberDialog(
+private fun AudioNumberDialog(
     label: String,
     value: Double,
     range: ClosedFloatingPointRange<Double>,
     step: Double,
     suffix: String,
     decimals: Int,
+    allowNegative: Boolean,
     onDismiss: () -> Unit,
     onValue: (Double) -> Unit,
 ) {
@@ -334,7 +444,10 @@ private fun CrossfeedNumberDialog(
                 singleLine = true,
                 suffix = { Text(suffix) },
                 supportingText = if (!valid) ({ Text("Enter ${formatNumber(range.start, decimals)}–${formatNumber(range.endInclusive, decimals)} in $step steps") }) else null,
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal, imeAction = ImeAction.Done),
+                keyboardOptions = KeyboardOptions(
+                    keyboardType = if (allowNegative) KeyboardType.Text else KeyboardType.Decimal,
+                    imeAction = ImeAction.Done,
+                ),
                 keyboardActions = KeyboardActions(onDone = {
                     if (valid) {
                         haptics.confirm()

@@ -85,7 +85,7 @@ fun InfoScreen(
             label = "Load factory EQ",
             supporting = "Replace live preview without writing flash",
             onClick = controller::requestRestoreDefaults,
-            enabled = !state.busy,
+            enabled = !state.deviceOperationBusy,
         ),
         InfoAction(
             icon = Icons.Outlined.RestartAlt,
@@ -96,14 +96,14 @@ fun InfoScreen(
                 "Requires firmware 1.7 or newer"
             },
             onClick = controller::requestRestart,
-            enabled = !state.busy && status?.supportsDeviceReset == true,
+            enabled = !state.deviceOperationBusy && status?.supportsDeviceReset == true,
         ),
         InfoAction(
             icon = Icons.Outlined.SystemUpdateAlt,
             label = "Upgrade firmware",
             supporting = "Expose the RP2350 drive for upgrading firmware",
             onClick = controller::requestBootsel,
-            enabled = !state.busy,
+            enabled = !state.deviceOperationBusy,
         ),
     )
 

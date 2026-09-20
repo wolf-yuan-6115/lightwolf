@@ -21,9 +21,11 @@ enum class Opcode(val value: Int) {
     GetProfiles(0x05),
     GetAudioControls(0x06),
     GetCrossfeed(0x07),
+    GetOutputProcessing(0x08),
     SetGlobal(0x10),
     SetBand(0x11),
     SetCrossfeed(0x12),
+    SetOutputProcessing(0x13),
     WriteFlash(0x20),
     RestoreDefaults(0x21),
     LoadProfile(0x22),
@@ -31,6 +33,7 @@ enum class Opcode(val value: Int) {
     SetDefaultProfile(0x24),
     DeleteProfile(0x25),
     SaveCrossfeed(0x26),
+    SaveOutputProcessing(0x27),
     MeterStart(0x30),
     MeterKeepalive(0x31),
     MeterStop(0x32),
@@ -57,7 +60,11 @@ enum class ProtocolStatus(val value: Int) {
 enum class FilterType(val value: Int) {
     LowShelf(0),
     Peaking(1),
-    HighShelf(2);
+    HighShelf(2),
+    LowPass(3),
+    HighPass(4),
+    Notch(5),
+    BandPass(6);
 
     companion object {
         fun from(value: Int): FilterType = entries.firstOrNull { it.value == value }
@@ -99,6 +106,7 @@ data class DeviceStatus(
     val dirty: Boolean,
     val eqEnabled: Boolean,
     val sampleRateHz: Long,
+    val bitDepth: Int?,
     val configGeneration: Long,
     val savedGeneration: Long,
     val appliedGeneration: Long,
@@ -112,6 +120,7 @@ data class DeviceStatus(
     val firmwareVersion: String get() = "$firmwareMajor.$firmwareMinor"
     val supportsDeviceReset: Boolean get() = firmwareMajor > 1 || (firmwareMajor == 1 && firmwareMinor >= 7)
     val supportsAudioControls: Boolean get() = firmwareMajor > 2 || (firmwareMajor == 2 && firmwareMinor >= 2)
+    val supportsFirmware3Controls: Boolean get() = firmwareMajor >= 3
 }
 
 data class AudioChannelControl(
@@ -148,6 +157,21 @@ data class CrossfeedConfig(
 data class CrossfeedState(
     val live: CrossfeedConfig,
     val saved: CrossfeedConfig,
+    val dirty: Boolean,
+)
+
+data class OutputProcessingConfig(
+    val mono: Boolean,
+    val swap: Boolean,
+    val invertLeft: Boolean,
+    val invertRight: Boolean,
+    val balancePercent: Double,
+    val widthPercent: Double,
+)
+
+data class OutputProcessingState(
+    val live: OutputProcessingConfig,
+    val saved: OutputProcessingConfig,
     val dirty: Boolean,
 )
 
@@ -264,10 +288,14 @@ object PumperProtocol {
 
     @Throws(ProtocolException::class)
     fun decodeStatus(payload: ByteArray): DeviceStatus {
-        if (payload.size != 28 && payload.size != 32 && payload.size != 44) {
+        if (payload.size != 28 && payload.size != 32 && payload.size != 44 && payload.size != 48) {
             throw ProtocolException("Invalid status response")
         }
         val flags = payload.u8(3)
+        val bitDepth = if (payload.size >= 48) payload.u8(44) else null
+        if (bitDepth != null && bitDepth != 16 && bitDepth != 24) {
+            throw ProtocolException("Invalid status bit depth")
+        }
         return DeviceStatus(
             firmwareMajor = payload.u8(0),
             firmwareMinor = payload.u8(1),
@@ -276,6 +304,7 @@ object PumperProtocol {
             dirty = flags and 0x02 != 0,
             eqEnabled = flags and 0x04 != 0,
             sampleRateHz = payload.u32(4),
+            bitDepth = bitDepth,
             configGeneration = payload.u32(8),
             savedGeneration = payload.u32(12),
             appliedGeneration = payload.u32(16),
@@ -383,6 +412,54 @@ object PumperProtocol {
         payload[16] = if (state.dirty) 1 else 0
     }
 
+    fun encodeOutputProcessing(config: OutputProcessingConfig): ByteArray {
+        validateOutputProcessing(config)
+        return ByteArray(8).also { payload ->
+            var flags = 0
+            if (config.mono) flags = flags or 0x01
+            if (config.swap) flags = flags or 0x02
+            if (config.invertLeft) flags = flags or 0x04
+            if (config.invertRight) flags = flags or 0x08
+            payload[0] = flags.toByte()
+            payload.putI16(2, (config.balancePercent * 100.0).roundToInt())
+            payload.putU16(4, (config.widthPercent * 100.0).roundToInt())
+        }
+    }
+
+    @Throws(ProtocolException::class)
+    fun decodeOutputProcessing(payload: ByteArray): OutputProcessingConfig {
+        if (payload.size != 8 || payload.u8(1) != 0 || payload.u8(6) != 0 || payload.u8(7) != 0 ||
+            payload.u8(0) and 0xf0 != 0
+        ) throw ProtocolException("Invalid output processing response")
+        val flags = payload.u8(0)
+        return OutputProcessingConfig(
+            mono = flags and 0x01 != 0,
+            swap = flags and 0x02 != 0,
+            invertLeft = flags and 0x04 != 0,
+            invertRight = flags and 0x08 != 0,
+            balancePercent = payload.i16(2) / 100.0,
+            widthPercent = payload.u16(4) / 100.0,
+        ).also(::validateOutputProcessing)
+    }
+
+    @Throws(ProtocolException::class)
+    fun decodeOutputProcessingState(payload: ByteArray): OutputProcessingState {
+        if (payload.size != 17 || payload.u8(16) !in 0..1) {
+            throw ProtocolException("Invalid output processing state response")
+        }
+        return OutputProcessingState(
+            live = decodeOutputProcessing(payload.copyOfRange(0, 8)),
+            saved = decodeOutputProcessing(payload.copyOfRange(8, 16)),
+            dirty = payload.u8(16) == 1,
+        )
+    }
+
+    fun encodeOutputProcessingState(state: OutputProcessingState): ByteArray = ByteArray(17).also { payload ->
+        encodeOutputProcessing(state.live).copyInto(payload, 0)
+        encodeOutputProcessing(state.saved).copyInto(payload, 8)
+        payload[16] = if (state.dirty) 1 else 0
+    }
+
     private fun validateCrossfeed(config: CrossfeedConfig) {
         if (config.strengthPercent !in 0.0..40.0 ||
             config.cutoffHz !in 300..2_000 ||
@@ -390,6 +467,12 @@ object PumperProtocol {
         ) {
             throw ProtocolException("Crossfeed values are out of range")
         }
+    }
+
+    private fun validateOutputProcessing(config: OutputProcessingConfig) {
+        if (!config.balancePercent.isFinite() || config.balancePercent !in -100.0..100.0 ||
+            !config.widthPercent.isFinite() || config.widthPercent !in 0.0..200.0
+        ) throw ProtocolException("Output processing values are out of range")
     }
 
     private fun statusLabel(response: ResponsePacket): String = when (response.status) {
@@ -429,6 +512,15 @@ val DefaultCrossfeedConfig = CrossfeedConfig(
     strengthPercent = 20.0,
     cutoffHz = 700,
     delayMs = 0.25,
+)
+
+val DefaultOutputProcessingConfig = OutputProcessingConfig(
+    mono = false,
+    swap = false,
+    invertLeft = false,
+    invertRight = false,
+    balancePercent = 0.0,
+    widthPercent = 100.0,
 )
 
 fun CrossfeedMode.displayConfig(retainedCustom: CrossfeedConfig = DefaultCrossfeedConfig): CrossfeedConfig = when (this) {

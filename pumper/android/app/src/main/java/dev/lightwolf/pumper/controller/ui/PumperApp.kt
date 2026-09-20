@@ -179,12 +179,14 @@ fun PumperApp(
                                 state = state,
                                 onCrossfeedChange = controller::updateCrossfeed,
                                 onSaveCrossfeed = controller::saveCrossfeed,
+                                onOutputProcessingChange = controller::updateOutputProcessing,
+                                onSaveOutputProcessing = controller::saveOutputProcessing,
                             )
                             AppDestination.Info -> InfoScreen(state, controller, themeMode, onThemeMode)
                         }
                     }
                 }
-                if (state.busy) {
+                if (state.deviceOperationBusy) {
                     LinearWavyProgressIndicator(Modifier.align(Alignment.TopCenter).fillMaxWidth())
                 }
             }
@@ -294,13 +296,13 @@ private fun ConfirmationDialog(
         }
         Confirmation.Restart -> {
             title = "Restart Pumper?"
-            body = "Audio and this controller connection will stop while the DAC restarts."
+            body = "Audio and this controller connection will stop while the DAC restarts. Unsaved EQ, crossfeed, and output-processing changes will be lost."
             confirmLabel = "Restart"
             icon = Icons.Outlined.PowerSettingsNew
         }
         Confirmation.Bootsel -> {
             title = "Enter BOOTSEL?"
-            body = "Pumper will disconnect and appear as the RP2350 USB drive for a manual UF2 firmware copy."
+            body = "Pumper will disconnect and appear as the RP2350 USB drive for a manual UF2 firmware copy. Unsaved EQ, crossfeed, and output-processing changes will be lost."
             confirmLabel = "Enter BOOTSEL"
             icon = Icons.Outlined.Usb
         }

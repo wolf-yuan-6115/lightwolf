@@ -162,8 +162,8 @@ describe("Pumper HID protocol", () => {
     });
   });
 
-  it("decodes performance diagnostics while accepting older status payloads", () => {
-    const payload = new Uint8Array(44);
+  it("decodes performance diagnostics and bit depth while accepting older status payloads", () => {
+    const payload = new Uint8Array(48);
     const view = new DataView(payload.buffer);
     payload.set([1, 9, 10, 0x04]);
     view.setUint32(4, 192000, true);
@@ -171,6 +171,7 @@ describe("Pumper HID protocol", () => {
     view.setUint32(32, 180000000, true);
     view.setUint32(36, 417, true);
     view.setUint32(40, 322, true);
+    payload[44] = 24;
 
     expect(decodeStatus(payload)).toMatchObject({
       firmwareVersion: "1.9",
@@ -178,15 +179,20 @@ describe("Pumper HID protocol", () => {
       systemClockMHz: 180,
       maxDspBlockUs: 417,
       i2sLowWaterFrames: 322,
+      bitDepth: 24,
     });
     expect(decodeStatus(payload.slice(0, 32))).toMatchObject({
       temperatureC: 42.375,
       systemClockMHz: null,
       maxDspBlockUs: null,
       i2sLowWaterFrames: null,
+      bitDepth: null,
     });
+    expect(decodeStatus(payload.slice(0, 44)).bitDepth).toBeNull();
     expect(decodeStatus(payload.slice(0, 28)).temperatureC).toBeNull();
     expect(() => decodeStatus(new Uint8Array(30))).toThrow("Invalid status response");
+    payload[44] = 20;
+    expect(() => decodeStatus(payload)).toThrow("Invalid status bit depth");
   });
 
   it("encodes meter timing and decodes pre- and post-EQ stereo levels", () => {

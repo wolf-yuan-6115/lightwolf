@@ -69,7 +69,8 @@ object EqMath {
     }
 
     private fun buildCoefficients(band: EqBand, sampleRateHz: Long): Coefficients {
-        if (!band.enabled || kotlin.math.abs(band.gainDb) < 0.0001 || band.frequencyHz >= sampleRateHz / 2.0) {
+        val gainFilter = band.type.value <= FilterType.HighShelf.value
+        if (!band.enabled || (gainFilter && kotlin.math.abs(band.gainDb) < 0.0001) || band.frequencyHz >= sampleRateHz / 2.0) {
             return Identity
         }
         val w0 = 2.0 * PI * band.frequencyHz / sampleRateHz
@@ -96,7 +97,7 @@ object EqMath {
             a0 = 1.0 + alpha / a
             a1 = -2.0 * cosW0
             a2 = 1.0 - alpha / a
-        } else {
+        } else if (band.type == FilterType.LowShelf || band.type == FilterType.HighShelf) {
             alpha = (sinW0 / 2.0) * sqrt((a + 1.0 / a) * (1.0 / band.q - 1.0) + 2.0)
             val term = 2.0 * sqrt(a) * alpha
             if (band.type == FilterType.LowShelf) {
@@ -113,6 +114,34 @@ object EqMath {
                 a0 = a + 1.0 - (a - 1.0) * cosW0 + term
                 a1 = 2.0 * (a - 1.0 - (a + 1.0) * cosW0)
                 a2 = a + 1.0 - (a - 1.0) * cosW0 - term
+            }
+        } else {
+            alpha = sinW0 / (2.0 * band.q)
+            a0 = 1.0 + alpha
+            a1 = -2.0 * cosW0
+            a2 = 1.0 - alpha
+            when (band.type) {
+                FilterType.LowPass -> {
+                    b0 = (1.0 - cosW0) / 2.0
+                    b1 = 1.0 - cosW0
+                    b2 = b0
+                }
+                FilterType.HighPass -> {
+                    b0 = (1.0 + cosW0) / 2.0
+                    b1 = -(1.0 + cosW0)
+                    b2 = b0
+                }
+                FilterType.Notch -> {
+                    b0 = 1.0
+                    b1 = -2.0 * cosW0
+                    b2 = 1.0
+                }
+                FilterType.BandPass -> {
+                    b0 = alpha
+                    b1 = 0.0
+                    b2 = -alpha
+                }
+                else -> error("Unsupported filter type")
             }
         }
         return Coefficients(b0 / a0, b1 / a0, b2 / a0, a1 / a0, a2 / a0)
@@ -136,4 +165,3 @@ object EqMath {
 
     private fun logFrequency(index: Int, count: Int): Double = 20.0 * 1000.0.pow(index.toDouble() / (count - 1))
 }
-

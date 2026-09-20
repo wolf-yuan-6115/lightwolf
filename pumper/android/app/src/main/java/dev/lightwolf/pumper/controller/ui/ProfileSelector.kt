@@ -71,12 +71,12 @@ internal fun ProfileSelector(
         SegmentedListItem(
             selected = true,
             onClick = {
-                if (!state.busy) {
+                if (!state.deviceOperationBusy) {
                     haptics.selection()
                     expanded = !expanded
                 }
             },
-            enabled = !state.busy,
+            enabled = !state.deviceOperationBusy,
             onLongClick = if (selectedPresent) ({
                 expanded = false
                 onManage(selected)
@@ -98,7 +98,7 @@ internal fun ProfileSelector(
                                 haptics.selection()
                                 controller.requestSaveProfile()
                             },
-                            enabled = !state.busy,
+                            enabled = !state.deviceOperationBusy,
                             shapes = IconButtonDefaults.shapes(),
                         ) {
                             Icon(Icons.Outlined.Save, contentDescription = "Save profile ${selected + 1}")
@@ -131,7 +131,7 @@ internal fun ProfileSelector(
                             expanded = false
                             controller.selectProfile(index)
                         },
-                        enabled = !state.busy,
+                        enabled = !state.deviceOperationBusy,
                         onLongClick = if (present) ({
                             expanded = false
                             onManage(index)
@@ -186,7 +186,7 @@ internal fun ProfileActionsDialog(
                         haptics.confirm()
                         onMakeDefault()
                     },
-                    enabled = !state.busy && !isDefault,
+                    enabled = !state.deviceOperationBusy && !isDefault,
                     shapes = ListItemDefaults.segmentedShapes(0, 2),
                     colors = standardColors,
                     leadingContent = {
@@ -204,7 +204,7 @@ internal fun ProfileActionsDialog(
                         haptics.confirm()
                         onDelete()
                     },
-                    enabled = !state.busy,
+                    enabled = !state.deviceOperationBusy,
                     shapes = ListItemDefaults.segmentedShapes(1, 2),
                     colors = deleteColors,
                     leadingContent = { Icon(Icons.Outlined.Delete, contentDescription = null) },

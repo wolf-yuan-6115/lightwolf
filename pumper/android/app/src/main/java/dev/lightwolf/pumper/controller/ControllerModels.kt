@@ -6,6 +6,7 @@ import dev.lightwolf.pumper.controller.protocol.CrossfeedState
 import dev.lightwolf.pumper.controller.protocol.DeviceStatus
 import dev.lightwolf.pumper.controller.protocol.EqConfig
 import dev.lightwolf.pumper.controller.protocol.ProfileState
+import dev.lightwolf.pumper.controller.protocol.OutputProcessingState
 import dev.lightwolf.pumper.controller.transport.PumperDevice
 
 enum class ConnectionState { Disconnected, Connecting, Connected }
@@ -29,6 +30,8 @@ data class ControllerUiState(
     val audioControls: AudioControls? = null,
     val crossfeed: CrossfeedState? = null,
     val crossfeedSaving: Boolean = false,
+    val outputProcessing: OutputProcessingState? = null,
+    val outputProcessingSaving: Boolean = false,
     val profiles: ProfileState = ProfileState(10, 0, 0, 0, 0),
     val selectedBand: Int = 0,
     val selectedProfile: Int = 0,
@@ -44,4 +47,5 @@ data class ControllerUiState(
     val selectedProfileEmpty: Boolean get() = !profiles.isPresent(selectedProfile)
     val selectedProfileIsDefault: Boolean get() = !selectedProfileEmpty && profiles.persistedProfile == selectedProfile
     val needsSave: Boolean get() = hasUnsavedEdits || (connected && selectedProfileEmpty)
+    val deviceOperationBusy: Boolean get() = busy || crossfeedSaving || outputProcessingSaving
 }

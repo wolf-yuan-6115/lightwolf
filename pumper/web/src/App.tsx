@@ -775,7 +775,7 @@ export default function App() {
                 <SaveStateBadge state={selectedProfileEmpty && !hasUnsavedEdits ? "Empty slot" : needsSave ? "Unsaved" : "Saved"} label="EQ profile save state" />
               </div>
 
-              <UsbAudioState settings={audioSettings} connected={connected} busy={writing || connecting || deviceActionPending} sampleRateHz={sampleRateHz} streaming={status?.streaming ?? false} />
+              <UsbAudioState settings={audioSettings} connected={connected} busy={writing || connecting || deviceActionPending} sampleRateHz={sampleRateHz} bitDepth={status?.bitDepth ?? null} streaming={status?.streaming ?? false} />
             </div>
           </aside>
         </div>

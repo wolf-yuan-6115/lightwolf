@@ -3,6 +3,7 @@ package dev.lightwolf.pumper.controller
 import dev.lightwolf.pumper.controller.protocol.CrossfeedConfig
 import dev.lightwolf.pumper.controller.protocol.CrossfeedMode
 import dev.lightwolf.pumper.controller.protocol.Opcode
+import dev.lightwolf.pumper.controller.protocol.OutputProcessingConfig
 import dev.lightwolf.pumper.controller.protocol.PumperProtocol
 import dev.lightwolf.pumper.controller.transport.PumperClient
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -16,19 +17,48 @@ import org.junit.Test
 @OptIn(ExperimentalCoroutinesApi::class)
 class SimulatedPumperTransportTest {
     @Test
-    fun `simulator exposes firmware 2 3 master audio state`() = runTest {
+    fun `simulator exposes firmware 3 master audio state`() = runTest {
         val client = PumperClient(SimulatedPumperTransport(), backgroundScope)
         runCurrent()
 
         val status = PumperProtocol.decodeStatus(client.request(Opcode.Hello).payload)
         val audio = PumperProtocol.decodeAudioControls(client.request(Opcode.GetAudioControls).payload)
 
-        assertEquals("2.3", status.firmwareVersion)
+        assertEquals("3.1", status.firmwareVersion)
+        assertEquals(16, status.bitDepth)
         assertTrue(status.supportsAudioControls)
+        assertTrue(status.supportsFirmware3Controls)
         assertEquals(-10.0, audio.master.volumeDb, 0.0)
         assertFalse(audio.master.muted)
         assertEquals(0.0, audio.left.volumeDb, 0.0)
         assertEquals(0.0, audio.right.volumeDb, 0.0)
+        client.close()
+    }
+
+    @Test
+    fun `output preview remains independent and persists only through output save`() = runTest {
+        val client = PumperClient(SimulatedPumperTransport(), backgroundScope)
+        runCurrent()
+        val custom = OutputProcessingConfig(true, true, false, true, -24.0, 135.0)
+
+        val preview = PumperProtocol.decodeOutputProcessingState(
+            client.request(Opcode.SetOutputProcessing, PumperProtocol.encodeOutputProcessing(custom)).payload,
+        )
+        assertEquals(custom, preview.live)
+        assertTrue(preview.dirty)
+
+        client.request(Opcode.SaveProfile, byteArrayOf(0))
+        val afterEqSave = PumperProtocol.decodeOutputProcessingState(client.request(Opcode.GetOutputProcessing).payload)
+        assertEquals(custom, afterEqSave.live)
+        assertTrue(afterEqSave.dirty)
+
+        client.request(Opcode.SaveCrossfeed)
+        val afterCrossfeedSave = PumperProtocol.decodeOutputProcessingState(client.request(Opcode.GetOutputProcessing).payload)
+        assertTrue(afterCrossfeedSave.dirty)
+
+        val saved = PumperProtocol.decodeOutputProcessingState(client.request(Opcode.SaveOutputProcessing).payload)
+        assertEquals(custom, saved.saved)
+        assertFalse(saved.dirty)
         client.close()
     }
 

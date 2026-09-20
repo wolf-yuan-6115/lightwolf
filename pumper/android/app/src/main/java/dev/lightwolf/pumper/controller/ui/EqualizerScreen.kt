@@ -29,6 +29,10 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExposedDropdownMenuAnchorType
+import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
@@ -141,6 +145,7 @@ fun EqualizerScreen(state: ControllerUiState, controller: PumperControllerViewMo
                 index = index,
                 band = band,
                 bandCount = state.config.bands.size,
+                supportsFirmware3Controls = state.status?.supportsFirmware3Controls == true,
                 controller = controller,
                 onSelect = { next ->
                     controller.selectBand(next)
@@ -325,10 +330,8 @@ private fun BandList(state: ControllerUiState, onOpen: (Int) -> Unit) {
                     }
                 },
                 supportingContent = {
-                    Text(
-                        "${filterLabel(band.type)} | ${formatFrequency(band.frequencyHz)} | ${formatSigned(band.gainDb)} dB" +
-                            if (band.enabled) "" else " | Off",
-                    )
+                    val gain = if (band.type.isGainIndependent()) "" else " | ${formatSigned(band.gainDb)} dB"
+                    Text("${filterLabel(band.type)} | ${formatFrequency(band.frequencyHz)}$gain" + if (band.enabled) "" else " | Off")
                 },
                 trailingContent = { Icon(Icons.Outlined.ChevronRight, contentDescription = "Edit band ${index + 1}") },
             ) {
@@ -344,6 +347,7 @@ private fun BandEditorSheet(
     index: Int,
     band: EqBand,
     bandCount: Int,
+    supportsFirmware3Controls: Boolean,
     controller: PumperControllerViewModel,
     onSelect: (Int) -> Unit,
     onDismiss: () -> Unit,
@@ -399,27 +403,16 @@ private fun BandEditorSheet(
                     },
                 )
             }
-            Text("Filter", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
-                val options = listOf(
-                    FilterType.LowShelf to "Low shelf",
-                    FilterType.Peaking to "Peak",
-                    FilterType.HighShelf to "High shelf",
-                )
-                options.forEachIndexed { optionIndex, (type, label) ->
-                    SegmentedButton(
-                        selected = band.type == type,
-                        onClick = {
-                            if (band.type != type) {
-                                haptics.selection()
-                                controller.updateBand(index) { it.copy(type = type) }
-                            }
-                        },
-                        shape = SegmentedButtonDefaults.itemShape(optionIndex, options.size),
-                        label = { Text(label, maxLines = 1) },
-                    )
-                }
-            }
+            FilterTypeDropdown(
+                selected = band.type,
+                supportsFirmware3Controls = supportsFirmware3Controls,
+                onSelect = { type ->
+                    if (band.type != type) {
+                        haptics.selection()
+                        controller.updateBand(index) { it.copy(type = type) }
+                    }
+                },
+            )
             ValueSlider(
                 label = "Frequency",
                 value = band.frequencyHz,
@@ -437,6 +430,7 @@ private fun BandEditorSheet(
                 maximum = 24.0,
                 step = 0.1,
                 suffix = "dB",
+                enabled = !band.type.isGainIndependent(),
                 onValue = { value -> controller.updateBand(index) { it.copy(gainDb = value) } },
             )
             if (band.type == FilterType.Peaking) {
@@ -470,10 +464,10 @@ private fun BandEditorSheet(
                 )
             } else {
                 ValueSlider(
-                    label = if (band.type == FilterType.Peaking) "Q" else "Slope",
+                    label = if (band.type == FilterType.LowShelf || band.type == FilterType.HighShelf) "Slope" else "Q",
                     value = band.q,
                     minimum = 0.1,
-                    maximum = if (band.type == FilterType.Peaking) 20.0 else 1.0,
+                    maximum = if (band.type == FilterType.LowShelf || band.type == FilterType.HighShelf) 1.0 else 20.0,
                     step = 0.01,
                     suffix = "",
                     onValue = { value -> controller.updateBand(index) { it.copy(q = value) } },
@@ -493,6 +487,7 @@ private fun ValueSlider(
     suffix: String,
     onValue: (Double) -> Unit,
     logarithmic: Boolean = false,
+    enabled: Boolean = true,
 ) {
     var editing by rememberSaveable { mutableStateOf(false) }
     val haptics = rememberPumperHaptics()
@@ -510,6 +505,7 @@ private fun ValueSlider(
                     haptics.selection()
                     editing = true
                 },
+                enabled = enabled,
                 shapes = ButtonDefaults.shapes(),
             ) {
                 Text(valueLabel(value, suffix))
@@ -529,6 +525,7 @@ private fun ValueSlider(
             },
             onValueChangeFinished = sliderHaptics::finish,
             valueRange = if (logarithmic) 0f..1f else minimum.toFloat()..maximum.toFloat(),
+            enabled = enabled,
         )
     }
     if (editing) {
@@ -610,8 +607,63 @@ private fun formatFrequency(value: Double): String = when {
     else -> "${formatNumber(value)} Hz"
 }
 
-private fun filterLabel(type: FilterType): String = when (type) {
-    FilterType.LowShelf -> "Low shelf"
+internal fun filterOptionsForFirmware(supportsFirmware3Controls: Boolean): List<FilterType> = if (supportsFirmware3Controls) {
+    listOf(
+        FilterType.Peaking,
+        FilterType.LowPass,
+        FilterType.LowShelf,
+        FilterType.HighPass,
+        FilterType.HighShelf,
+        FilterType.Notch,
+        FilterType.BandPass,
+    )
+} else {
+    listOf(FilterType.Peaking, FilterType.LowShelf, FilterType.HighShelf)
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun FilterTypeDropdown(
+    selected: FilterType,
+    supportsFirmware3Controls: Boolean,
+    onSelect: (FilterType) -> Unit,
+) {
+    var expanded by remember { mutableStateOf(false) }
+    val options = filterOptionsForFirmware(supportsFirmware3Controls)
+    ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = it }) {
+        OutlinedTextField(
+            value = filterLabel(selected),
+            onValueChange = {},
+            readOnly = true,
+            label = { Text("Filter") },
+            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded) },
+            modifier = Modifier.fillMaxWidth().menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable),
+        )
+        ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            options.forEach { type ->
+                DropdownMenuItem(
+                    text = { Text(filterLabel(type)) },
+                    onClick = {
+                        expanded = false
+                        onSelect(type)
+                    },
+                )
+            }
+        }
+    }
+}
+
+private fun FilterType.isGainIndependent(): Boolean = when (this) {
+    FilterType.LowPass, FilterType.HighPass, FilterType.Notch, FilterType.BandPass -> true
+    else -> false
+}
+
+internal fun filterLabel(type: FilterType): String = when (type) {
     FilterType.Peaking -> "Peaking"
+    FilterType.LowPass -> "Low-pass"
+    FilterType.LowShelf -> "Low shelf"
+    FilterType.HighPass -> "High-pass"
     FilterType.HighShelf -> "High shelf"
+    FilterType.Notch -> "Notch"
+    FilterType.BandPass -> "Band-pass"
 }

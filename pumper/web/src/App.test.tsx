@@ -50,7 +50,7 @@ afterEach(() => {
   else Reflect.deleteProperty(navigator, "hid");
 });
 
-function mockConnectedPumper(deviceConfig: EqConfig = defaultConfig, rejectRequest?: (opcode: Opcode) => Error | null, version = [1, 8]) {
+function mockConnectedPumper(deviceConfig: EqConfig = defaultConfig, rejectRequest?: (opcode: Opcode) => Error | null, version = [1, 8], statusPayloadSize = 48) {
   const audioMock = audioSettingsMock();
   const device = { vendorId: 0x2e8a, productId: 0xf10a } as HIDDevice;
   Object.defineProperty(navigator, "hid", {
@@ -70,11 +70,12 @@ function mockConnectedPumper(deviceConfig: EqConfig = defaultConfig, rejectReque
     }
     let responsePayload: Uint8Array<ArrayBufferLike> = new Uint8Array();
     if (opcode === Opcode.Hello || opcode === Opcode.GetStatus) {
-      responsePayload = new Uint8Array(32);
+      responsePayload = new Uint8Array(statusPayloadSize);
       const view = new DataView(responsePayload.buffer);
       responsePayload.set([...version, 10, 0x04]);
       view.setUint32(4, 48000, true);
       view.setInt32(28, 42375, true);
+      if (statusPayloadSize >= 48) responsePayload[44] = 16;
     } else if (opcode === Opcode.GetGlobal) {
       responsePayload = encodeGlobal(deviceConfig);
     } else if (opcode === Opcode.GetProfiles) {
@@ -140,11 +141,20 @@ describe("Pumper controller", () => {
     const globalPane = screen.getByRole("heading", { name: "Global EQ" }).closest("aside")!;
     expect(within(globalPane).getByRole("group", { name: "Host USB audio controls" })).toBe(group);
     expect(within(globalPane).getByText("Sample rate")).toBeInTheDocument();
+    expect(within(globalPane).getByText("Bit depth")).toBeInTheDocument();
+    expect(within(globalPane).getByText("16-bit")).toBeInTheDocument();
     expect(within(globalPane).getByText("Stream state")).toBeInTheDocument();
     expect(within(group).getByText("Master volume")).toBeInTheDocument();
     const filters = screen.getByRole("heading", { name: "Filter configuration" }).closest("section")!;
     const crossfeed = screen.getByRole("heading", { name: "Headphone crossfeed" }).closest("section")!;
     expect(filters.compareDocumentPosition(crossfeed) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it("omits bit depth for firmware with the legacy status payload", async () => {
+    mockConnectedPumper(defaultConfig, undefined, [3, 0], 44);
+    render(<App />);
+    await screen.findByRole("button", { name: "Profile: Profile 1 (default)" });
+    expect(screen.queryByText("Bit depth")).not.toBeInTheDocument();
   });
 
   it("shows each preset's parameters read-only and restores retained Custom settings", async () => {

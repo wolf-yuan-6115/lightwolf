@@ -31,5 +31,46 @@ class EqMathTest {
         assertEquals(0.0, EqMath.compositeGainDb(config, 48_000, 1000.0), 0.0)
         assertEquals(0.0, EqMath.responseCurve(config, 48_000).first().gainDb, 0.0)
     }
-}
 
+    @Test
+    fun `new RBJ filters have expected response at every supported rate`() {
+        val rates = listOf(44_100L, 48_000L, 88_200L, 96_000L, 176_400L, 192_000L)
+        rates.forEach { rate ->
+            val lowPass = configWith(FilterType.LowPass, 1_000.0)
+            val highPass = configWith(FilterType.HighPass, 1_000.0)
+            val notch = configWith(FilterType.Notch, 1_000.0)
+            val bandPass = configWith(FilterType.BandPass, 1_000.0)
+
+            assertEquals(-3.01, EqMath.compositeGainDb(lowPass, rate, 1_000.0), 0.08)
+            assertEquals(-3.01, EqMath.compositeGainDb(highPass, rate, 1_000.0), 0.08)
+            assertTrue(EqMath.compositeGainDb(lowPass, rate, 100.0) > -0.1)
+            assertTrue(EqMath.compositeGainDb(highPass, rate, 100.0) < -35.0)
+            assertTrue(EqMath.compositeGainDb(notch, rate, 1_000.0) < -100.0)
+            assertEquals(0.0, EqMath.compositeGainDb(bandPass, rate, 1_000.0), 0.0001)
+            FilterType.entries.drop(3).forEach { type ->
+                assertTrue(EqMath.responseCurve(configWith(type, 1_137.0), rate).all { it.gainDb.isFinite() })
+            }
+        }
+    }
+
+    @Test
+    fun `new filters ignore gain but contribute to auto preamp and bypass at nyquist`() {
+        val lowPass = configWith(FilterType.LowPass, 1_000.0, gainDb = 18.0)
+        val neutralGain = configWith(FilterType.LowPass, 1_000.0, gainDb = 0.0)
+        assertEquals(
+            EqMath.compositeGainDb(neutralGain, 48_000, 4_000.0),
+            EqMath.compositeGainDb(lowPass, 48_000, 4_000.0),
+            0.000001,
+        )
+        assertTrue(EqMath.calculateAutoPreamp(configWith(FilterType.BandPass, 1_000.0), 48_000).peakDb > -0.01)
+        assertEquals(0.0, EqMath.compositeGainDb(configWith(FilterType.LowPass, 24_000.0), 48_000, 8_000.0), 0.0)
+    }
+
+    private fun configWith(type: FilterType, frequencyHz: Double, gainDb: Double = 0.0): EqConfig = EqConfig(
+        enabled = true,
+        preampDb = 0.0,
+        bands = listOf(
+            EqBand(true, type, WidthMode.Q, frequencyHz, gainDb, 1.0 / kotlin.math.sqrt(2.0), 1.0),
+        ),
+    )
+}
