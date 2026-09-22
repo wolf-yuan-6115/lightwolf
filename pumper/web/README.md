@@ -6,7 +6,7 @@ DAC. It uses TypeScript, Vite, Tailwind CSS 4, daisyUI, and Lucide icons.
 It provides:
 
 - Live ten-band parametric EQ preview with response graph, automatic preamp,
-  and input/output level meters.
+  input/output level meters, and a firmware 3.3 limiter activity indicator.
 - Ten device profiles with separate load, save, default, and delete actions.
 - USB sample-rate, bit-depth, stream, volume, and mute status.
 - Headphone crossfeed and, on firmware 3.0 or newer, global output processing.

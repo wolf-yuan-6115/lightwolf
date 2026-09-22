@@ -40,6 +40,8 @@ changes; do not reset or rewrite user work.
 - The HID meter reports both pre-EQ input levels and the final post-processing
   output levels. The blue LED uses the saturated post-processing output peak
   immediately before I2S packing, without scanning the samples a second time.
+- I2S packing applies a fixed 0.75 output gain after metering. Preserve this
+  hardware-safety ceiling without changing the HID meter or blue LED levels.
 - The audio processing order is EQ/preamp, crossfeed, host USB gain/mute,
   global output processing, always-on limiter, and final PCM quantization.
   Output-processing and EQ changes ramp over 10 ms.

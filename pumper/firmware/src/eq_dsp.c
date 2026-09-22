@@ -284,10 +284,13 @@ void eq_process_interleaved_stereo(float *restrict interleaved, size_t frame_cou
       eq_biquad_t *band = &s_bands[s_active_bands[active]];
       process_stereo(&left, &right, band);
     }
-    audio_controls_process(&left, &right);
+    bool limiter_active = audio_controls_process(&left, &right);
     interleaved[frame * 2u] = left;
     interleaved[frame * 2u + 1u] = right;
-    if (metrics != NULL) measure_pair(&metrics->post_eq, left, right, measure_rms);
+    if (metrics != NULL) {
+      measure_pair(&metrics->post_eq, left, right, measure_rms);
+      metrics->limiter_active |= limiter_active;
+    }
   }
   for (size_t frame = transitioning; frame < frame_count; frame++) {
     float input_left = interleaved[frame * 2u];
@@ -297,9 +300,12 @@ void eq_process_interleaved_stereo(float *restrict interleaved, size_t frame_cou
     float right = input_right * s_preamp_current;
     for (uint8_t active = 0u; active < s_active_band_count; active++)
       process_stereo(&left, &right, &s_bands[s_active_bands[active]]);
-    audio_controls_process(&left, &right);
+    bool limiter_active = audio_controls_process(&left, &right);
     interleaved[frame * 2u] = left;
     interleaved[frame * 2u + 1u] = right;
-    if (metrics != NULL) measure_pair(&metrics->post_eq, left, right, measure_rms);
+    if (metrics != NULL) {
+      measure_pair(&metrics->post_eq, left, right, measure_rms);
+      metrics->limiter_active |= limiter_active;
+    }
   }
 }

@@ -1,6 +1,7 @@
 #ifndef EQ_DSP_H_
 #define EQ_DSP_H_
 
+#include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 
@@ -16,6 +17,7 @@ typedef struct {
 typedef struct {
   eq_level_metrics_t pre_eq;
   eq_level_metrics_t post_eq;
+  bool limiter_active;
 } eq_block_metrics_t;
 
 void eq_init(uint32_t sample_rate_hz, eq_config_t const *config);

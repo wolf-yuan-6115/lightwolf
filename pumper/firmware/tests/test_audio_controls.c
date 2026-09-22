@@ -124,28 +124,37 @@ static void test_limiter(void) {
   unsigned const rate = 48000u;
   audio_controls_init(rate, &k_crossfeed_default, &k_output_processing_default);
   float l = 20000.0f, r = -10000.0f;
-  audio_controls_process(&l, &r);
+  assert(!audio_controls_process(&l, &r));
   assert(l == 20000.0f && r == -10000.0f);
 
   l = 60000.0f;
   r = -30000.0f;
-  audio_controls_process(&l, &r);
+  assert(audio_controls_process(&l, &r));
   assert(fabsf(l) < 32768.0f && fabsf(r) < 32768.0f);
   assert(fabsf(l / r + 2.0f) < 0.001f);
 
   float first_gain = fabsf(l / 60000.0f);
   l = r = 1000.0f;
-  audio_controls_process(&l, &r);
+  assert(audio_controls_process(&l, &r));
   float early_gain = l / 1000.0f;
   assert(early_gain >= first_gain && early_gain < 1.0f);
-  for (unsigned i = 0; i < rate / 2u; ++i) {
+  bool active = true;
+  for (unsigned i = 0; i < rate; ++i) {
     l = r = 1000.0f;
-    audio_controls_process(&l, &r);
+    active = audio_controls_process(&l, &r);
   }
   assert(l > 999.0f && l <= 1000.0f);
+  assert(!active);
   l = r = 0.0f;
   audio_controls_process(&l, &r);
   assert(l == 0.0f && r == 0.0f);
+
+  eq_init(rate, &k_eq_default_config);
+  audio_controls_reset(rate);
+  float block[] = {60000.0f, -30000.0f, 1000.0f, 1000.0f};
+  eq_block_metrics_t metrics;
+  eq_process_interleaved_stereo(block, 2u, &metrics, true);
+  assert(metrics.limiter_active);
 }
 
 static void test_crossfeed_and_pipeline(void) {

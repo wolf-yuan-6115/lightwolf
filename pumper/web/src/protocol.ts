@@ -333,6 +333,7 @@ export interface MeterLevel {
   sequence: number;
   preEq: StereoMeterLevel;
   postEq: StereoMeterLevel;
+  limiterActive: boolean;
 }
 
 export interface ProfileState {
@@ -486,7 +487,10 @@ export function encodeMeterConfig(reportIntervalMs: number, timeoutMs: number): 
 }
 
 export function decodeMeterLevel(payload: Uint8Array): MeterLevel {
-  if (payload.length !== 28) throw new Error("Invalid audio meter report");
+  if (payload.length !== 28 && payload.length !== 32) throw new Error("Invalid audio meter report");
+  if (payload.length === 32 && ((payload[28] & 0xfe) !== 0 || payload[29] !== 0 || payload[30] !== 0 || payload[31] !== 0)) {
+    throw new Error("Invalid audio meter flags");
+  }
   const view = viewFor(payload);
   return {
     sequence: view.getUint32(0, true),
@@ -502,6 +506,7 @@ export function decodeMeterLevel(payload: Uint8Array): MeterLevel {
       leftMeanSquare: view.getUint32(20, true),
       rightMeanSquare: view.getUint32(24, true),
     },
+    limiterActive: payload.length === 32 && (payload[28] & 0x01) !== 0,
   };
 }
 

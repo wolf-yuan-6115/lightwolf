@@ -6,8 +6,8 @@ WebHID controller in [`../web/`](../web/).
 
 The app provides:
 
-- Live ten-band parametric EQ preview, response graph, automatic preamp, and
-  signal meters.
+- Live ten-band parametric EQ preview, response graph, automatic preamp,
+  signal meters, and a firmware 3.3 limiter activity indicator.
 - Audio status including USB sample rate, bit depth, stream state, and host
   master volume/mute.
 - Headphone crossfeed with Off, Low, Medium, High, and Custom modes.

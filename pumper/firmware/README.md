@@ -6,7 +6,7 @@ parametric EQ, headphone crossfeed, global output processing, USB host volume
 and mute, persistent profiles, and device diagnostics for the WebHID and
 Android controllers.
 
-Firmware 3.2 supports stereo PCM in these formats:
+Firmware 3.3 supports stereo PCM in these formats:
 
 - 16-bit at 44.1, 48, 88.2, 96, 176.4, and 192 kHz.
 - Packed 24-bit at 44.1, 48, 88.2, and 96 kHz.
@@ -15,6 +15,8 @@ The 24-bit alternate is not available at 176.4 or 192 kHz. Profile changes and
 audio-control previews are live; persistent settings are changed only by the
 corresponding save, default, or delete action. Audio is briefly muted while a
 persistent setting is written and verified.
+Realtime meter reports also identify limiter gain reduction for controller clip
+indicators.
 
 ## Requirements
 

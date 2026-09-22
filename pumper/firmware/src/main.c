@@ -94,6 +94,7 @@ typedef struct {
   eq_level_metrics_t pre_eq;
   eq_level_metrics_t post_eq;
   uint32_t frame_count;
+  bool limiter_active;
 } meter_accumulator_t;
 
 typedef struct {
@@ -333,7 +334,8 @@ static void meter_merge_level(eq_level_metrics_t *accumulator,
 }
 
 static void meter_accumulate(eq_level_metrics_t const *pre_eq,
-                             eq_level_metrics_t const *post_eq, uint16_t frames) {
+                             eq_level_metrics_t const *post_eq, uint16_t frames,
+                             bool limiter_active) {
   if (!s_meter_active) return;
   for (;;) {
     uint32_t index = __atomic_load_n(&s_meter_accumulator_index, __ATOMIC_ACQUIRE);
@@ -342,6 +344,7 @@ static void meter_accumulate(eq_level_metrics_t const *pre_eq,
       meter_merge_level(&s_meter_accumulators[index].pre_eq, pre_eq);
       meter_merge_level(&s_meter_accumulators[index].post_eq, post_eq);
       s_meter_accumulators[index].frame_count += frames;
+      s_meter_accumulators[index].limiter_active |= limiter_active;
       __atomic_sub_fetch(&s_meter_writers[index], 1u, __ATOMIC_RELEASE);
       return;
     }
@@ -418,7 +421,10 @@ static void dsp_core_main(void) {
       uint32_t peak = metrics.post_eq.left_peak;
       if (metrics.post_eq.right_peak > peak) peak = metrics.post_eq.right_peak;
       led_set_level(LED_BLUE_PIN, (uint16_t)((peak * LED_BLUE_MAX_BRIGHTNESS) / 32768u));
-      if (measure_block) meter_accumulate(&metrics.pre_eq, &metrics.post_eq, block->frames);
+      if (measure_block) {
+        meter_accumulate(&metrics.pre_eq, &metrics.post_eq, block->frames,
+                         metrics.limiter_active);
+      }
 
       block->word_count = (uint16_t)audio_format_pack_i2s(
           block->data.words, block->data.samples, block->frames, block->format);
@@ -680,7 +686,7 @@ static void hid_response_status(uint8_t opcode, uint16_t request_id) {
   hid_response_prepare(opcode, request_id, EQ_STATUS_OK, EQ_PROTOCOL_STATUS_PAYLOAD_SIZE);
   uint8_t *payload = &s_hid_response[EQ_PROTOCOL_HEADER_SIZE];
   payload[0] = 3u;
-  payload[1] = 2u;
+  payload[1] = 3u;
   payload[2] = EQ_NUM_FILTERS;
   payload[3] = (s_streaming_active ? 0x01u : 0u) | (config_is_dirty() ? 0x02u : 0u) |
                (config.enabled ? 0x04u : 0u);
@@ -1235,6 +1241,7 @@ static void meter_stream_task(void) {
   eq_protocol_write_u16(payload + 18u, meter.post_eq.right_peak);
   eq_protocol_write_u32(payload + 20u, post_eq_left_mean_square);
   eq_protocol_write_u32(payload + 24u, post_eq_right_mean_square);
+  payload[28] = meter.limiter_active ? EQ_PROTOCOL_METER_FLAG_LIMITER_ACTIVE : 0u;
 
   s_meter_next_report_us = now + (uint64_t)s_meter_report_interval_ms * 1000u;
   (void)tud_hid_report(0u, report, sizeof(report));

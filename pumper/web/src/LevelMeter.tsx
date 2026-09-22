@@ -1,3 +1,4 @@
+import { useEffect, useRef, useState } from "react";
 import { Activity } from "lucide-react";
 import { MeterLevel, StereoMeterLevel } from "./protocol";
 
@@ -59,17 +60,51 @@ interface MeterRowProps {
   source: "input" | "output";
   tone: "indigo" | "emerald";
   level: StereoMeterLevel | null;
+  limiterIndicator?: React.ReactNode;
 }
 
-function MeterRow({ title, source, tone, level }: MeterRowProps) {
+function MeterRow({ title, source, tone, level, limiterIndicator }: MeterRowProps) {
   return (
     <div className="grid min-w-0 gap-3 p-4 sm:p-5">
-      <strong className="text-xs font-semibold">{title}</strong>
+      <div className="flex items-center gap-2">
+        <strong className="text-xs font-semibold">{title}</strong>
+        {limiterIndicator}
+      </div>
       <div className="grid min-w-0 gap-1.5">
         <ChannelMeter channel="L" peak={level?.leftPeak ?? 0} source={source} tone={tone} />
         <ChannelMeter channel="R" peak={level?.rightPeak ?? 0} source={source} tone={tone} />
       </div>
     </div>
+  );
+}
+
+function LimiterIndicator({ active, sequence }: { active: boolean; sequence: number | null }) {
+  const [lit, setLit] = useState(false);
+  const clearTimer = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (!active) return;
+    setLit(true);
+    if (clearTimer.current !== null) window.clearTimeout(clearTimer.current);
+    clearTimer.current = window.setTimeout(() => {
+      setLit(false);
+      clearTimer.current = null;
+    }, 1000);
+  }, [active, sequence]);
+
+  useEffect(() => () => {
+    if (clearTimer.current !== null) window.clearTimeout(clearTimer.current);
+  }, []);
+
+  const label = lit ? "Limiter active" : "Limiter inactive";
+  return (
+    <span className="tooltip tooltip-right inline-flex" data-tip={label}>
+      <span
+        className={`status status-error transition-[opacity,box-shadow] duration-100 ${lit ? "opacity-100 shadow-[0_0_7px_color-mix(in_oklab,var(--color-error)_75%,transparent)]" : "opacity-25"}`}
+        role="status"
+        aria-label={label}
+      />
+    </span>
   );
 }
 
@@ -81,7 +116,13 @@ export function LevelMeter({ level }: { level: MeterLevel | null }) {
       </div>
       <div className="grid min-w-0 divide-y divide-base-200 md:grid-cols-2 md:divide-x md:divide-y-0">
         <MeterRow title="INPUT" source="input" tone="indigo" level={level?.preEq ?? null} />
-        <MeterRow title="OUTPUT" source="output" tone="emerald" level={level?.postEq ?? null} />
+        <MeterRow
+          title="OUTPUT"
+          source="output"
+          tone="emerald"
+          level={level?.postEq ?? null}
+          limiterIndicator={<LimiterIndicator active={level?.limiterActive ?? false} sequence={level?.sequence ?? null} />}
+        />
       </div>
     </section>
   );

@@ -52,7 +52,7 @@ static void test_protocol_header(void) {
   assert(eq_protocol_decode(report, sizeof(report), &packet));
   assert(packet.opcode == (EQ_OPCODE_METER_LEVEL | EQ_OPCODE_RESPONSE));
   assert(packet.request_id == 0u);
-  assert(packet.payload_length == 28u);
+  assert(packet.payload_length == 32u);
   assert(eq_protocol_read_u32(packet.payload) == 42u);
   assert(eq_protocol_read_u16(packet.payload + 4u) == 32768u);
   assert(eq_protocol_read_u16(packet.payload + 16u) == 16384u);

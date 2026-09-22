@@ -199,7 +199,7 @@ internal class SimulatedPumperTransport : PumperTransport {
 
     private fun encodeStatus(): ByteArray = ByteArray(48).also { payload ->
         payload[0] = 3
-        payload[1] = 2
+        payload[1] = 3
         payload[2] = config.bands.size.toByte()
         var flags = 0x01
         if (config != storedProfiles[activeProfile]) flags = flags or 0x02
@@ -243,7 +243,7 @@ internal class SimulatedPumperTransport : PumperTransport {
         ),
     )
 
-    private fun encodeMeter(): ByteArray = ByteArray(28).also { payload ->
+    private fun encodeMeter(): ByteArray = ByteArray(32).also { payload ->
         val phase = meterSequence / 18.0
         val left = (11_000 + 17_000 * abs(sin(phase))).toInt()
         val right = (9_000 + 15_000 * abs(sin(phase + PI / 3))).toInt()
@@ -259,6 +259,7 @@ internal class SimulatedPumperTransport : PumperTransport {
         payload.putU16(18, postRight)
         payload.putU32(20, postLeft.toLong() * postLeft / 2)
         payload.putU32(24, postRight.toLong() * postRight / 2)
+        if (meterSequence % 45L < 5L) payload[28] = 0x01
     }
 
     private fun response(opcode: Opcode, requestId: Int, payload: ByteArray): ByteArray = ByteArray(REPORT_SIZE).also {

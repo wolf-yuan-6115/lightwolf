@@ -7,6 +7,7 @@
 #define PI 3.14159265358979323846f
 #define FULL_SCALE 32768.0f
 #define LIMITER_KNEE 0.8912509381f
+#define LIMITER_RECOVERY_GAIN 0.9999f
 
 _Static_assert(DELAY_SIZE > (192000u * 600u / 1000000u) + 1u, "Delay history too small");
 crossfeed_config_t const k_crossfeed_default = {CROSSFEED_OFF, 2000, 700, 250};
@@ -202,7 +203,7 @@ static float limiter_target(float peak) {
   float excess = p - LIMITER_KNEE, room = 1.0f - LIMITER_KNEE;
   return (LIMITER_KNEE + excess / (1.0f + excess / room)) / p;
 }
-void audio_controls_process(float *left, float *right) {
+bool audio_controls_process(float *left, float *right) {
   float a = *left, b = *right;
   if (current.strength != 0.0f || fade_remaining) process_crossfeed(&current, a, b, &a, &b);
   if (fade_remaining) {
@@ -227,7 +228,10 @@ void audio_controls_process(float *left, float *right) {
   float or = matrix.rl * a + matrix.rr * b;
   float target = limiter_target(fmaxf(fabsf(ol), fabsf(or)));
   limiter_gain = target < limiter_gain ? target : target + (limiter_gain - target) * limiter_release_alpha;
+  if (target == 1.0f && limiter_gain > LIMITER_RECOVERY_GAIN) limiter_gain = 1.0f;
+  bool limiter_active = limiter_gain < 1.0f;
   float limited_l = ol * limiter_gain, limited_r = or * limiter_gain;
   *left = isfinite(limited_l) ? fmaxf(-32768.0f, fminf(32767.0f, limited_l)) : 0.0f;
   *right = isfinite(limited_r) ? fmaxf(-32768.0f, fminf(32767.0f, limited_r)) : 0.0f;
+  return limiter_active;
 }

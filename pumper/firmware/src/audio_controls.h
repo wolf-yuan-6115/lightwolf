@@ -55,5 +55,5 @@ void audio_controls_reset(uint32_t rate);
 void audio_controls_set_crossfeed(crossfeed_config_t const *config);
 void audio_controls_set_output_processing(output_processing_config_t const *config);
 void audio_controls_set_gains(float const gains[2]);
-void audio_controls_process(float *left, float *right);
+bool audio_controls_process(float *left, float *right);
 #endif

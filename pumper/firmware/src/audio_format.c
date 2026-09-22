@@ -2,6 +2,12 @@
 
 #include <math.h>
 
+#define I2S_OUTPUT_GAIN 0.75f
+#define PCM16_OUTPUT_MIN (-24576)
+#define PCM16_OUTPUT_MAX 24575
+#define PCM24_OUTPUT_MIN (-6291456)
+#define PCM24_OUTPUT_MAX 6291455
+
 size_t audio_format_frame_bytes(audio_sample_format_t format) {
   return format == AUDIO_FORMAT_PCM24 ? 6u : format == AUDIO_FORMAT_PCM16 ? 4u : 0u;
 }
@@ -63,16 +69,20 @@ size_t audio_format_pack_i2s(uint32_t *output, float const *input,
   // The board routes the DAC's analog channels crossed, so compensate only at the I2S boundary.
   if (format == AUDIO_FORMAT_PCM16) {
     for (size_t frame = 0; frame < frames; frame++) {
-      int32_t left = quantize(input[frame * 2u], 1.0f, -32768, 32767);
-      int32_t right = quantize(input[frame * 2u + 1u], 1.0f, -32768, 32767);
+      int32_t left = quantize(input[frame * 2u], I2S_OUTPUT_GAIN,
+                              PCM16_OUTPUT_MIN, PCM16_OUTPUT_MAX);
+      int32_t right = quantize(input[frame * 2u + 1u], I2S_OUTPUT_GAIN,
+                               PCM16_OUTPUT_MIN, PCM16_OUTPUT_MAX);
       output[frame] = (uint16_t)right | (uint32_t)(uint16_t)left << 16u;
     }
     return frames;
   }
   if (format == AUDIO_FORMAT_PCM24) {
     for (size_t frame = 0; frame < frames; frame++) {
-      int32_t left = quantize(input[frame * 2u], 256.0f, -8388608, 8388607);
-      int32_t right = quantize(input[frame * 2u + 1u], 256.0f, -8388608, 8388607);
+      int32_t left = quantize(input[frame * 2u], 256.0f * I2S_OUTPUT_GAIN,
+                              PCM24_OUTPUT_MIN, PCM24_OUTPUT_MAX);
+      int32_t right = quantize(input[frame * 2u + 1u], 256.0f * I2S_OUTPUT_GAIN,
+                               PCM24_OUTPUT_MIN, PCM24_OUTPUT_MAX);
       output[frame * 2u] = ((uint32_t)left & 0x00ffffffu) << 8u;
       output[frame * 2u + 1u] = ((uint32_t)right & 0x00ffffffu) << 8u;
     }

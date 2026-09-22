@@ -8,6 +8,7 @@ import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import dev.wolf.yuan.pumper.protocol.MeterLevel
+import dev.wolf.yuan.pumper.protocol.StereoMeterLevel
 import kotlinx.coroutines.flow.MutableStateFlow
 import org.junit.Rule
 import org.junit.Test
@@ -26,7 +27,20 @@ class LevelMeterComposeTest {
 
         composeRule.onNodeWithText("Output").assertIsDisplayed()
         composeRule.onNodeWithText("dBFS").assertIsDisplayed()
+        composeRule.onNodeWithContentDescription("Limiter inactive").assertIsDisplayed()
         composeRule.onNodeWithContentDescription("Stereo input level").assertIsDisplayed()
         composeRule.onAllNodesWithText("Nested").assertCountEquals(0)
+    }
+
+    @Test
+    fun limiterIndicatorShowsReportedActivity() {
+        val silence = StereoMeterLevel(0, 0, 0, 0)
+        composeRule.setContent {
+            MaterialTheme {
+                SignalLevels(MutableStateFlow(MeterLevel(1, silence, silence, limiterActive = true)))
+            }
+        }
+
+        composeRule.onNodeWithContentDescription("Limiter active").assertIsDisplayed()
     }
 }

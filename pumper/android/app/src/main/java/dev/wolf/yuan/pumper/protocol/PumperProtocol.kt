@@ -186,6 +186,7 @@ data class MeterLevel(
     val sequence: Long,
     val preEq: StereoMeterLevel,
     val postEq: StereoMeterLevel,
+    val limiterActive: Boolean = false,
 )
 
 data class ProfileState(
@@ -324,11 +325,17 @@ object PumperProtocol {
 
     @Throws(ProtocolException::class)
     fun decodeMeterLevel(payload: ByteArray): MeterLevel {
-        if (payload.size != 28) throw ProtocolException("Invalid audio meter report")
+        if (payload.size != 28 && payload.size != 32) throw ProtocolException("Invalid audio meter report")
+        if (payload.size == 32 &&
+            (payload.u8(28) and 0xfe != 0 || payload.u8(29) != 0 || payload.u8(30) != 0 || payload.u8(31) != 0)
+        ) {
+            throw ProtocolException("Invalid audio meter flags")
+        }
         return MeterLevel(
             sequence = payload.u32(0),
             preEq = StereoMeterLevel(payload.u16(4), payload.u16(6), payload.u32(8), payload.u32(12)),
             postEq = StereoMeterLevel(payload.u16(16), payload.u16(18), payload.u32(20), payload.u32(24)),
+            limiterActive = payload.size == 32 && payload.u8(28) and 0x01 != 0,
         )
     }
 

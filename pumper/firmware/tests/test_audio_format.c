@@ -35,18 +35,21 @@ static void test_decode(void) {
 }
 
 static void test_pack(void) {
-  float samples[] = {-40000.0f, 40000.0f, 1.4f, -1.6f};
-  uint32_t words[4] = {0};
-  assert(audio_format_pack_i2s(words, samples, 2u, AUDIO_FORMAT_PCM16) == 2u);
-  assert(words[0] == 0x80007fffu);
-  assert(words[1] == 0x0001fffeu);
+  float samples[] = {-32768.0f, 32767.0f, -40000.0f, 40000.0f, 1.4f, -1.6f};
+  uint32_t words[6] = {0};
+  assert(audio_format_pack_i2s(words, samples, 3u, AUDIO_FORMAT_PCM16) == 3u);
+  assert(words[0] == 0xa0005fffu);
+  assert(words[1] == 0xa0005fffu);
+  assert(words[2] == 0x0001ffffu);
 
-  float pcm24[] = {-32768.0f, 32768.0f, 1.0f, -1.0f};
-  assert(audio_format_pack_i2s(words, pcm24, 2u, AUDIO_FORMAT_PCM24) == 4u);
-  assert(words[0] == 0x80000000u);
-  assert(words[1] == 0x7fffff00u);
-  assert(words[2] == 0x00010000u);
-  assert(words[3] == 0xffff0000u);
+  float pcm24[] = {-32768.0f, 32768.0f, -40000.0f, 40000.0f, 1.0f, -1.0f};
+  assert(audio_format_pack_i2s(words, pcm24, 3u, AUDIO_FORMAT_PCM24) == 6u);
+  assert(words[0] == 0xa0000000u);
+  assert(words[1] == 0x5fffff00u);
+  assert(words[2] == 0xa0000000u);
+  assert(words[3] == 0x5fffff00u);
+  assert(words[4] == 0x0000c000u);
+  assert(words[5] == 0xffff4000u);
 }
 
 int main(void) {

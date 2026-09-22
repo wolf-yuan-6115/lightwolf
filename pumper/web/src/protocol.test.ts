@@ -223,7 +223,17 @@ describe("Pumper HID protocol", () => {
         leftMeanSquare: 301989888,
         rightMeanSquare: 33554432,
       },
+      limiterActive: false,
     });
+    const extended = new Uint8Array(32);
+    extended.set(payload);
+    extended[28] = 0x01;
+    expect(decodeMeterLevel(extended).limiterActive).toBe(true);
+    extended[28] = 0x02;
+    expect(() => decodeMeterLevel(extended)).toThrow("Invalid audio meter flags");
+    extended[28] = 0x01;
+    extended[31] = 1;
+    expect(() => decodeMeterLevel(extended)).toThrow("Invalid audio meter flags");
     expect(() => decodeMeterLevel(new Uint8Array(16))).toThrow("Invalid audio meter report");
   });
 

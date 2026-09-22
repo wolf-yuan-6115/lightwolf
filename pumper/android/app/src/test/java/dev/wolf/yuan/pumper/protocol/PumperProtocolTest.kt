@@ -97,6 +97,16 @@ class PumperProtocolTest {
         assertEquals(17L, meter.sequence)
         assertEquals(32768, meter.preEq.leftPeak)
         assertEquals(301989888L, meter.postEq.leftMeanSquare)
+        assertFalse(meter.limiterActive)
+
+        val extended = payload.copyOf(32)
+        extended[28] = 0x01
+        assertTrue(PumperProtocol.decodeMeterLevel(extended).limiterActive)
+        extended[28] = 0x02
+        assertThrows(ProtocolException::class.java) { PumperProtocol.decodeMeterLevel(extended) }
+        extended[28] = 0x01
+        extended[31] = 1
+        assertThrows(ProtocolException::class.java) { PumperProtocol.decodeMeterLevel(extended) }
     }
 
     @Test

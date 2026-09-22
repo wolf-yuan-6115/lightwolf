@@ -1,11 +1,16 @@
 package dev.wolf.yuan.pumper.ui
 
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -32,6 +37,9 @@ import dev.wolf.yuan.pumper.protocol.MeterLevel
 import dev.wolf.yuan.pumper.protocol.StereoMeterLevel
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import java.util.Locale
 import kotlin.math.abs
 import kotlin.math.exp
@@ -71,10 +79,17 @@ fun SignalLevels(
     modifier: Modifier = Modifier,
 ) {
     val frame = rememberAnimatedMeter(levels)
+    val limiterActive = rememberLimiterIndicator(levels)
 
     Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Text("Output", style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
+        Row(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text("Output", style = MaterialTheme.typography.titleLarge)
+            LimiterIndicator(limiterActive.value)
+            Spacer(Modifier.weight(1f))
             Text("dBFS", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         StereoOutputField(frame)
@@ -85,6 +100,43 @@ fun SignalLevels(
         )
         StereoInputField(frame)
     }
+}
+
+@Composable
+private fun rememberLimiterIndicator(levels: StateFlow<MeterLevel?>): State<Boolean> {
+    val active = remember { mutableStateOf(false) }
+    LaunchedEffect(levels) {
+        var clearJob: Job? = null
+        try {
+            levels.collect { level ->
+                if (level?.limiterActive == true) {
+                    active.value = true
+                    clearJob?.cancel()
+                    clearJob = launch {
+                        delay(1_000)
+                        active.value = false
+                    }
+                }
+            }
+        } finally {
+            clearJob?.cancel()
+        }
+    }
+    return active
+}
+
+@Composable
+private fun LimiterIndicator(active: Boolean) {
+    val label = if (active) "Limiter active" else "Limiter inactive"
+    Box(
+        Modifier
+            .size(9.dp)
+            .background(
+                MaterialTheme.colorScheme.error.copy(alpha = if (active) 1f else 0.25f),
+                CircleShape,
+            )
+            .semantics { contentDescription = label },
+    )
 }
 
 @Composable
