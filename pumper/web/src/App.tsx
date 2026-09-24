@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { AlertTriangle, ChartSpline, Check, Info, ListFilter, SlidersHorizontal, Moon, Power, RotateCcw, Save, Sun, Trash2, Upload, Usb, X } from "lucide-react";
+import { AlertTriangle, ChartSpline, Check, ClipboardCopy, ClipboardPaste, Info, ListFilter, SlidersHorizontal, Moon, Power, RotateCcw, Save, Sun, Trash2, Upload, Usb, X } from "lucide-react";
 import { bandColors, EqGraph } from "./EqGraph";
 import { calculateAutoPreamp } from "./eqMath";
+import { parseEqText, serializeEqText } from "./eqText";
 import { METER_REPORT_EVENT, PumperHidTransport } from "./hidTransport";
 import { LevelMeter } from "./LevelMeter";
 import { SaveStateBadge } from "./SaveStateBadge";
@@ -222,6 +223,9 @@ export default function App() {
   const [autoPreamp, setAutoPreamp] = useState(false);
   const [localDirty, setLocalDirty] = useState(false);
   const [dialog, setDialog] = useState<Dialog>(null);
+  const [importDialogOpen, setImportDialogOpen] = useState(false);
+  const [importText, setImportText] = useState("");
+  const [importError, setImportError] = useState<string | null>(null);
   const [deviceDialog, setDeviceDialog] = useState<DeviceDialog>(null);
   const [deviceActionPending, setDeviceActionPending] = useState(false);
   const [writing, setWriting] = useState(false);
@@ -618,6 +622,48 @@ export default function App() {
     setPendingProfile(null);
   };
 
+  const copyEqText = async () => {
+    try {
+      await navigator.clipboard.writeText(serializeEqText(configRef.current));
+      setError(null);
+      setNotice("Parametric EQ text copied");
+    } catch {
+      setError("Unable to copy EQ text. Allow clipboard access and try again.");
+    }
+  };
+
+  const openImportDialog = () => {
+    setImportText("");
+    setImportError(null);
+    setImportDialogOpen(true);
+  };
+
+  const importEqText = () => {
+    try {
+      const next = parseEqText(importText, status?.bandCount ?? configRef.current.bands.length);
+      if (!audioSettings.outputSupported && next.bands.some((band) => band.type > FilterType.HighShelf)) {
+        throw new Error("Low-pass, high-pass, notch, and band-pass filters require firmware 3.0 or newer.");
+      }
+      const validationError = validateConfig(next);
+      if (validationError) throw new Error(validationError);
+      clearTimers();
+      autoRef.current = false;
+      setAutoPreamp(false);
+      configRef.current = next;
+      setConfig(next);
+      updateDirtyState(next);
+      setSelectedBand(0);
+      sendGlobalSoon(next, "Imported global EQ");
+      next.bands.forEach((band, index) => sendBandSoon(index, band, `Imported band ${index + 1}`));
+      setImportDialogOpen(false);
+      setImportError(null);
+      setError(null);
+      setNotice("Parametric EQ imported into live preview");
+    } catch (reason) {
+      setImportError(reason instanceof Error ? reason.message : "Unable to import EQ text");
+    }
+  };
+
   const confirmDeviceAction = async () => {
     if (deviceDialog !== "restart" && deviceDialog !== "bootsel") return;
     const action = deviceDialog;
@@ -783,8 +829,16 @@ export default function App() {
         <LevelMeter level={meterLevel} />
 
         <section className="card card-border min-w-0 overflow-hidden bg-base-100">
-          <div className="border-b border-base-200 p-4 sm:p-5">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-base-200 p-4 sm:p-5">
             <h2 className="card-title text-base"><ListFilter size={18} aria-hidden="true" />Filter configuration</h2>
+            <div className="flex items-center gap-2">
+              <button type="button" className={secondaryButton} onClick={() => { void copyEqText(); }} disabled={!connected} title="Copy current EQ as text">
+                <ClipboardCopy size={16} aria-hidden="true" /> Copy EQ
+              </button>
+              <button type="button" className={secondaryButton} onClick={openImportDialog} disabled={!connected} title="Import parametric EQ text">
+                <ClipboardPaste size={16} aria-hidden="true" /> Import EQ
+              </button>
+            </div>
           </div>
           <div className="max-w-full overflow-x-auto">
             <table className="table table-sm w-full min-w-[930px] table-fixed">
@@ -848,6 +902,33 @@ export default function App() {
             </div>
           </div>
           <button className="modal-backdrop" onClick={() => setConnectionIssue(null)} aria-label="Close connection dialog">close</button>
+        </div>
+      )}
+
+      {importDialogOpen && (
+        <div className="modal modal-open" role="dialog" aria-modal="true" aria-labelledby="import-eq-title">
+          <div className="modal-box max-w-2xl">
+            <h2 className="text-lg font-semibold" id="import-eq-title">Import parametric EQ</h2>
+            <p className="mt-2 text-sm leading-relaxed text-base-content/65">
+              Paste Equalizer APO-style settings. Imported filters replace all ten live bands; omitted bands are disabled. Nothing is written to flash until you save the profile.
+            </p>
+            <textarea
+              className={`textarea mt-4 h-72 w-full resize-y font-mono text-xs leading-relaxed ${importError ? "textarea-error" : "textarea-bordered"}`}
+              value={importText}
+              onChange={(event) => { setImportText(event.target.value); setImportError(null); }}
+              placeholder={"Preamp: -6 dB\nFilter 1: ON PK Fc 100 Hz Gain 3 dB Q 1.4"}
+              aria-label="Parametric EQ text"
+              aria-invalid={importError ? "true" : undefined}
+              autoFocus
+            />
+            {importError && <p className="mt-2 text-sm text-error" role="alert">{importError}</p>}
+            <p className="mt-2 text-xs text-base-content/55">Types: PK, LS, HS, LP, HP, NO, BP. Use Q for width, or BW with peaking filters.</p>
+            <div className="modal-action">
+              <button className={secondaryButton} onClick={() => setImportDialogOpen(false)}>Cancel</button>
+              <button className={primaryButton} onClick={importEqText} disabled={!importText.trim()}>Import to preview</button>
+            </div>
+          </div>
+          <button className="modal-backdrop" onClick={() => setImportDialogOpen(false)} aria-label="Close import dialog">close</button>
         </div>
       )}
 

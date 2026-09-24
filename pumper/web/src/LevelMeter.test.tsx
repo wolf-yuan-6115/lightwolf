@@ -1,5 +1,5 @@
-import { act, render, screen, within } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { render, screen, within } from "@testing-library/react";
+import { describe, expect, it } from "vitest";
 import { LevelMeter } from "./LevelMeter";
 
 describe("LevelMeter", () => {
@@ -33,11 +33,12 @@ describe("LevelMeter", () => {
     expect(container.querySelector(".bg-red-500")).toBeInTheDocument();
     const leftInputSegments = container.querySelector('[aria-label="L input 0.0 dBFS"] [aria-hidden="true"]');
     expect(leftInputSegments?.lastElementChild).toHaveClass("bg-red-500");
-    expect(screen.getByRole("status", { name: "Limiter inactive" })).toHaveClass("opacity-25");
+    expect(screen.getByRole("status", { name: "Limiter inactive" })).toHaveTextContent("LIM");
+    expect(screen.getByRole("status", { name: "Limiter inactive" })).toHaveClass("badge-ghost");
+    expect(container.querySelector(".tooltip")).not.toBeInTheDocument();
   });
 
-  it("holds the limiter indicator for one second after the latest active report", () => {
-    vi.useFakeTimers();
+  it("follows limiter activity on each meter report", () => {
     const level = {
       sequence: 1,
       preEq: { leftPeak: 0, rightPeak: 0, leftMeanSquare: 0, rightMeanSquare: 0 },
@@ -46,13 +47,8 @@ describe("LevelMeter", () => {
     };
     const { container, rerender } = render(<LevelMeter level={level} />);
 
-    expect(within(container).getByRole("status", { name: "Limiter active" })).toHaveClass("opacity-100");
-    act(() => vi.advanceTimersByTime(750));
-    rerender(<LevelMeter level={{ ...level, sequence: 2 }} />);
-    act(() => vi.advanceTimersByTime(999));
-    expect(within(container).getByRole("status", { name: "Limiter active" })).toBeInTheDocument();
-    act(() => vi.advanceTimersByTime(1));
-    expect(within(container).getByRole("status", { name: "Limiter inactive" })).toBeInTheDocument();
-    vi.useRealTimers();
+    expect(within(container).getByRole("status", { name: "Limiter active" })).toHaveClass("badge-error");
+    rerender(<LevelMeter level={{ ...level, sequence: 2, limiterActive: false }} />);
+    expect(within(container).getByRole("status", { name: "Limiter inactive" })).toHaveClass("badge-ghost");
   });
 });

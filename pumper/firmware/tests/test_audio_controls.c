@@ -123,7 +123,24 @@ static void test_output_utilities(void) {
 static void test_limiter(void) {
   unsigned const rate = 48000u;
   audio_controls_init(rate, &k_crossfeed_default, &k_output_processing_default);
-  float l = 20000.0f, r = -10000.0f;
+
+  float l = 32767.0f, r = -32768.0f;
+  assert(!audio_controls_process(&l, &r));
+  assert(l == 32767.0f && r == -32768.0f);
+
+  l = 32768.0f;
+  r = -16384.0f;
+  assert(!audio_controls_process(&l, &r));
+  assert(l == 32767.0f && r == -16384.0f);
+
+  l = 65536.0f;
+  r = -32768.0f;
+  assert(audio_controls_process(&l, &r));
+  assert(l == 32767.0f && r == -16384.0f);
+
+  audio_controls_reset(rate);
+  l = 20000.0f;
+  r = -10000.0f;
   assert(!audio_controls_process(&l, &r));
   assert(l == 20000.0f && r == -10000.0f);
 

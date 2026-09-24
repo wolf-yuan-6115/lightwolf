@@ -6,7 +6,6 @@
 #define DELAY_SIZE 128u
 #define PI 3.14159265358979323846f
 #define FULL_SCALE 32768.0f
-#define LIMITER_KNEE 0.8912509381f
 #define LIMITER_RECOVERY_GAIN 0.9999f
 
 _Static_assert(DELAY_SIZE > (192000u * 600u / 1000000u) + 1u, "Delay history too small");
@@ -198,10 +197,7 @@ static void advance_matrix(void) {
 }
 static float limiter_target(float peak) {
   if (!isfinite(peak)) return 0.0f;
-  float p = peak / FULL_SCALE;
-  if (p <= LIMITER_KNEE) return 1.0f;
-  float excess = p - LIMITER_KNEE, room = 1.0f - LIMITER_KNEE;
-  return (LIMITER_KNEE + excess / (1.0f + excess / room)) / p;
+  return peak <= FULL_SCALE ? 1.0f : FULL_SCALE / peak;
 }
 bool audio_controls_process(float *left, float *right) {
   float a = *left, b = *right;

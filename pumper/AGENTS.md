@@ -45,9 +45,9 @@ changes; do not reset or rewrite user work.
 - The audio processing order is EQ/preamp, crossfeed, host USB gain/mute,
   global output processing, always-on limiter, and final PCM quantization.
   Output-processing and EQ changes ramp over 10 ms.
-- The stereo-linked limiter has immediate attack, a -1 dBFS soft knee, and a
-  50 ms release. It has no lookahead, true-peak oversampling, dither, or user
-  toggle.
+- The stereo-linked limiter has immediate attack, a 0 dBFS hard knee, and a
+  50 ms release. Signals at or below full scale pass without limiter gain
+  reduction. It has no lookahead, true-peak oversampling, dither, or user toggle.
 - Keep the advertised format matrix in sync across descriptors, format
   validation, I2S packing, status reporting, and both controllers: 16-bit
   stereo at 44.1/48/88.2/96/176.4/192 kHz, and packed 24-bit stereo at

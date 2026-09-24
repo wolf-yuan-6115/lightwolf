@@ -1,4 +1,3 @@
-import { useEffect, useRef, useState } from "react";
 import { Activity } from "lucide-react";
 import { MeterLevel, StereoMeterLevel } from "./protocol";
 
@@ -66,44 +65,31 @@ interface MeterRowProps {
 function MeterRow({ title, source, tone, level, limiterIndicator }: MeterRowProps) {
   return (
     <div className="grid min-w-0 gap-3 p-4 sm:p-5">
-      <div className="flex items-center gap-2">
-        <strong className="text-xs font-semibold">{title}</strong>
+      <strong className="text-xs font-semibold">{title}</strong>
+      <div className={limiterIndicator ? "grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-3" : "grid min-w-0"}>
+        <div className="grid min-w-0 gap-1.5">
+          <ChannelMeter channel="L" peak={level?.leftPeak ?? 0} source={source} tone={tone} />
+          <ChannelMeter channel="R" peak={level?.rightPeak ?? 0} source={source} tone={tone} />
+        </div>
         {limiterIndicator}
-      </div>
-      <div className="grid min-w-0 gap-1.5">
-        <ChannelMeter channel="L" peak={level?.leftPeak ?? 0} source={source} tone={tone} />
-        <ChannelMeter channel="R" peak={level?.rightPeak ?? 0} source={source} tone={tone} />
       </div>
     </div>
   );
 }
 
-function LimiterIndicator({ active, sequence }: { active: boolean; sequence: number | null }) {
-  const [lit, setLit] = useState(false);
-  const clearTimer = useRef<number | null>(null);
-
-  useEffect(() => {
-    if (!active) return;
-    setLit(true);
-    if (clearTimer.current !== null) window.clearTimeout(clearTimer.current);
-    clearTimer.current = window.setTimeout(() => {
-      setLit(false);
-      clearTimer.current = null;
-    }, 1000);
-  }, [active, sequence]);
-
-  useEffect(() => () => {
-    if (clearTimer.current !== null) window.clearTimeout(clearTimer.current);
-  }, []);
-
-  const label = lit ? "Limiter active" : "Limiter inactive";
+function LimiterIndicator({ active }: { active: boolean }) {
+  const label = active ? "Limiter active" : "Limiter inactive";
   return (
-    <span className="tooltip tooltip-right inline-flex" data-tip={label}>
+    <span
+      className={`badge badge-sm h-7 gap-1.5 px-2 text-[9px] font-semibold tracking-wider ${active ? "badge-error badge-soft" : "badge-ghost text-base-content/45"}`}
+      role="status"
+      aria-label={label}
+    >
       <span
-        className={`status status-error transition-[opacity,box-shadow] duration-100 ${lit ? "opacity-100 shadow-[0_0_7px_color-mix(in_oklab,var(--color-error)_75%,transparent)]" : "opacity-25"}`}
-        role="status"
-        aria-label={label}
+        className={`status ${active ? "status-error shadow-[0_0_6px_color-mix(in_oklab,var(--color-error)_65%,transparent)]" : "bg-current opacity-45"}`}
+        aria-hidden="true"
       />
+      LIM
     </span>
   );
 }
@@ -121,7 +107,7 @@ export function LevelMeter({ level }: { level: MeterLevel | null }) {
           source="output"
           tone="emerald"
           level={level?.postEq ?? null}
-          limiterIndicator={<LimiterIndicator active={level?.limiterActive ?? false} sequence={level?.sequence ?? null} />}
+          limiterIndicator={<LimiterIndicator active={level?.limiterActive ?? false} />}
         />
       </div>
     </section>

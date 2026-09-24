@@ -21,6 +21,7 @@ import {
 } from "./protocol";
 
 const originalHid = Object.getOwnPropertyDescriptor(navigator, "hid");
+const originalClipboard = Object.getOwnPropertyDescriptor(navigator, "clipboard");
 const originalLocalStorage = Object.getOwnPropertyDescriptor(window, "localStorage");
 const storedValues = new Map<string, string>();
 const localStorageMock: Storage = {
@@ -48,6 +49,8 @@ afterEach(() => {
   else Reflect.deleteProperty(window, "localStorage");
   if (originalHid) Object.defineProperty(navigator, "hid", originalHid);
   else Reflect.deleteProperty(navigator, "hid");
+  if (originalClipboard) Object.defineProperty(navigator, "clipboard", originalClipboard);
+  else Reflect.deleteProperty(navigator, "clipboard");
 });
 
 function mockConnectedPumper(deviceConfig: EqConfig = defaultConfig, rejectRequest?: (opcode: Opcode) => Error | null, version = [1, 8], statusPayloadSize = 48) {
@@ -110,6 +113,58 @@ function getProfileOption(label: string) {
 }
 
 describe("Pumper controller", () => {
+  it("copies the current EQ as parametric text", async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText } });
+    mockConnectedPumper({ ...defaultConfig, preampDb: -3.5 });
+    render(<App />);
+    const copyButton = await screen.findByRole("button", { name: "Copy EQ" });
+    await waitFor(() => expect(copyButton).toBeEnabled());
+
+    fireEvent.click(copyButton);
+
+    await waitFor(() => expect(writeText).toHaveBeenCalledOnce());
+    expect(writeText.mock.calls[0][0]).toContain("Preamp: -3.5 dB");
+    expect(writeText.mock.calls[0][0]).toContain("Filter 1: ON PK Fc 68 Hz Gain 0 dB BW 1.89 oct");
+    expect(await screen.findByText("Parametric EQ text copied")).toBeInTheDocument();
+  });
+
+  it("imports text into live preview without saving flash", async () => {
+    const { request } = mockConnectedPumper();
+    render(<App />);
+    const importButton = await screen.findByRole("button", { name: "Import EQ" });
+    await waitFor(() => expect(importButton).toBeEnabled());
+    request.mockClear();
+
+    fireEvent.click(importButton);
+    fireEvent.change(screen.getByLabelText("Parametric EQ text"), {
+      target: { value: "Equalizer: ON\nPreamp: -6 dB\nFilter 1: ON PK Fc 120 Hz Gain 4 dB Q 1.2" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Import to preview" }));
+
+    expect(await screen.findByText("Parametric EQ imported into live preview")).toBeInTheDocument();
+    expect(screen.getByLabelText("Preamp gain")).toHaveValue("-6");
+    expect(screen.getByLabelText("Frequency for band 1")).toHaveValue("120");
+    expect(screen.getByLabelText("Enable band 2")).not.toBeChecked();
+    expect(screen.getByRole("button", { name: "Save profile" })).toBeEnabled();
+    await waitFor(() => expect(request.mock.calls.filter(([opcode]) => opcode === Opcode.SetBand)).toHaveLength(10));
+    expect(request.mock.calls.some(([opcode]) => opcode === Opcode.SaveProfile)).toBe(false);
+  });
+
+  it("keeps the import dialog open when EQ text is invalid", async () => {
+    mockConnectedPumper();
+    render(<App />);
+    const importButton = await screen.findByRole("button", { name: "Import EQ" });
+    await waitFor(() => expect(importButton).toBeEnabled());
+
+    fireEvent.click(importButton);
+    fireEvent.change(screen.getByLabelText("Parametric EQ text"), { target: { value: "Filter 1: ON PK Fc 2 Hz Gain 0 dB Q 1" } });
+    fireEvent.click(screen.getByRole("button", { name: "Import to preview" }));
+
+    expect(screen.getByRole("dialog", { name: "Import parametric EQ" })).toBeInTheDocument();
+    expect(screen.getByRole("alert")).toHaveTextContent("Filter 1 frequency must be between 20 and 20000");
+  });
+
   it("keeps new audio controls disabled on old firmware without sending unsupported commands", async () => {
     const { request } = mockConnectedPumper();
     render(<App />);

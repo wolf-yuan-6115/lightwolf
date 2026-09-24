@@ -16,6 +16,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.State
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.withFrameNanos
@@ -37,9 +38,6 @@ import dev.wolf.yuan.pumper.protocol.MeterLevel
 import dev.wolf.yuan.pumper.protocol.StereoMeterLevel
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.collectLatest
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 import java.util.Locale
 import kotlin.math.abs
 import kotlin.math.exp
@@ -79,7 +77,7 @@ fun SignalLevels(
     modifier: Modifier = Modifier,
 ) {
     val frame = rememberAnimatedMeter(levels)
-    val limiterActive = rememberLimiterIndicator(levels)
+    val meterLevel = levels.collectAsState()
 
     Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Row(
@@ -88,7 +86,7 @@ fun SignalLevels(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text("Output", style = MaterialTheme.typography.titleLarge)
-            LimiterIndicator(limiterActive.value)
+            LimiterIndicator(meterLevel.value?.limiterActive == true)
             Spacer(Modifier.weight(1f))
             Text("dBFS", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
@@ -100,29 +98,6 @@ fun SignalLevels(
         )
         StereoInputField(frame)
     }
-}
-
-@Composable
-private fun rememberLimiterIndicator(levels: StateFlow<MeterLevel?>): State<Boolean> {
-    val active = remember { mutableStateOf(false) }
-    LaunchedEffect(levels) {
-        var clearJob: Job? = null
-        try {
-            levels.collect { level ->
-                if (level?.limiterActive == true) {
-                    active.value = true
-                    clearJob?.cancel()
-                    clearJob = launch {
-                        delay(1_000)
-                        active.value = false
-                    }
-                }
-            }
-        } finally {
-            clearJob?.cancel()
-        }
-    }
-    return active
 }
 
 @Composable
