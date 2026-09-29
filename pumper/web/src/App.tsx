@@ -938,7 +938,7 @@ export default function App() {
 
       {deviceDialog && (
         <div className="modal modal-open" role="dialog" aria-modal="true" aria-labelledby="device-dialog-title">
-          <div className={`modal-box ${deviceDialog === "info" ? "!w-[calc(100vw-2rem)] !max-w-6xl overflow-x-hidden" : "max-w-md"}`}>
+          <div className={`modal-box ${deviceDialog === "info" ? "!w-[calc(100vw-2rem)] !max-w-4xl overflow-x-hidden" : "max-w-md"}`}>
             {deviceDialog === "info" ? (
               <>
                 <div className="flex items-start justify-between gap-4">
@@ -950,7 +950,7 @@ export default function App() {
                   </button>
                 </div>
 
-                <DeviceInfoPipeline status={status} telemetry={telemetry} />
+                <DeviceInfoPipeline status={status} telemetry={telemetry} eq={config} audio={audioSettings.audio} crossfeed={audioSettings.crossfeed?.live ?? null} outputProcessing={audioSettings.outputProcessing?.live ?? null} />
 
 
                 <div className="modal-action flex-col sm:flex-row">

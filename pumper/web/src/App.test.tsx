@@ -620,11 +620,12 @@ describe("Pumper controller", () => {
 
     fireEvent.click(deviceButton);
     let modal = screen.getByRole("dialog");
+    expect(modal.querySelector(".modal-box")).toHaveClass("!max-w-4xl");
     expect(within(modal).getByRole("heading", { name: "Pumper USB DAC" })).toBeInTheDocument();
     const flow = within(modal).getByRole("list", { name: "Audio signal flow" });
     expect(flow).toHaveAttribute("data-flow-state", "streaming");
     expect(within(flow).getAllByRole("heading").map((heading) => heading.textContent)).toEqual([
-      "USB Audio In", "DSP", "Limiter", "I²S Audio Out",
+      "USB Audio In", "EQ & preamp", "Crossfeed", "Host gain", "Output processing", "Limiter", "I²S Audio Out",
     ]);
     for (const label of [
       "Firmware", "Chip temperature", "System clock", "Device uptime",

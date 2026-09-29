@@ -1,10 +1,13 @@
 import {
   Activity, AudioWaveform, CircleX, ClockAlert, Cpu, DatabaseZap, Gauge,
-  Info, Radio, ShieldAlert, Thermometer, Timer, Usb,
+  Radio, ShieldAlert, Thermometer, Timer, Usb, SlidersHorizontal, Volume2, Shuffle,
   type LucideIcon,
 } from "lucide-react";
-import type { DeviceStatus, DeviceTelemetry } from "./protocol";
+import { CrossfeedMode, type AudioControls, type CrossfeedConfig, type EqConfig,
+  type OutputProcessingConfig, type DeviceStatus, type DeviceTelemetry } from "./protocol";
 import styles from "./DeviceInfoPipeline.module.css";
+import { crossfeedParameters } from "./crossfeedParameters";
+import { MetricTooltip } from "./MetricTooltip";
 
 interface Metric {
   label: string;
@@ -46,16 +49,7 @@ function formattedSampleRate(sampleRateHz: number | null | undefined): string {
 }
 
 function MetricHelp({ metric }: { metric: Metric }) {
-  return (
-    <span
-      className="tooltip tooltip-top inline-flex size-5 shrink-0 cursor-help items-center justify-center rounded-full text-base-content/40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-base-content"
-      tabIndex={0}
-      aria-label={`About ${metric.label}: ${metric.help}`}
-    >
-      <span className="tooltip-content z-20 w-64 max-w-[calc(100vw-2rem)] whitespace-normal text-left text-xs leading-relaxed">{metric.help}</span>
-      <Info size={13} aria-hidden="true" />
-    </span>
-  );
+  return <MetricTooltip label={metric.label} help={metric.help} />;
 }
 
 function SummaryRail({ title, metrics }: { title: string; metrics: SummaryMetric[] }) {
@@ -87,18 +81,20 @@ function SummaryRail({ title, metrics }: { title: string; metrics: SummaryMetric
 function Stage({ stage }: { stage: PipelineStage }) {
   const Icon = stage.icon;
   return (
-    <article className="min-w-0">
-      <header className="relative z-10 mb-4 flex items-center gap-2.5 py-1 xl:mb-6 xl:w-fit xl:pr-4">
-        <Icon className="shrink-0 text-base-content/65" size={18} aria-hidden="true" />
+    <article className="grid min-w-0 gap-3 py-4 md:grid-cols-[9rem_minmax(0,1fr)] md:gap-6">
+      <header className="relative flex min-h-8 items-start pt-1.5">
+        <span className="absolute -left-12 top-0 grid size-8 place-items-center rounded-md border border-base-300 bg-base-200 text-base-content/70">
+          <Icon size={17} aria-hidden="true" />
+        </span>
         <h4 className="text-sm font-semibold">{stage.title}</h4>
       </header>
-      <dl className="space-y-2.5">
+      <dl className="grid min-w-0 grid-cols-1 gap-x-6 gap-y-3 sm:grid-cols-2 lg:grid-cols-3">
         {stage.metrics.map((metric) => (
-          <div className="flex items-baseline justify-between gap-3" key={metric.label}>
+          <div className="min-w-0" key={metric.label}>
             <dt className="flex min-w-0 items-center gap-0.5 text-xs text-base-content/65">
               <span>{metric.label}</span><MetricHelp metric={metric} />
             </dt>
-            <dd className="min-w-0 break-words text-right font-mono text-xs tabular-nums">{metric.value}</dd>
+            <dd className="mt-0.5 min-w-0 break-words font-mono text-xs tabular-nums">{metric.value}</dd>
           </div>
         ))}
       </dl>
@@ -106,8 +102,22 @@ function Stage({ stage }: { stage: PipelineStage }) {
   );
 }
 
-export function DeviceInfoPipeline({ status, telemetry }: { status: DeviceStatus | null; telemetry: DeviceTelemetry | null }) {
+interface DeviceInfoPipelineProps {
+  status: DeviceStatus | null;
+  telemetry: DeviceTelemetry | null;
+  eq: EqConfig;
+  audio: AudioControls | null;
+  crossfeed: CrossfeedConfig | null;
+  outputProcessing: OutputProcessingConfig | null;
+}
+
+function channelGain(channel: AudioControls["master"] | undefined): string {
+  return channel == null ? "—" : channel.muted ? "Muted" : `${channel.volumeDb > 0 ? "+" : ""}${channel.volumeDb.toLocaleString("en-US")} dB`;
+}
+
+export function DeviceInfoPipeline({ status, telemetry, eq, audio, crossfeed, outputProcessing: output }: DeviceInfoPipelineProps) {
   const streaming = telemetry?.streaming ?? status?.streaming ?? false;
+  const crossfeedValues = crossfeed == null ? null : crossfeedParameters(crossfeed);
   const limiterObserved = telemetry == null ? "—" : telemetry.limiterActiveMs > 0 ? "Observed" : "Not observed";
   const feedbackCorrection = telemetry == null
     ? "—"
@@ -135,14 +145,43 @@ export function DeviceInfoPipeline({ status, telemetry }: { status: DeviceStatus
       ],
     },
     {
-      title: "DSP",
-      icon: Activity,
+      title: "EQ & preamp",
+      icon: SlidersHorizontal,
       metrics: [
-        { label: "Average load", help: "Average share of each audio block's playback time spent in DSP during this stream.", value: telemetry == null ? "—" : `${telemetry.averageDspLoadPercent.toFixed(2)}%` },
-        { label: "Peak load", help: "Highest processing-time share observed for one audio block during this stream.", value: telemetry == null ? "—" : `${telemetry.peakDspLoadPercent.toFixed(2)}%` },
-        { label: "Worst block", help: "Longest EQ processing time observed since the current audio stream opened.", value: status?.maxDspBlockUs == null ? "—" : `${formattedNumber(status.maxDspBlockUs)} µs` },
-        { label: "Backpressure events", help: "Times USB audio had to wait because every processing buffer was busy.", value: formattedNumber(status?.backpressureEvents) },
+        { label: "EQ state", help: "Whether the live equalizer is enabled.", value: status == null ? "—" : eq.enabled ? "Enabled" : "Bypassed" },
+        { label: "Preamp", help: "Live preamp gain applied before the EQ filters when EQ is enabled.", value: status == null ? "—" : `${eq.preampDb > 0 ? "+" : ""}${eq.preampDb.toLocaleString("en-US")} dB` },
+        { label: "Enabled bands", help: "Number of enabled filters in the live EQ configuration. EQ bypass also bypasses these filters.", value: status == null ? "—" : `${eq.bands.filter((band) => band.enabled).length} / ${eq.bands.length}` },
         { label: "Active configuration", help: "The EQ settings revision currently running on the audio processor.", value: formattedNumber(status?.appliedGeneration) },
+      ],
+    },
+    {
+      title: "Crossfeed",
+      icon: Shuffle,
+      metrics: [
+        { label: "Crossfeed mode", help: "Live crossfeed mode. Off bypasses the crossfeed stage.", value: crossfeed == null ? "—" : CrossfeedMode[crossfeed.mode] },
+        { label: "Crossfeed strength", help: "Effective crossfeed strength for the selected preset or custom mode.", value: crossfeedValues == null ? "—" : `${crossfeedValues.strengthPercent}%` },
+        { label: "Crossfeed cutoff", help: "Effective crossfeed cutoff frequency. Off bypasses the stage.", value: crossfeedValues == null ? "—" : `${formattedNumber(crossfeedValues.cutoffHz)} Hz` },
+        { label: "Crossfeed delay", help: "Effective crossfeed delay for the selected preset or custom mode.", value: crossfeedValues == null ? "—" : `${crossfeedValues.delayMs} ms` },
+      ],
+    },
+    {
+      title: "Host gain",
+      icon: Volume2,
+      metrics: [
+        { label: "Master gain", help: "USB host master volume or mute, applied after crossfeed.", value: channelGain(audio?.master) },
+        { label: "Left gain", help: "USB host left-channel volume or mute, combined with the master gain.", value: channelGain(audio?.left) },
+        { label: "Right gain", help: "USB host right-channel volume or mute, combined with the master gain.", value: channelGain(audio?.right) },
+      ],
+    },
+    {
+      title: "Output processing",
+      icon: AudioWaveform,
+      metrics: [
+        { label: "Channel mode", help: "Live output channel mode before the limiter.", value: output == null ? "—" : output.mono ? "Mono" : "Stereo" },
+        { label: "Stereo width", help: "Live stereo width. 100% is neutral; mono output has no stereo separation.", value: output == null ? "—" : `${output.widthPercent}%` },
+        { label: "Balance", help: "Live balance between the left and right output channels.", value: output == null ? "—" : output.balancePercent === 0 ? "Center" : `${Math.abs(output.balancePercent)}% ${output.balancePercent < 0 ? "left" : "right"}` },
+        { label: "Channel routing", help: "Whether the left and right output channels are swapped.", value: output == null ? "—" : output.swap ? "Swapped" : "L → L · R → R" },
+        { label: "Polarity", help: "Live phase inversion applied to the output channels.", value: output == null ? "—" : output.invertLeft && output.invertRight ? "Both inverted" : output.invertLeft ? "Left inverted" : output.invertRight ? "Right inverted" : "Normal" },
       ],
     },
     {
@@ -172,21 +211,31 @@ export function DeviceInfoPipeline({ status, telemetry }: { status: DeviceStatus
     { icon: DatabaseZap, label: "Flash failures", help: "Profile or global-setting flash operations that failed since boot.", value: formattedNumber(telemetry?.flashFailures) },
   ];
 
+  const processing: SummaryMetric[] = [
+    { icon: Activity, label: "Average load", help: "Average share of playback time spent processing the whole audio chain during this stream.", value: telemetry == null ? "—" : `${telemetry.averageDspLoadPercent.toFixed(2)}%` },
+    { icon: Gauge, label: "Peak load", help: "Highest processing-time share observed for one block across the whole audio chain.", value: telemetry == null ? "—" : `${telemetry.peakDspLoadPercent.toFixed(2)}%` },
+    { icon: Timer, label: "Worst block", help: "Longest processing time measured for the whole audio chain during this stream.", value: status?.maxDspBlockUs == null ? "—" : `${formattedNumber(status.maxDspBlockUs)} µs` },
+    { icon: ClockAlert, label: "Backpressure events", help: "Times USB audio had to wait because every processing buffer was busy.", value: formattedNumber(status?.backpressureEvents) },
+  ];
+
   return (
     <div className="mt-6 space-y-6">
       <SummaryRail title="Device" metrics={device} />
 
       <section className="rounded-lg border border-base-300 bg-base-200 p-4 sm:p-5" aria-labelledby="audio-flow-title">
-        <div className="mb-6 flex items-center justify-between gap-3">
+        <div className="mb-2">
           <h3 className="text-xs font-medium text-base-content/60" id="audio-flow-title">Signal path</h3>
         </div>
-        <ol className={`${styles.flow} grid grid-cols-1 xl:grid-cols-4 xl:gap-8`} aria-label="Audio signal flow" data-flow-state={streaming ? "streaming" : "idle"}>
+        <ol className={styles.flow} aria-label="Audio signal flow" data-flow-state={streaming ? "streaming" : "idle"}>
           {stages.map((stage) => (
             <li className={`${styles.stage} relative min-w-0`} key={stage.title}>
               <Stage stage={stage} />
             </li>
           ))}
         </ol>
+        <div className="mt-4 border-t border-base-300 pt-4">
+          <SummaryRail title="Processing totals" metrics={processing} />
+        </div>
       </section>
 
       <SummaryRail title="Transport & storage" metrics={health} />

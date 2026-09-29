@@ -4,6 +4,7 @@ import { SelectMenu } from "./SelectMenu";
 import { SaveStateBadge } from "./SaveStateBadge";
 import { CrossfeedMode, defaultCrossfeed, defaultOutputProcessing, type AudioChannelControl, type CrossfeedConfig, type OutputProcessingConfig } from "./protocol";
 import type { useAudioSettings } from "./useAudioSettings";
+import { crossfeedParameters } from "./crossfeedParameters";
 
 const modeOptions = [
   { value: CrossfeedMode.Off, label: "Off" },
@@ -62,19 +63,12 @@ export function UsbAudioState({ settings, connected, busy, sampleRateHz, bitDept
   );
 }
 
-const presetParameters = {
-  [CrossfeedMode.Off]: { strengthPercent: 0, cutoffHz: 700, delayMs: 0 },
-  [CrossfeedMode.Low]: { strengthPercent: 10, cutoffHz: 700, delayMs: 0.2 },
-  [CrossfeedMode.Medium]: { strengthPercent: 20, cutoffHz: 700, delayMs: 0.25 },
-  [CrossfeedMode.High]: { strengthPercent: 30, cutoffHz: 700, delayMs: 0.3 },
-};
-
 export function CrossfeedSettings({ settings, connected, busy, onError }: Props) {
   const { crossfeed, supported, savingCrossfeed: saving } = settings;
   const unavailable = !connected ? "Connect DAC to view audio settings" : !supported ? "Requires firmware 2.2" : null;
   const disabled = !connected || !supported || busy || saving || crossfeed === null;
   const live = crossfeed?.live ?? defaultCrossfeed;
-  const displayed = live.mode === CrossfeedMode.Custom ? live : presetParameters[live.mode];
+  const displayed = crossfeedParameters(live);
   const parametersDisabled = disabled || live.mode !== CrossfeedMode.Custom;
   const customControls: Array<{ key: keyof Pick<CrossfeedConfig, "strengthPercent" | "cutoffHz" | "delayMs">; label: string; min: number; max: number; step: number; unit: string }> = [
     { key: "strengthPercent", label: "Crossfeed strength", min: 0, max: 40, step: 1, unit: "%" },
