@@ -63,17 +63,34 @@ fun InfoScreen(
 ) {
     val haptics = rememberPumperHaptics()
     val status = state.status
+    val telemetry = state.telemetry
     val number = NumberFormat.getIntegerInstance()
     val audioValues = listOf(
         LabeledValue("Active configuration", status?.appliedGeneration?.let(number::format) ?: "-"),
+        LabeledValue("Stream duration", telemetry?.streamDurationMs?.let(::formatDuration) ?: "-"),
         LabeledValue("Worst DSP block", status?.maxDspBlockUs?.let { "${number.format(it)} us" } ?: "-"),
+        LabeledValue("Average DSP load", telemetry?.averageDspLoadPercent?.let { "%.2f%%".format(it) } ?: "-"),
+        LabeledValue("Peak DSP load", telemetry?.peakDspLoadPercent?.let { "%.2f%%".format(it) } ?: "-"),
+        LabeledValue("I2S buffered", telemetry?.i2sBufferedFrames?.let { "${number.format(it)} frames" } ?: "-"),
         LabeledValue("I2S low-water", status?.i2sLowWaterFrames?.let { "${number.format(it)} frames" } ?: "-"),
+        LabeledValue("I2S high-water", telemetry?.i2sHighWaterFrames?.let { "${number.format(it)} frames" } ?: "-"),
         LabeledValue("Audio underruns", status?.underrunFrames?.let(number::format) ?: "-"),
         LabeledValue("Backpressure events", status?.backpressureEvents?.let(number::format) ?: "-"),
+        LabeledValue("Limiter active", telemetry?.limiterActiveMs?.let(::formatDuration) ?: "-"),
+        LabeledValue("Feedback correction", telemetry?.feedbackCorrectionPpm?.let { "${if (it > 0) "+" else ""}${number.format(it)} ppm" } ?: "-"),
+        LabeledValue("Stream starts", telemetry?.streamStarts?.let(number::format) ?: "-"),
     )
     val hardwareValues = listOf(
         LabeledValue("Chip temperature", status?.temperatureC?.let { "%.1f C".format(it) } ?: "-"),
         LabeledValue("System clock", status?.systemClockMHz?.let { "%.0f MHz".format(it) } ?: "-"),
+        LabeledValue("Device uptime", telemetry?.uptimeSeconds?.let { formatDuration(it * 1000) } ?: "-"),
+    )
+    val transportValues = listOf(
+        LabeledValue("USB audio packets", telemetry?.usbAudioPackets?.let(number::format) ?: "-"),
+        LabeledValue("Meter reports", telemetry?.meterReports?.let(number::format) ?: "-"),
+        LabeledValue("Malformed HID reports", telemetry?.malformedHidReports?.let(number::format) ?: "-"),
+        LabeledValue("Busy HID reports", telemetry?.busyHidReports?.let(number::format) ?: "-"),
+        LabeledValue("Flash failures", telemetry?.flashFailures?.let(number::format) ?: "-"),
     )
     val actions = listOf(
         InfoAction(
@@ -160,6 +177,11 @@ fun InfoScreen(
                 LabeledValueGroup(hardwareValues)
             }
 
+            item { SectionLabel("Transport & storage") }
+            item(key = "transport-values") {
+                LabeledValueGroup(transportValues)
+            }
+
             item { SectionLabel("Appearance") }
             item {
                 InfoSurface {
@@ -204,6 +226,21 @@ fun InfoScreen(
                 }
             }
         }
+    }
+}
+
+private fun formatDuration(milliseconds: Long): String {
+    if (milliseconds < 1_000) return "$milliseconds ms"
+    val totalSeconds = milliseconds / 1_000
+    val days = totalSeconds / 86_400
+    val hours = totalSeconds % 86_400 / 3_600
+    val minutes = totalSeconds % 3_600 / 60
+    val seconds = totalSeconds % 60
+    return when {
+        days > 0 -> "${days}d ${hours}h"
+        hours > 0 -> "${hours}h ${minutes}m"
+        minutes > 0 -> "${minutes}m ${seconds}s"
+        else -> "${seconds}s"
     }
 }
 

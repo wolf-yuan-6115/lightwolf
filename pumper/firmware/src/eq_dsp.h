@@ -17,7 +17,7 @@ typedef struct {
 typedef struct {
   eq_level_metrics_t pre_eq;
   eq_level_metrics_t post_eq;
-  bool limiter_active;
+  uint32_t limiter_active_frames;
 } eq_block_metrics_t;
 
 void eq_init(uint32_t sample_rate_hz, eq_config_t const *config);

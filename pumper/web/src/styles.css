@@ -1,8 +1,10 @@
 @import "tailwindcss";
 @plugin "daisyui" {
-  themes: light --default, dark --prefersdark;
+  themes: false;
   logs: false;
 }
+@plugin "./themes/latte.ts";
+@plugin "./themes/mocha.ts";
 
 /* daisyUI disables pointer events on disabled buttons, which hides their cursor state. */
 button:disabled {

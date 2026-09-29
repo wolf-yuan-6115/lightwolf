@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { AlertTriangle, ChartSpline, Check, ClipboardCopy, ClipboardPaste, Info, ListFilter, SlidersHorizontal, Moon, Power, RotateCcw, Save, Sun, Trash2, Upload, Usb, X } from "lucide-react";
+import { AlertTriangle, ChartSpline, Check, ClipboardCopy, ClipboardPaste, ListFilter, SlidersHorizontal, Moon, Power, RotateCcw, Save, Sun, Trash2, Upload, Usb, X } from "lucide-react";
 import { bandColors, EqGraph } from "./EqGraph";
 import { calculateAutoPreamp } from "./eqMath";
 import { parseEqText, serializeEqText } from "./eqText";
 import { METER_REPORT_EVENT, PumperHidTransport } from "./hidTransport";
 import { LevelMeter } from "./LevelMeter";
+import { DeviceInfoPipeline } from "./DeviceInfoPipeline";
 import { SaveStateBadge } from "./SaveStateBadge";
 import { NumericInput } from "./NumericInput";
 import { SelectMenu, type SelectMenuOption } from "./SelectMenu";
@@ -16,8 +17,10 @@ import {
   decodeMeterLevel,
   decodeProfileState,
   decodeStatus,
+  decodeTelemetry,
   defaultConfig,
   DeviceStatus,
+  DeviceTelemetry,
   encodeBand,
   encodeGlobal,
   encodeMeterConfig,
@@ -31,6 +34,7 @@ import {
   Opcode,
   ProfileState,
   ResponsePacket,
+  supportsTelemetry,
   WidthMode,
 } from "./protocol";
 
@@ -72,22 +76,6 @@ const widthOptions: readonly SelectMenuOption<WidthMode>[] = [
   { value: WidthMode.Bandwidth, label: "Bandwidth" },
   { value: WidthMode.Q, label: "Q" },
 ];
-
-function DiagnosticLabel({ label, help }: { label: string; help: string }) {
-  return (
-    <span className="flex items-center gap-1.5 text-sm text-base-content/65">
-      {label}
-      <span
-        className="tooltip tooltip-top inline-flex size-5 cursor-help items-center justify-center rounded-full text-base-content/50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-base-content"
-        tabIndex={0}
-        aria-label={`About ${label}: ${help}`}
-      >
-        <span className="tooltip-content z-10 w-64 max-w-[calc(100vw-2rem)] whitespace-normal text-left text-xs leading-relaxed">{help}</span>
-        <Info size={14} aria-hidden="true" />
-      </span>
-    </span>
-  );
-}
 
 function initialTheme(): Theme {
   if (typeof window === "undefined") return "light";
@@ -207,6 +195,7 @@ export default function App() {
 
   const [config, setConfig] = useState<EqConfig>(() => cloneConfig(defaultConfig));
   const [status, setStatus] = useState<DeviceStatus | null>(null);
+  const [telemetry, setTelemetry] = useState<DeviceTelemetry | null>(null);
   const [meterLevel, setMeterLevel] = useState<MeterLevel | null>(null);
   const [profileState, setProfileState] = useState<ProfileState>({
     count: 10,
@@ -245,9 +234,9 @@ export default function App() {
   const filterOptions = audioSettings.outputSupported ? firmware3FilterOptions : legacyFilterOptions;
 
   useEffect(() => {
-    document.documentElement.dataset.theme = theme;
+    document.documentElement.dataset.theme = theme === "dark" ? "mocha" : "latte";
     document.documentElement.style.colorScheme = theme;
-    document.querySelector<HTMLMetaElement>('meta[name="theme-color"]')?.setAttribute("content", theme === "dark" ? "#1d232a" : "#ffffff");
+    document.querySelector<HTMLMetaElement>('meta[name="theme-color"]')?.setAttribute("content", theme === "dark" ? "#1e1e2e" : "#eff1f5");
     try {
       window.localStorage.setItem(themeStorageKey, theme);
     } catch {
@@ -368,6 +357,9 @@ export default function App() {
   const readDevice = useCallback(async (knownStoredProfile = false) => {
     const hello = await transport.current.request(Opcode.Hello);
     const nextStatus = decodeStatus(hello.payload);
+    const nextTelemetry = supportsTelemetry(nextStatus.firmwareVersion)
+      ? decodeTelemetry((await transport.current.request(Opcode.GetTelemetry)).payload)
+      : null;
     const global = decodeGlobal((await transport.current.request(Opcode.GetGlobal)).payload);
     const nextProfiles = decodeProfileState((await transport.current.request(Opcode.GetProfiles)).payload);
     const bands: EqBand[] = [];
@@ -389,6 +381,7 @@ export default function App() {
     if (knownStoredProfile || !nextStatus.dirty) savedConfigRef.current = cloneConfig(deviceConfig);
     setConfig(next);
     setStatus(nextStatus);
+    setTelemetry(nextTelemetry);
     setProfileState(nextProfiles);
     setSelectedProfile(nextProfiles.activeProfile);
     updateDirtyState(next);
@@ -412,6 +405,7 @@ export default function App() {
           clearTimers();
           setConnected(false);
           setStatus(null);
+          setTelemetry(null);
           setMeterLevel(null);
           savedConfigRef.current = null;
           setLocalDirty(false);
@@ -424,6 +418,7 @@ export default function App() {
       } catch (reason) {
         await transport.current.close().catch(() => undefined);
         setConnected(false);
+        setTelemetry(null);
         setConnectionIssue(reason instanceof Error ? reason.message : "Unable to connect to Pumper");
       } finally {
         setConnecting(false);
@@ -453,7 +448,16 @@ export default function App() {
     const timer = window.setInterval(() => {
       transport.current
         .request(Opcode.GetStatus)
-        .then((response) => setStatus(decodeStatus(response.payload)))
+        .then(async (response) => {
+          const nextStatus = decodeStatus(response.payload);
+          setStatus(nextStatus);
+          if (supportsTelemetry(nextStatus.firmwareVersion)) {
+            const nextTelemetry = await transport.current.request(Opcode.GetTelemetry);
+            setTelemetry(decodeTelemetry(nextTelemetry.payload));
+          } else {
+            setTelemetry(null);
+          }
+        })
         .catch(() => undefined);
       void audioSettings.refresh();
     }, 1000);
@@ -720,7 +724,7 @@ export default function App() {
             )}
             <div className="tooltip tooltip-bottom" data-tip={theme === "dark" ? "Use light theme" : "Use dark theme"}>
               <label className="btn btn-ghost btn-square btn-sm swap swap-rotate" title={theme === "dark" ? "Use light theme" : "Use dark theme"}>
-                <input className="theme-controller" type="checkbox" value="dark" checked={theme === "dark"} onChange={(event) => setTheme(event.target.checked ? "dark" : "light")} aria-label={theme === "dark" ? "Use light theme" : "Use dark theme"} />
+                <input type="checkbox" checked={theme === "dark"} onChange={(event) => setTheme(event.target.checked ? "dark" : "light")} aria-label={theme === "dark" ? "Use light theme" : "Use dark theme"} />
                 <Sun className="swap-off" size={18} />
                 <Moon className="swap-on" size={18} />
               </label>
@@ -934,7 +938,7 @@ export default function App() {
 
       {deviceDialog && (
         <div className="modal modal-open" role="dialog" aria-modal="true" aria-labelledby="device-dialog-title">
-          <div className="modal-box max-w-md">
+          <div className={`modal-box ${deviceDialog === "info" ? "!w-[calc(100vw-2rem)] !max-w-6xl overflow-x-hidden" : "max-w-md"}`}>
             {deviceDialog === "info" ? (
               <>
                 <div className="flex items-start justify-between gap-4">
@@ -946,16 +950,7 @@ export default function App() {
                   </button>
                 </div>
 
-                <ul className="list mt-5 divide-y divide-base-300 rounded-box bg-base-200">
-                  <li className="list-row items-center px-4 py-3"><span className="text-sm text-base-content/65">Firmware</span><strong className="text-right text-sm font-semibold">{status?.firmwareVersion ?? "-"}</strong></li>
-                  <li className="list-row items-center px-4 py-3"><DiagnosticLabel label="Chip temperature" help="Approximate RP2350 junction temperature reported by its internal sensor; this is not the ambient temperature." /><strong className="text-right text-sm font-semibold">{status?.temperatureC == null ? "-" : `${status.temperatureC.toFixed(1)} °C`}</strong></li>
-                  <li className="list-row items-center px-4 py-3"><DiagnosticLabel label="System clock" help="Current RP2350 system clock. It rises while the USB audio stream is open and returns to idle speed when the stream closes." /><strong className="text-right text-sm font-semibold">{status?.systemClockMHz == null ? "-" : `${status.systemClockMHz.toFixed(0)} MHz`}</strong></li>
-                  <li className="list-row items-center px-4 py-3"><DiagnosticLabel label="Active configuration version" help="The EQ settings revision currently running on the audio processor." /><strong className="text-right text-sm font-semibold">{status?.appliedGeneration ?? "-"}</strong></li>
-                  <li className="list-row items-center px-4 py-3"><DiagnosticLabel label="Worst DSP block" help="Longest EQ processing time observed since the current audio stream opened." /><strong className="text-right text-sm font-semibold">{status?.maxDspBlockUs == null ? "-" : `${status.maxDspBlockUs.toLocaleString()} µs`}</strong></li>
-                  <li className="list-row items-center px-4 py-3"><DiagnosticLabel label="I2S low-water mark" help="Lowest number of queued stereo frames observed after the output buffer was primed." /><strong className="text-right text-sm font-semibold">{status?.i2sLowWaterFrames == null ? "-" : `${status.i2sLowWaterFrames.toLocaleString()} frames`}</strong></li>
-                  <li className="list-row items-center px-4 py-3"><DiagnosticLabel label="Audio underruns" help="Audio frames replaced with silence because the output buffer ran empty." /><strong className="text-right text-sm font-semibold">{status?.underrunFrames.toLocaleString() ?? "-"}</strong></li>
-                  <li className="list-row items-center px-4 py-3"><DiagnosticLabel label="Backpressure events" help="Times USB audio had to wait because every processing buffer was busy." /><strong className="text-right text-sm font-semibold">{status?.backpressureEvents.toLocaleString() ?? "-"}</strong></li>
-                </ul>
+                <DeviceInfoPipeline status={status} telemetry={telemetry} />
 
 
                 <div className="modal-action flex-col sm:flex-row">

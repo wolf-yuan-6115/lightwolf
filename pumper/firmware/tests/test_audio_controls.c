@@ -171,7 +171,7 @@ static void test_limiter(void) {
   float block[] = {60000.0f, -30000.0f, 1000.0f, 1000.0f};
   eq_block_metrics_t metrics;
   eq_process_interleaved_stereo(block, 2u, &metrics, true);
-  assert(metrics.limiter_active);
+  assert(metrics.limiter_active_frames > 0u);
 }
 
 static void test_crossfeed_and_pipeline(void) {

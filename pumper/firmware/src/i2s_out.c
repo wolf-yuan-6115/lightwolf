@@ -23,7 +23,7 @@ static int dma_chan[DMA_COUNT] = {-1, -1};
 static uint offset16, offset32;
 static uint32_t rate_hz = 48000u, silence_phase;
 static audio_sample_format_t active_format = AUDIO_FORMAT_PCM16;
-static volatile uint32_t underrun_frames, low_water_frames = UINT32_MAX;
+static volatile uint32_t underrun_frames, low_water_frames = UINT32_MAX, high_water_frames;
 static audio_block_queue_t block_queue;
 static i2s_audio_block_t *active[DMA_COUNT];
 static uint32_t silence[SILENCE_MAX_WORDS];
@@ -67,7 +67,11 @@ static void prepare_dma(uint32_t index) {
     words = block->word_count;
   } else {
     frames = next_silence_frames();
-    if (starved) underrun_frames += frames;
+    if (starved) {
+      critical_section_enter_blocking(&lock);
+      underrun_frames += frames;
+      critical_section_exit(&lock);
+    }
     words = frames * (active_format == AUDIO_FORMAT_PCM24 ? 2u : 1u);
     source = silence;
   }
@@ -155,6 +159,8 @@ bool i2s_out_submit(i2s_audio_block_t *block) {
   critical_section_enter_blocking(&lock);
   bool accepted = block->format == active_format &&
                   audio_block_queue_submit(&block_queue, block, block->frames);
+  if (accepted && block_queue.buffered_frames > high_water_frames)
+    high_water_frames = block_queue.buffered_frames;
   critical_section_exit(&lock);
   return accepted;
 }
@@ -188,7 +194,10 @@ void i2s_out_set_streaming(bool enabled) {
     active[i] = NULL;
   }
   audio_block_queue_reset(&block_queue, rate_hz, enabled);
-  low_water_frames = UINT32_MAX;
+  if (enabled) {
+    low_water_frames = UINT32_MAX;
+    high_water_frames = 0u;
+  }
   critical_section_exit(&lock);
   for (size_t i = 0; i < count; i++) release_block(reclaim[i]);
   if (dma_chan[0] >= 0) restart_dma();
@@ -224,7 +233,6 @@ void i2s_out_enter_flash_mute(void) {
     active[i] = NULL;
   }
   audio_block_queue_reset(&block_queue, rate_hz, false);
-  low_water_frames = UINT32_MAX;
   critical_section_exit(&lock);
 
   for (size_t i = 0; i < count; i++) release_block(reclaim[i]);
@@ -235,6 +243,10 @@ void i2s_out_exit_flash_mute(bool streaming) {
   dma_channel_acknowledge_irq0((uint)dma_chan[0]);
   critical_section_enter_blocking(&lock);
   audio_block_queue_reset(&block_queue, rate_hz, streaming);
+  if (streaming) {
+    low_water_frames = UINT32_MAX;
+    high_water_frames = 0u;
+  }
   critical_section_exit(&lock);
   restart_dma();
 }
@@ -245,7 +257,14 @@ uint32_t i2s_out_buffered_frames(void) {
   critical_section_exit(&lock);
   return frames;
 }
-uint32_t i2s_out_underrun_frames(void) { return underrun_frames; }
-uint32_t i2s_out_low_water_frames(void) {
-  return low_water_frames == UINT32_MAX ? 0u : low_water_frames;
+i2s_out_diagnostics_t i2s_out_diagnostics(void) {
+  critical_section_enter_blocking(&lock);
+  i2s_out_diagnostics_t result = {
+      .buffered_frames = block_queue.buffered_frames,
+      .underrun_frames = underrun_frames,
+      .low_water_frames = low_water_frames == UINT32_MAX ? 0u : low_water_frames,
+      .high_water_frames = high_water_frames,
+  };
+  critical_section_exit(&lock);
+  return result;
 }

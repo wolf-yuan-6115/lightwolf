@@ -25,6 +25,7 @@
 #include "eq_settings.h"
 #include "i2s_out.h"
 #include "quirk_os_guessing.h"
+#include "telemetry.h"
 #include "usb_descriptors.h"
 
 #define AUDIO_CHANNELS 2u
@@ -200,6 +201,10 @@ static void set_streaming_state(bool streaming) {
   if (streaming) set_performance_clock(true);
 
   s_stream_generation++;
+  if (streaming)
+    telemetry_stream_started(time_us_64(), s_stream_generation);
+  else
+    telemetry_stream_stopped(time_us_64());
   s_streaming_active = streaming;
   s_feedback_initialized = false;
   s_feedback_next_update_us = 0u;
@@ -416,6 +421,8 @@ static void dsp_core_main(void) {
       eq_process_interleaved_stereo(block->data.samples, block->frames, &metrics, measure_block);
       uint32_t elapsed_us = time_us_32() - started_us;
       if (elapsed_us > s_dsp_max_block_us) s_dsp_max_block_us = elapsed_us;
+      telemetry_record_audio_block(block->stream_generation, block->frames, elapsed_us,
+                                   metrics.limiter_active_frames);
 
       // Reuse the saturated output metrics collected for HID; no second sample scan.
       uint32_t peak = metrics.post_eq.left_peak;
@@ -423,7 +430,7 @@ static void dsp_core_main(void) {
       led_set_level(LED_BLUE_PIN, (uint16_t)((peak * LED_BLUE_MAX_BRIGHTNESS) / 32768u));
       if (measure_block) {
         meter_accumulate(&metrics.pre_eq, &metrics.post_eq, block->frames,
-                         metrics.limiter_active);
+                         metrics.limiter_active_frames != 0u);
       }
 
       block->word_count = (uint16_t)audio_format_pack_i2s(
@@ -623,7 +630,7 @@ bool tud_audio_rx_done_pre_read_cb(uint8_t rhport, uint16_t n_bytes_received, ui
   (void) func_id;
   (void) ep_out;
   (void) cur_alt_setting;
-  (void) n_bytes_received;
+  if (n_bytes_received) telemetry_record_usb_audio_packet();
   return true;
 }
 
@@ -683,10 +690,11 @@ static void hid_response_prepare(uint8_t opcode, uint16_t request_id, eq_protoco
 
 static void hid_response_status(uint8_t opcode, uint16_t request_id) {
   eq_config_t config = config_snapshot(NULL);
+  i2s_out_diagnostics_t i2s = i2s_out_diagnostics();
   hid_response_prepare(opcode, request_id, EQ_STATUS_OK, EQ_PROTOCOL_STATUS_PAYLOAD_SIZE);
   uint8_t *payload = &s_hid_response[EQ_PROTOCOL_HEADER_SIZE];
   payload[0] = 3u;
-  payload[1] = 3u;
+  payload[1] = 4u;
   payload[2] = EQ_NUM_FILTERS;
   payload[3] = (s_streaming_active ? 0x01u : 0u) | (config_is_dirty() ? 0x02u : 0u) |
                (config.enabled ? 0x04u : 0u);
@@ -694,13 +702,23 @@ static void hid_response_status(uint8_t opcode, uint16_t request_id) {
   eq_protocol_write_u32(payload + 8u, s_config_generation);
   eq_protocol_write_u32(payload + 12u, s_saved_generation);
   eq_protocol_write_u32(payload + 16u, s_applied_generation);
-  eq_protocol_write_u32(payload + 20u, i2s_out_underrun_frames());
+  eq_protocol_write_u32(payload + 20u, i2s.underrun_frames);
   eq_protocol_write_u32(payload + 24u, s_backpressure_events);
   eq_protocol_write_i32(payload + 28u, chip_temperature_millicelsius());
   eq_protocol_write_u32(payload + 32u, clock_get_hz(clk_sys));
   eq_protocol_write_u32(payload + 36u, s_dsp_max_block_us);
-  eq_protocol_write_u32(payload + 40u, i2s_out_low_water_frames());
+  eq_protocol_write_u32(payload + 40u, i2s.low_water_frames);
   payload[44] = s_audio_format == AUDIO_FORMAT_PCM24 ? 24u : 16u;
+}
+
+static void hid_response_telemetry(uint8_t opcode, uint16_t request_id) {
+  i2s_out_diagnostics_t i2s = i2s_out_diagnostics();
+  telemetry_snapshot_t snapshot = telemetry_snapshot(
+      time_us_64(), s_sample_rate_hz, s_streaming_active, s_feedback_initialized,
+      i2s.buffered_frames, i2s.high_water_frames);
+  hid_response_prepare(opcode, request_id, EQ_STATUS_OK, EQ_PROTOCOL_TELEMETRY_PAYLOAD_SIZE);
+  uint8_t *payload = &s_hid_response[EQ_PROTOCOL_HEADER_SIZE];
+  telemetry_encode(payload, &snapshot);
 }
 
 static void hid_response_crossfeed(uint8_t opcode, uint16_t request_id) {
@@ -729,6 +747,13 @@ static void hid_process_command(eq_protocol_packet_t const *packet) {
       } else {
         hid_response_status(packet->opcode, packet->request_id);
       }
+      break;
+
+    case EQ_OPCODE_GET_TELEMETRY:
+      if (packet->payload_length != 0u)
+        hid_response_prepare(packet->opcode, packet->request_id, EQ_STATUS_INVALID_LENGTH, 0u);
+      else
+        hid_response_telemetry(packet->opcode, packet->request_id);
       break;
 
     case EQ_OPCODE_GET_AUDIO_CONTROLS:
@@ -1089,16 +1114,24 @@ void tud_hid_set_report_cb(uint8_t instance, uint8_t report_id, hid_report_type_
   (void)report_id;
   if (report_type == HID_REPORT_TYPE_OUTPUT)
     hid_activity_notify(&s_hid_activity, time_us_32());
-  if (report_type != HID_REPORT_TYPE_OUTPUT || s_hid_response_pending || s_flash_write_pending ||
-      s_device_reset_action != DEVICE_RESET_NONE) return;
+  if (report_type != HID_REPORT_TYPE_OUTPUT) return;
+  if (s_hid_response_pending || s_flash_write_pending ||
+      s_device_reset_action != DEVICE_RESET_NONE) {
+    telemetry_record_busy_hid_report();
+    return;
+  }
   eq_protocol_packet_t packet;
-  if (eq_protocol_decode(buffer, bufsize, &packet)) hid_process_command(&packet);
+  if (eq_protocol_decode(buffer, bufsize, &packet))
+    hid_process_command(&packet);
+  else
+    telemetry_record_malformed_hid_report();
 }
 
 static void hid_control_task(void) {
   if (s_flash_write_pending && !s_hid_response_pending) {
     bool const resume_stream = s_streaming_active;
     if (resume_stream) {
+      telemetry_stream_stopped(time_us_64());
       s_stream_generation++;
       s_streaming_active = false;
       s_feedback_initialized = false;
@@ -1140,6 +1173,7 @@ static void hid_control_task(void) {
     if (resume_stream) {
       tud_audio_clear_ep_out_ff();
       s_stream_generation++;
+      telemetry_stream_started(time_us_64(), s_stream_generation);
       s_streaming_active = true;
       s_feedback_next_update_us = 0u;
     }
@@ -1161,6 +1195,7 @@ static void hid_control_task(void) {
                                               ? generation
                                               : state.bank_generation);
     }
+    if (!succeeded) telemetry_record_flash_failure();
     s_flash_write_pending = false;
   }
 
@@ -1244,7 +1279,7 @@ static void meter_stream_task(void) {
   payload[28] = meter.limiter_active ? EQ_PROTOCOL_METER_FLAG_LIMITER_ACTIVE : 0u;
 
   s_meter_next_report_us = now + (uint64_t)s_meter_report_interval_ms * 1000u;
-  (void)tud_hid_report(0u, report, sizeof(report));
+  if (tud_hid_report(0u, report, sizeof(report))) telemetry_record_meter_report();
 }
 
 void tud_audio_feedback_params_cb(uint8_t func_id, uint8_t alt_itf, audio_feedback_params_t *feedback_param) {
@@ -1266,6 +1301,8 @@ static void audio_feedback_task(void) {
   if (!s_feedback_initialized) {
     audio_feedback_init(&s_feedback_controller, s_sample_rate_hz);
     (void)tud_audio_n_fb_set(0u, s_feedback_controller.nominal_q16);
+    telemetry_record_feedback(s_feedback_controller.nominal_q16,
+                              s_feedback_controller.nominal_q16);
     s_feedback_initialized = true;
     s_feedback_next_update_us = now + 1000u;
     return;
@@ -1274,6 +1311,7 @@ static void audio_feedback_task(void) {
 
   uint32_t feedback = audio_feedback_update(&s_feedback_controller, i2s_out_buffered_frames());
   (void)tud_audio_n_fb_set(0u, feedback);
+  telemetry_record_feedback(feedback, s_feedback_controller.nominal_q16);
   s_feedback_next_update_us = now + 1000u;
 }
 
@@ -1284,6 +1322,7 @@ static void audio_block_release(i2s_audio_block_t *block) {
 
 int main(void) {
   board_init();
+  telemetry_init(time_us_64());
 
   adc_init();
   adc_set_temp_sensor_enabled(true);

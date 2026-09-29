@@ -18,6 +18,7 @@ class PumperProtocolTest {
         assertEquals(0x12, Opcode.SetCrossfeed.value)
         assertEquals(0x26, Opcode.SaveCrossfeed.value)
         assertEquals(0x08, Opcode.GetOutputProcessing.value)
+        assertEquals(0x09, Opcode.GetTelemetry.value)
         assertEquals(0x13, Opcode.SetOutputProcessing.value)
         assertEquals(0x27, Opcode.SaveOutputProcessing.value)
         assertEquals(listOf(3, 4, 5, 6), listOf(FilterType.LowPass, FilterType.HighPass, FilterType.Notch, FilterType.BandPass).map { it.value })
@@ -71,11 +72,55 @@ class PumperProtocolTest {
         payload[0] = 3
         payload[1] = 0
         assertTrue(PumperProtocol.decodeStatus(payload).supportsFirmware3Controls)
+        payload[1] = 4
+        assertTrue(PumperProtocol.decodeStatus(payload).supportsTelemetry)
         assertNull(PumperProtocol.decodeStatus(payload.copyOf(44)).bitDepth)
         assertNull(PumperProtocol.decodeStatus(payload.copyOf(28)).temperatureC)
         assertThrows(ProtocolException::class.java) { PumperProtocol.decodeStatus(ByteArray(30)) }
         payload[44] = 20
         assertThrows(ProtocolException::class.java) { PumperProtocol.decodeStatus(payload) }
+    }
+
+    @Test
+    fun `decodes and validates telemetry`() {
+        val payload = ByteArray(56)
+        payload[0] = 1
+        payload[1] = 0x03
+        ByteBuffer.wrap(payload).order(ByteOrder.LITTLE_ENDIAN).apply {
+            putInt(4, 86_401)
+            putInt(8, 123_456)
+            putInt(12, 144)
+            putInt(16, 388)
+            putInt(20, -125)
+            putShort(24, 1_234.toShort())
+            putShort(26, 0xffff.toShort())
+            putInt(28, 2_300)
+            putInt(32, 1_001)
+            putInt(36, 7)
+            putInt(40, 2)
+            putInt(44, 3)
+            putInt(48, 4)
+            putInt(52, 1_000)
+        }
+        val telemetry = PumperProtocol.decodeTelemetry(payload)
+        assertTrue(telemetry.streaming)
+        assertTrue(telemetry.feedbackActive)
+        assertEquals(86_401L, telemetry.uptimeSeconds)
+        assertEquals(-125, telemetry.feedbackCorrectionPpm)
+        assertEquals(12.34, telemetry.averageDspLoadPercent, 0.0001)
+        assertEquals(655.35, telemetry.peakDspLoadPercent, 0.0001)
+        assertEquals(4L, telemetry.flashFailures)
+        assertEquals(1_000L, telemetry.meterReports)
+
+        assertThrows(ProtocolException::class.java) { PumperProtocol.decodeTelemetry(payload.copyOf(52)) }
+        payload[0] = 2
+        assertThrows(ProtocolException::class.java) { PumperProtocol.decodeTelemetry(payload) }
+        payload[0] = 1
+        payload[1] = 0x04
+        assertThrows(ProtocolException::class.java) { PumperProtocol.decodeTelemetry(payload) }
+        payload[1] = 0
+        payload[2] = 1
+        assertThrows(ProtocolException::class.java) { PumperProtocol.decodeTelemetry(payload) }
     }
 
     @Test

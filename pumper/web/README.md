@@ -13,6 +13,8 @@ It provides:
 - The additional low-pass, high-pass, notch, and constant-peak band-pass EQ
   filters available on firmware 3.0 or newer.
 - Firmware restart and BOOTSEL handoff actions.
+- A responsive firmware 3.4 diagnostics grid for DSP, buffering, USB, and
+  storage telemetry.
 
 Live edits are sent to the DAC for preview. Flash is changed only by an
 explicit profile, crossfeed, output-processing, default, or delete action.

@@ -79,6 +79,24 @@ function mockConnectedPumper(deviceConfig: EqConfig = defaultConfig, rejectReque
       view.setUint32(4, 48000, true);
       view.setInt32(28, 42375, true);
       if (statusPayloadSize >= 48) responsePayload[44] = 16;
+    } else if (opcode === Opcode.GetTelemetry) {
+      responsePayload = new Uint8Array(56);
+      const view = new DataView(responsePayload.buffer);
+      responsePayload.set([1, 0x03]);
+      view.setUint32(4, 3723, true);
+      view.setUint32(8, 123456, true);
+      view.setUint32(12, 144, true);
+      view.setUint32(16, 388, true);
+      view.setInt32(20, -125, true);
+      view.setUint16(24, 1234, true);
+      view.setUint16(26, 2345, true);
+      view.setUint32(28, 2300, true);
+      view.setUint32(32, 1001, true);
+      view.setUint32(36, 7, true);
+      view.setUint32(40, 2, true);
+      view.setUint32(44, 3, true);
+      view.setUint32(48, 4, true);
+      view.setUint32(52, 1000, true);
     } else if (opcode === Opcode.GetGlobal) {
       responsePayload = encodeGlobal(deviceConfig);
     } else if (opcode === Opcode.GetProfiles) {
@@ -383,13 +401,13 @@ describe("Pumper controller", () => {
     expect(screen.getAllByLabelText(/Enable band \d+/)).toHaveLength(10);
   });
 
-  it("switches between built-in themes and persists the selection", () => {
+  it("switches between Catppuccin themes and preserves the light/dark preference", () => {
     render(<App />);
 
-    expect(document.documentElement).toHaveAttribute("data-theme", "light");
+    expect(document.documentElement).toHaveAttribute("data-theme", "latte");
     fireEvent.click(screen.getByLabelText("Use dark theme"));
 
-    expect(document.documentElement).toHaveAttribute("data-theme", "dark");
+    expect(document.documentElement).toHaveAttribute("data-theme", "mocha");
     expect(window.localStorage.getItem("pumper-theme")).toBe("dark");
     expect(screen.getByLabelText("Use light theme")).toBeChecked();
   });
@@ -595,24 +613,32 @@ describe("Pumper controller", () => {
   });
 
   it("confirms device resets and shows the BOOTSEL handoff", async () => {
-    const { request } = mockConnectedPumper();
+    const { request } = mockConnectedPumper(defaultConfig, undefined, [3, 4]);
     render(<App />);
     const deviceButton = await screen.findByRole("button", { name: "DAC info" });
-    expect(screen.queryByText("Active configuration version")).not.toBeInTheDocument();
+    expect(screen.queryByText("Active configuration")).not.toBeInTheDocument();
 
     fireEvent.click(deviceButton);
     let modal = screen.getByRole("dialog");
     expect(within(modal).getByRole("heading", { name: "Pumper USB DAC" })).toBeInTheDocument();
-    expect(within(modal).getByText("Firmware")).toBeInTheDocument();
-    expect(within(modal).getByText("Chip temperature")).toBeInTheDocument();
+    const flow = within(modal).getByRole("list", { name: "Audio signal flow" });
+    expect(flow).toHaveAttribute("data-flow-state", "streaming");
+    expect(within(flow).getAllByRole("heading").map((heading) => heading.textContent)).toEqual([
+      "USB Audio In", "DSP", "Limiter", "I²S Audio Out",
+    ]);
+    for (const label of [
+      "Firmware", "Chip temperature", "System clock", "Device uptime",
+      "Sample rate", "Bit depth", "Stream duration", "USB audio packets", "Stream starts", "USB feedback",
+      "Feedback correction", "Average load", "Peak load", "Worst block", "Backpressure events",
+      "Active configuration", "Activity state", "Active duration", "Buffered", "Low-water", "High-water",
+      "Audio underruns", "Meter reports", "Malformed HID reports", "Busy HID reports", "Flash failures",
+    ]) {
+      expect(within(modal).getByText(label)).toBeInTheDocument();
+      expect(within(modal).getByLabelText(new RegExp(`About ${label}:`))).toBeInTheDocument();
+    }
     expect(within(modal).getByText("42.4 °C")).toBeInTheDocument();
-    expect(within(modal).getByLabelText(/About Chip temperature:/)).toBeInTheDocument();
-    expect(within(modal).getByText("Active configuration version")).toBeInTheDocument();
-    expect(within(modal).getByText("Audio underruns")).toBeInTheDocument();
-    expect(within(modal).getByText("Backpressure events")).toBeInTheDocument();
-    expect(within(modal).getByLabelText(/About Active configuration version:/)).toBeInTheDocument();
-    expect(within(modal).getByLabelText(/About Audio underruns:/)).toBeInTheDocument();
-    expect(within(modal).getByLabelText(/About Backpressure events:/)).toBeInTheDocument();
+    expect(within(modal).getByText("12.34%")).toBeInTheDocument();
+    expect(within(modal).getByText("Observed")).toBeInTheDocument();
 
     fireEvent.click(within(modal).getByRole("button", { name: "Restart" }));
     modal = screen.getByRole("dialog");
@@ -631,5 +657,18 @@ describe("Pumper controller", () => {
     expect(within(modal).getByRole("heading", { name: "Firmware update" })).toBeInTheDocument();
     expect(within(modal).getByText("RP2350")).toBeInTheDocument();
     expect(request).toHaveBeenCalledWith(Opcode.EnterBootsel);
+  });
+
+  it("shows a static idle pipeline when telemetry is unavailable", async () => {
+    mockConnectedPumper(defaultConfig, undefined, [3, 3]);
+    render(<App />);
+    const deviceButton = await screen.findByRole("button", { name: "DAC info" });
+    await waitFor(() => expect(deviceButton).toBeEnabled());
+
+    fireEvent.click(deviceButton);
+    const modal = screen.getByRole("dialog");
+    const flow = within(modal).getByRole("list", { name: "Audio signal flow" });
+    expect(flow).toHaveAttribute("data-flow-state", "idle");
+    expect(within(modal).getAllByText("—").length).toBeGreaterThan(0);
   });
 });

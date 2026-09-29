@@ -24,9 +24,11 @@ static void test_protocol_header(void) {
   assert(EQ_OPCODE_RESTART_DEVICE == 0x40u);
   assert(EQ_OPCODE_ENTER_BOOTSEL == 0x41u);
   assert(EQ_OPCODE_GET_OUTPUT_PROCESSING == 0x08u);
+  assert(EQ_OPCODE_GET_TELEMETRY == 0x09u);
   assert(EQ_OPCODE_SET_OUTPUT_PROCESSING == 0x13u);
   assert(EQ_OPCODE_SAVE_OUTPUT_PROCESSING == 0x27u);
   assert(EQ_PROTOCOL_STATUS_PAYLOAD_SIZE == 48u);
+  assert(EQ_PROTOCOL_TELEMETRY_PAYLOAD_SIZE == 56u);
 
   uint8_t report[EQ_PROTOCOL_REPORT_SIZE];
   eq_protocol_response_init(report, EQ_OPCODE_GET_STATUS, 0x1234u, EQ_STATUS_OK, 3u);

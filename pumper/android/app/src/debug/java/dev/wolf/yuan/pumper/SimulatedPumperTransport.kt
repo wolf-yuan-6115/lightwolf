@@ -104,6 +104,7 @@ internal class SimulatedPumperTransport : PumperTransport {
 
     private fun handle(opcode: Opcode, payload: ByteArray): ByteArray = when (opcode) {
         Opcode.Hello, Opcode.GetStatus -> encodeStatus()
+        Opcode.GetTelemetry -> encodeTelemetry()
         Opcode.GetGlobal -> PumperProtocol.encodeGlobal(config)
         Opcode.GetBand -> PumperProtocol.encodeBand(payload.u8(0), config.bands[payload.u8(0)])
         Opcode.GetProfiles -> encodeProfiles()
@@ -199,7 +200,7 @@ internal class SimulatedPumperTransport : PumperTransport {
 
     private fun encodeStatus(): ByteArray = ByteArray(48).also { payload ->
         payload[0] = 3
-        payload[1] = 3
+        payload[1] = 4
         payload[2] = config.bands.size.toByte()
         var flags = 0x01
         if (config != storedProfiles[activeProfile]) flags = flags or 0x02
@@ -216,6 +217,25 @@ internal class SimulatedPumperTransport : PumperTransport {
         payload.putU32(36, 386)
         payload.putU32(40, 348)
         payload[44] = 16
+    }
+
+    private fun encodeTelemetry(): ByteArray = ByteArray(56).also { payload ->
+        payload[0] = 1
+        payload[1] = 0x03
+        payload.putU32(4, 3_723)
+        payload.putU32(8, meterSequence * meterIntervalMs)
+        payload.putU32(12, 144)
+        payload.putU32(16, 388)
+        payload.putI32(20, -125)
+        payload.putU16(24, 1_234)
+        payload.putU16(26, 2_345)
+        payload.putU32(28, meterSequence * 2)
+        payload.putU32(32, meterSequence * 2 + 1_000)
+        payload.putU32(36, 7)
+        payload.putU32(40, 2)
+        payload.putU32(44, 3)
+        payload.putU32(48, 0)
+        payload.putU32(52, meterSequence)
     }
 
     private fun encodeProfiles(): ByteArray = ByteArray(12).also { payload ->

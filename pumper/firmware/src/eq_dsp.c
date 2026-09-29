@@ -289,7 +289,7 @@ void eq_process_interleaved_stereo(float *restrict interleaved, size_t frame_cou
     interleaved[frame * 2u + 1u] = right;
     if (metrics != NULL) {
       measure_pair(&metrics->post_eq, left, right, measure_rms);
-      metrics->limiter_active |= limiter_active;
+      metrics->limiter_active_frames += limiter_active ? 1u : 0u;
     }
   }
   for (size_t frame = transitioning; frame < frame_count; frame++) {
@@ -305,7 +305,7 @@ void eq_process_interleaved_stereo(float *restrict interleaved, size_t frame_cou
     interleaved[frame * 2u + 1u] = right;
     if (metrics != NULL) {
       measure_pair(&metrics->post_eq, left, right, measure_rms);
-      metrics->limiter_active |= limiter_active;
+      metrics->limiter_active_frames += limiter_active ? 1u : 0u;
     }
   }
 }

@@ -1,0 +1,80 @@
+.flow {
+  position: relative;
+  padding-top: 0.5rem;
+  padding-left: 1.5rem;
+}
+
+.flow::before {
+  content: "";
+  position: absolute;
+  z-index: 0;
+  top: 30px;
+  bottom: 24px;
+  left: 8px;
+  width: 4px;
+  border-radius: 999px;
+  background: var(--color-base-300);
+}
+
+.flow[data-flow-state="streaming"]::after {
+  content: "";
+  position: absolute;
+  z-index: 0;
+  top: 30px;
+  bottom: 24px;
+  left: 8px;
+  width: 4px;
+  border-radius: 999px;
+  background-image: linear-gradient(to bottom, transparent, var(--color-primary), transparent);
+  background-repeat: no-repeat;
+  background-size: 100% 28%;
+  animation: signal-down 5s linear infinite;
+  opacity: 1;
+}
+
+@keyframes signal-down {
+  from { background-position: 0 -200%; }
+  to { background-position: 0 200%; }
+}
+
+@keyframes signal-right {
+  from { background-position: -200% 0; }
+  to { background-position: 200% 0; }
+}
+
+@media (min-width: 80rem) {
+  .flow {
+    padding-left: 0;
+  }
+
+  .flow::before {
+    top: 46px;
+    right: 0;
+    bottom: auto;
+    left: 0;
+    width: auto;
+    height: 4px;
+    border-radius: 999px;
+  }
+
+  .flow[data-flow-state="streaming"]::after {
+    top: 46px;
+    right: 0;
+    bottom: auto;
+    left: 0;
+    width: auto;
+    height: 4px;
+    background-image: linear-gradient(to right, transparent, var(--color-primary), transparent);
+    background-repeat: no-repeat;
+    background-size: 42% 100%;
+    animation-name: signal-right;
+  }
+
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .flow[data-flow-state="streaming"]::after {
+    animation: none;
+    background-position: 50% 50%;
+  }
+}

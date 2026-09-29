@@ -23,6 +23,13 @@ typedef struct __attribute__((aligned(16))) {
 
 typedef void (*i2s_block_release_fn)(i2s_audio_block_t *block);
 
+typedef struct {
+  uint32_t buffered_frames;
+  uint32_t underrun_frames;
+  uint32_t low_water_frames;
+  uint32_t high_water_frames;
+} i2s_out_diagnostics_t;
+
 void i2s_out_init(uint32_t sample_rate_hz, audio_sample_format_t format,
                   i2s_block_release_fn release);
 void i2s_out_set_format(uint32_t sample_rate_hz, audio_sample_format_t format);
@@ -31,7 +38,6 @@ void i2s_out_set_streaming(bool streaming);
 void i2s_out_enter_flash_mute(void);
 void i2s_out_exit_flash_mute(bool streaming);
 uint32_t i2s_out_buffered_frames(void);
-uint32_t i2s_out_underrun_frames(void);
-uint32_t i2s_out_low_water_frames(void);
+i2s_out_diagnostics_t i2s_out_diagnostics(void);
 
 #endif

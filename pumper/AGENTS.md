@@ -89,6 +89,11 @@ changes; do not reset or rewrite user work.
   contain live config, saved config, and dirty state.
 - Firmware 3.1 status is 48 bytes. Byte 44 reports active PCM bit depth (16 or
   24); bytes 45–47 are reserved and zeroed. Do not move existing fields.
+- Firmware 3.4 adds GetTelemetry (`0x09`) with a 56-byte schema-1 payload.
+  Telemetry keeps core-0 counters separate from the sequence-checked core-1
+  DSP snapshot; it must not lock, allocate, divide, or rescan samples in the
+  audio path. Stream-scoped values reset on stream start, while transport and
+  storage counters are boot-scoped.
 - Host USB volume and mute are controlled by the audio host. The controllers
   display them but must not treat them as profile settings.
 
@@ -142,8 +147,8 @@ Do not vendor or commit the patched SDK into Pumper.
   Jetpack Compose/Material 3. Keep debug-only simulator code out of release
   builds.
 - Set the Android `versionName` to `1.<firmware major>.<firmware minor>` for
-  the newest firmware version it supports (currently `1.3.2` for firmware
-  3.2). Update it when supported firmware changes, and increment `versionCode`
+  the newest firmware version it supports (currently `1.3.4` for firmware
+  3.4). Update it when supported firmware changes, and increment `versionCode`
   for every release.
 - Use the same fixed-size HID protocol and persistence semantics as the web
   controller. Crossfeed, output processing, and EQ profile saves remain

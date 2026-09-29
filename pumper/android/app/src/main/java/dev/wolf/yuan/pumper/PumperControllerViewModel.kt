@@ -147,6 +147,7 @@ class PumperControllerViewModel(application: Application) : AndroidViewModel(app
                     connection = ConnectionState.Disconnected,
                     productName = null,
                     status = null,
+                    telemetry = null,
                     audioControls = null,
                     crossfeed = null,
                     crossfeedSaving = false,
@@ -399,6 +400,9 @@ class PumperControllerViewModel(application: Application) : AndroidViewModel(app
     private suspend fun readDevice(knownStoredProfile: Boolean) {
         val activeClient = client ?: return
         val nextStatus = PumperProtocol.decodeStatus(activeClient.request(Opcode.Hello).payload)
+        val nextTelemetry = if (nextStatus.supportsTelemetry) {
+            PumperProtocol.decodeTelemetry(activeClient.request(Opcode.GetTelemetry).payload)
+        } else null
         val nextAudio = if (nextStatus.supportsAudioControls && _state.value.audioControls == null) {
             PumperProtocol.decodeAudioControls(activeClient.request(Opcode.GetAudioControls).payload)
         } else _state.value.audioControls
@@ -428,6 +432,7 @@ class PumperControllerViewModel(application: Application) : AndroidViewModel(app
             it.copy(
                 config = next,
                 status = nextStatus,
+                telemetry = nextTelemetry,
                 audioControls = nextAudio,
                 crossfeed = nextCrossfeed,
                 outputProcessing = nextOutputProcessing,
@@ -452,6 +457,7 @@ class PumperControllerViewModel(application: Application) : AndroidViewModel(app
                         connection = ConnectionState.Disconnected,
                         productName = null,
                         status = null,
+                        telemetry = null,
                         audioControls = null,
                         crossfeed = null,
                         crossfeedSaving = false,
@@ -485,8 +491,13 @@ class PumperControllerViewModel(application: Application) : AndroidViewModel(app
         scope.launch {
             while (isActive) {
                 delay(1_000)
-                runCatching { PumperProtocol.decodeStatus(activeClient.request(Opcode.GetStatus).payload) }
-                    .onSuccess { status ->
+                runCatching {
+                    val status = PumperProtocol.decodeStatus(activeClient.request(Opcode.GetStatus).payload)
+                    val telemetry = if (status.supportsTelemetry) {
+                        PumperProtocol.decodeTelemetry(activeClient.request(Opcode.GetTelemetry).payload)
+                    } else null
+                    status to telemetry
+                }.onSuccess { (status, telemetry) ->
                         val oldStatus = _state.value.status
                         val oldRate = _state.value.status?.sampleRateHz
                         if (oldStatus != null &&
@@ -496,7 +507,7 @@ class PumperControllerViewModel(application: Application) : AndroidViewModel(app
                             clearPendingOutputProcessing()
                             _state.update { it.copy(outputProcessing = null, outputProcessingSaving = false) }
                         }
-                        _state.update { it.copy(status = status) }
+                        _state.update { it.copy(status = status, telemetry = telemetry) }
                         if (_state.value.autoPreamp && oldRate != status.sampleRateHz) {
                             val next = _state.value.config.copy(
                                 preampDb = EqMath.calculateAutoPreamp(_state.value.config, status.sampleRateHz).preampDb,

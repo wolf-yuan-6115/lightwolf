@@ -7,6 +7,7 @@ import {
   decodeMeterLevel,
   decodeProfileState,
   decodeStatus,
+  decodeTelemetry,
   encodeBand,
   encodeGlobal,
   encodeMeterConfig,
@@ -25,6 +26,7 @@ import {
   encodeCrossfeed,
   supportsAudioControls,
   supportsFirmware3Controls,
+  supportsTelemetry,
   defaultOutputProcessing,
   decodeOutputProcessing,
   decodeOutputProcessingState,
@@ -44,6 +46,12 @@ describe("Pumper HID protocol", () => {
     for (const version of ["3.0", "3.1", "4.0"]) expect(supportsFirmware3Controls(version)).toBe(true);
     expect([Opcode.GetOutputProcessing, Opcode.SetOutputProcessing, Opcode.SaveOutputProcessing]).toEqual([0x08, 0x13, 0x27]);
     expect([FilterType.LowPass, FilterType.HighPass, FilterType.Notch, FilterType.BandPass]).toEqual([3, 4, 5, 6]);
+  });
+
+  it("gates telemetry at firmware 3.4", () => {
+    for (const version of ["3.0", "3.3", "invalid"]) expect(supportsTelemetry(version)).toBe(false);
+    for (const version of ["3.4", "3.10", "4.0"]) expect(supportsTelemetry(version)).toBe(true);
+    expect(Opcode.GetTelemetry).toBe(0x09);
   });
 
   it("round-trips output processing and decodes live, saved, and dirty state", () => {
@@ -193,6 +201,55 @@ describe("Pumper HID protocol", () => {
     expect(() => decodeStatus(new Uint8Array(30))).toThrow("Invalid status response");
     payload[44] = 20;
     expect(() => decodeStatus(payload)).toThrow("Invalid status bit depth");
+  });
+
+  it("decodes telemetry and validates its schema, flags, and reserved bytes", () => {
+    const payload = new Uint8Array(56);
+    const view = new DataView(payload.buffer);
+    payload[0] = 1;
+    payload[1] = 0x03;
+    view.setUint32(4, 86401, true);
+    view.setUint32(8, 123456, true);
+    view.setUint32(12, 144, true);
+    view.setUint32(16, 388, true);
+    view.setInt32(20, -125, true);
+    view.setUint16(24, 1234, true);
+    view.setUint16(26, 65535, true);
+    view.setUint32(28, 2300, true);
+    view.setUint32(32, 1001, true);
+    view.setUint32(36, 7, true);
+    view.setUint32(40, 2, true);
+    view.setUint32(44, 3, true);
+    view.setUint32(48, 4, true);
+    view.setUint32(52, 1000, true);
+
+    expect(decodeTelemetry(payload)).toEqual({
+      streaming: true,
+      feedbackActive: true,
+      uptimeSeconds: 86401,
+      streamDurationMs: 123456,
+      i2sBufferedFrames: 144,
+      i2sHighWaterFrames: 388,
+      feedbackCorrectionPpm: -125,
+      averageDspLoadPercent: 12.34,
+      peakDspLoadPercent: 655.35,
+      limiterActiveMs: 2300,
+      usbAudioPackets: 1001,
+      streamStarts: 7,
+      malformedHidReports: 2,
+      busyHidReports: 3,
+      flashFailures: 4,
+      meterReports: 1000,
+    });
+    expect(() => decodeTelemetry(payload.slice(0, 52))).toThrow("Invalid telemetry response");
+    payload[0] = 2;
+    expect(() => decodeTelemetry(payload)).toThrow("Invalid telemetry response");
+    payload[0] = 1;
+    payload[1] = 0x04;
+    expect(() => decodeTelemetry(payload)).toThrow("Invalid telemetry response");
+    payload[1] = 0;
+    payload[2] = 1;
+    expect(() => decodeTelemetry(payload)).toThrow("Invalid telemetry response");
   });
 
   it("encodes meter timing and decodes pre- and post-EQ stereo levels", () => {

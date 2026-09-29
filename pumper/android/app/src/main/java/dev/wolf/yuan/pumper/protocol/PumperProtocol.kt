@@ -22,6 +22,7 @@ enum class Opcode(val value: Int) {
     GetAudioControls(0x06),
     GetCrossfeed(0x07),
     GetOutputProcessing(0x08),
+    GetTelemetry(0x09),
     SetGlobal(0x10),
     SetBand(0x11),
     SetCrossfeed(0x12),
@@ -121,7 +122,27 @@ data class DeviceStatus(
     val supportsDeviceReset: Boolean get() = firmwareMajor > 1 || (firmwareMajor == 1 && firmwareMinor >= 7)
     val supportsAudioControls: Boolean get() = firmwareMajor > 2 || (firmwareMajor == 2 && firmwareMinor >= 2)
     val supportsFirmware3Controls: Boolean get() = firmwareMajor >= 3
+    val supportsTelemetry: Boolean get() = firmwareMajor > 3 || (firmwareMajor == 3 && firmwareMinor >= 4)
 }
+
+data class DeviceTelemetry(
+    val streaming: Boolean,
+    val feedbackActive: Boolean,
+    val uptimeSeconds: Long,
+    val streamDurationMs: Long,
+    val i2sBufferedFrames: Long,
+    val i2sHighWaterFrames: Long,
+    val feedbackCorrectionPpm: Int,
+    val averageDspLoadPercent: Double,
+    val peakDspLoadPercent: Double,
+    val limiterActiveMs: Long,
+    val usbAudioPackets: Long,
+    val streamStarts: Long,
+    val malformedHidReports: Long,
+    val busyHidReports: Long,
+    val flashFailures: Long,
+    val meterReports: Long,
+)
 
 data class AudioChannelControl(
     val volumeDb: Double,
@@ -315,6 +336,33 @@ object PumperProtocol {
             systemClockMHz = if (payload.size >= 44) payload.u32(32) / 1_000_000.0 else null,
             maxDspBlockUs = if (payload.size >= 44) payload.u32(36) else null,
             i2sLowWaterFrames = if (payload.size >= 44) payload.u32(40) else null,
+        )
+    }
+
+    @Throws(ProtocolException::class)
+    fun decodeTelemetry(payload: ByteArray): DeviceTelemetry {
+        if (payload.size != 56 || payload.u8(0) != 1) throw ProtocolException("Invalid telemetry response")
+        val flags = payload.u8(1)
+        if (flags and 0xfc != 0 || payload.u8(2) != 0 || payload.u8(3) != 0) {
+            throw ProtocolException("Invalid telemetry response")
+        }
+        return DeviceTelemetry(
+            streaming = flags and 0x01 != 0,
+            feedbackActive = flags and 0x02 != 0,
+            uptimeSeconds = payload.u32(4),
+            streamDurationMs = payload.u32(8),
+            i2sBufferedFrames = payload.u32(12),
+            i2sHighWaterFrames = payload.u32(16),
+            feedbackCorrectionPpm = payload.i32(20),
+            averageDspLoadPercent = payload.u16(24) / 100.0,
+            peakDspLoadPercent = payload.u16(26) / 100.0,
+            limiterActiveMs = payload.u32(28),
+            usbAudioPackets = payload.u32(32),
+            streamStarts = payload.u32(36),
+            malformedHidReports = payload.u32(40),
+            busyHidReports = payload.u32(44),
+            flashFailures = payload.u32(48),
+            meterReports = payload.u32(52),
         )
     }
 

@@ -70,6 +70,12 @@ target_include_directories(hid_activity_tests PRIVATE ../src)
 target_compile_options(hid_activity_tests PRIVATE -Wall -Wextra -Werror)
 add_test(NAME hid_activity_tests COMMAND hid_activity_tests)
 
+add_executable(telemetry_tests test_telemetry.c ../src/telemetry.c ../src/eq_protocol.c ../src/eq_config.c)
+target_include_directories(telemetry_tests PRIVATE ../src)
+target_compile_options(telemetry_tests PRIVATE -Wall -Wextra -Werror)
+target_link_libraries(telemetry_tests PRIVATE m)
+add_test(NAME telemetry_tests COMMAND telemetry_tests)
+
 add_test(NAME resource_report_tests
   COMMAND ${CMAKE_COMMAND}
     -DREPORT_SCRIPT=${CMAKE_CURRENT_LIST_DIR}/../cmake/report_firmware_usage.cmake

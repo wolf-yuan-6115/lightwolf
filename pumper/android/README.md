@@ -17,6 +17,8 @@ The app provides:
   filters.
 - Ten profiles with separate save, select, default, and delete actions.
 - Firmware diagnostics, normal restart, and BOOTSEL handoff.
+- Firmware 3.4 telemetry for DSP load, I2S buffering, USB feedback, limiter
+  activity, and transport/storage health.
 
 Crossfeed requires firmware 2.2 or newer. Output processing and the additional
 EQ filter types require firmware 3.0 or newer. Live edits do not write flash;

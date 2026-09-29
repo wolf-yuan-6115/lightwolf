@@ -4,6 +4,7 @@ import dev.wolf.yuan.pumper.protocol.DefaultEqConfig
 import dev.wolf.yuan.pumper.protocol.AudioControls
 import dev.wolf.yuan.pumper.protocol.CrossfeedState
 import dev.wolf.yuan.pumper.protocol.DeviceStatus
+import dev.wolf.yuan.pumper.protocol.DeviceTelemetry
 import dev.wolf.yuan.pumper.protocol.EqConfig
 import dev.wolf.yuan.pumper.protocol.ProfileState
 import dev.wolf.yuan.pumper.protocol.OutputProcessingState
@@ -27,6 +28,7 @@ data class ControllerUiState(
     val productName: String? = null,
     val config: EqConfig = DefaultEqConfig,
     val status: DeviceStatus? = null,
+    val telemetry: DeviceTelemetry? = null,
     val audioControls: AudioControls? = null,
     val crossfeed: CrossfeedState? = null,
     val crossfeedSaving: Boolean = false,

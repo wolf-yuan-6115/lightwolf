@@ -19,6 +19,7 @@ export enum Opcode {
   GetAudioControls = 0x06,
   GetCrossfeed = 0x07,
   GetOutputProcessing = 0x08,
+  GetTelemetry = 0x09,
   SetGlobal = 0x10,
   SetBand = 0x11,
   SetCrossfeed = 0x12,
@@ -167,6 +168,10 @@ export function supportsFirmware3Controls(firmwareVersion: string): boolean {
   return firmwareAtLeast(firmwareVersion, 3, 0);
 }
 
+export function supportsTelemetry(firmwareVersion: string): boolean {
+  return firmwareAtLeast(firmwareVersion, 3, 4);
+}
+
 export function effectiveAudioControl(master: AudioChannelControl, channel: AudioChannelControl): AudioChannelControl {
   return { volumeDb: master.volumeDb + channel.volumeDb, muted: master.muted || channel.muted };
 }
@@ -313,6 +318,25 @@ export interface DeviceStatus {
   systemClockMHz: number | null;
   maxDspBlockUs: number | null;
   i2sLowWaterFrames: number | null;
+}
+
+export interface DeviceTelemetry {
+  streaming: boolean;
+  feedbackActive: boolean;
+  uptimeSeconds: number;
+  streamDurationMs: number;
+  i2sBufferedFrames: number;
+  i2sHighWaterFrames: number;
+  feedbackCorrectionPpm: number;
+  averageDspLoadPercent: number;
+  peakDspLoadPercent: number;
+  limiterActiveMs: number;
+  usbAudioPackets: number;
+  streamStarts: number;
+  malformedHidReports: number;
+  busyHidReports: number;
+  flashFailures: number;
+  meterReports: number;
 }
 
 export interface ResponsePacket {
@@ -475,6 +499,33 @@ export function decodeStatus(payload: Uint8Array): DeviceStatus {
     systemClockMHz: payload.length >= 44 ? view.getUint32(32, true) / 1_000_000 : null,
     maxDspBlockUs: payload.length >= 44 ? view.getUint32(36, true) : null,
     i2sLowWaterFrames: payload.length >= 44 ? view.getUint32(40, true) : null,
+  };
+}
+
+export function decodeTelemetry(payload: Uint8Array): DeviceTelemetry {
+  if (payload.length !== 56 || payload[0] !== 1) throw new Error("Invalid telemetry response");
+  const flags = payload[1];
+  if ((flags & ~0x03) !== 0 || payload[2] !== 0 || payload[3] !== 0) {
+    throw new Error("Invalid telemetry response");
+  }
+  const view = viewFor(payload);
+  return {
+    streaming: (flags & 0x01) !== 0,
+    feedbackActive: (flags & 0x02) !== 0,
+    uptimeSeconds: view.getUint32(4, true),
+    streamDurationMs: view.getUint32(8, true),
+    i2sBufferedFrames: view.getUint32(12, true),
+    i2sHighWaterFrames: view.getUint32(16, true),
+    feedbackCorrectionPpm: view.getInt32(20, true),
+    averageDspLoadPercent: view.getUint16(24, true) / 100,
+    peakDspLoadPercent: view.getUint16(26, true) / 100,
+    limiterActiveMs: view.getUint32(28, true),
+    usbAudioPackets: view.getUint32(32, true),
+    streamStarts: view.getUint32(36, true),
+    malformedHidReports: view.getUint32(40, true),
+    busyHidReports: view.getUint32(44, true),
+    flashFailures: view.getUint32(48, true),
+    meterReports: view.getUint32(52, true),
   };
 }
 
