@@ -1,6 +1,6 @@
 import { act, cleanup, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { PumperHidTransport, SPECTRUM_REPORT_EVENT } from "./hidTransport";
+import { PumperHidTransport, SPECTRUM_REPORT_EVENT, SPECTRUM_STARTED_EVENT } from "./hidTransport";
 import { useOutputSpectrum } from "./useOutputSpectrum";
 
 let hidden = false;
@@ -143,4 +143,42 @@ it("expires animation when the first report arrives at time zero", async () => {
   emit(transport); // A replay of the expired frame cannot revive the graph.
   animate();
   expect(result.current).toBeNull();
+});
+
+// Expiry recovery restarts the firmware sequence at one without reconnecting.
+it("recovers after an acknowledged subscription restart resets frame sequences", () => {
+  const transport = makeTransport();
+  const { result } = renderHook(() => useOutputSpectrum(transport, true));
+  emit(transport, 5000);
+  animate();
+  expect(result.current).not.toBeNull();
+  animate(500);
+  expect(result.current).toBeNull();
+  emit(transport, 1);
+  animate();
+  expect(result.current).toBeNull(); // Old/replayed sequences remain rejected.
+  act(() => { transport.dispatchEvent(new Event(SPECTRUM_STARTED_EVENT)); });
+  emit(transport, 1);
+  animate();
+  expect(result.current).not.toBeNull();
+});
+
+it("discards partial chunks and pending animation from the previous subscription", () => {
+  const transport = makeTransport();
+  const cancel = vi.spyOn(window, "cancelAnimationFrame");
+  const { result, unmount } = renderHook(() => useOutputSpectrum(transport, true));
+  emit(transport, 100);
+  expect(result.current).toBeNull();
+  emit(transport, 101, [0, 1, 2]);
+  act(() => { transport.dispatchEvent(new Event(SPECTRUM_STARTED_EVENT)); });
+  expect(cancel).toHaveBeenCalledOnce();
+  emit(transport, 1, [3, 4, 5]);
+  animate();
+  expect(result.current).toBeNull();
+  emit(transport, 1, [0, 1, 2]);
+  animate();
+  expect(result.current).not.toBeNull();
+  unmount();
+  act(() => { transport.dispatchEvent(new Event(SPECTRUM_STARTED_EVENT)); });
+  expect(transport.request).not.toHaveBeenCalled();
 });

@@ -16,6 +16,7 @@ interface PendingRequest {
 }
 
 export const SPECTRUM_REPORT_EVENT = "spectrumreport";
+export const SPECTRUM_STARTED_EVENT = "spectrumstarted";
 export const METER_REPORT_EVENT = "meterreport";
 
 export class PumperHidTransport extends EventTarget {
@@ -135,6 +136,9 @@ export class PumperHidTransport extends EventTarget {
       const pending = this.pending;
       this.pending = null;
       clearTimeout(pending.timeout);
+      // SpectrumStart begins a new sequence namespace even on the same USB
+      // connection. Reset consumers at the acknowledged report boundary.
+      if (pending.opcode === Opcode.SpectrumStart) this.dispatchEvent(new Event(SPECTRUM_STARTED_EVENT));
       pending.resolve(response);
     } catch (error) {
       if (bytes.length >= 6 && bytes[4] === 0 && bytes[5] === 0 && bytes[3] === (Opcode.SpectrumData | 0x80)) return;

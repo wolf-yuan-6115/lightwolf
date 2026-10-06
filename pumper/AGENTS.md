@@ -171,6 +171,9 @@ Do not vendor or commit the patched SDK into Pumper.
 - Crossfeed, output processing, and EQ profiles have independent saved/dirty
   state. Reconnecting reads device state instead of replaying stale browser
   edits.
+- An acknowledged SpectrumStart begins a fresh frame-sequence namespace even
+  within the same connection. Reset web reassembly and animation at that report
+  boundary; stale display expiry alone must retain replay protection.
 - Animate the web spectrum on browser animation frames, independently of HID
   report cadence. Retarget immediately to the latest complete frame; use dB-height
   smoothing (20 ms attack, 100 ms release) and cancel animation on hidden pages,

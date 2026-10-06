@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { PumperHidTransport, SPECTRUM_REPORT_EVENT } from "./hidTransport";
+import { PumperHidTransport, SPECTRUM_REPORT_EVENT, SPECTRUM_STARTED_EVENT } from "./hidTransport";
 import { decodeSpectrumChunk, type ResponsePacket } from "./protocol";
 import { SpectrumAssembler, smoothSpectrum, spectrumSettled } from "./spectrum";
 
@@ -51,9 +51,11 @@ export function useOutputSpectrum(transport: PumperHidTransport | null, enabled:
         }
       } catch { /* Malformed visual telemetry must not affect control requests. */ }
     };
+    const started = () => clear();
     const visibility = () => clear();
     const disconnected = () => { connected = false; clear(); };
     transport.addEventListener(SPECTRUM_REPORT_EVENT, report);
+    transport.addEventListener(SPECTRUM_STARTED_EVENT, started);
     transport.addEventListener("disconnect", disconnected);
     document.addEventListener("visibilitychange", visibility);
     const stale = window.setInterval(() => {
@@ -63,6 +65,7 @@ export function useOutputSpectrum(transport: PumperHidTransport | null, enabled:
       alive = false;
       clear();
       transport.removeEventListener(SPECTRUM_REPORT_EVENT, report);
+      transport.removeEventListener(SPECTRUM_STARTED_EVENT, started);
       transport.removeEventListener("disconnect", disconnected);
       document.removeEventListener("visibilitychange", visibility);
       window.clearInterval(stale);

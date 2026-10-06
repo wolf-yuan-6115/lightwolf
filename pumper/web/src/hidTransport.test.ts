@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { METER_REPORT_EVENT, SPECTRUM_REPORT_EVENT, PumperHidTransport } from "./hidTransport";
+import { METER_REPORT_EVENT, SPECTRUM_REPORT_EVENT, SPECTRUM_STARTED_EVENT, PumperHidTransport } from "./hidTransport";
 import { createRequest, Opcode, USB_PRODUCT_ID, USB_VENDOR_ID } from "./protocol";
 
 const originalHid = Object.getOwnPropertyDescriptor(navigator, "hid");
@@ -53,6 +53,41 @@ describe("Pumper HID transport", () => {
     expect(requestDevice).toHaveBeenCalledWith({
       filters: [{ vendorId: USB_VENDOR_ID, productId: USB_PRODUCT_ID }],
     });
+  });
+
+  it("announces a fresh spectrum subscription only after a matching successful acknowledgement", async () => {
+    let input!: EventListener;
+    const device = {
+      opened: true,
+      addEventListener: vi.fn((type, listener) => { if (type === "inputreport") input = listener; }),
+      removeEventListener: vi.fn(), close: vi.fn().mockResolvedValue(undefined),
+      sendReport: vi.fn().mockResolvedValue(undefined),
+    } as unknown as HIDDevice;
+    Object.defineProperty(navigator, "hid", { configurable: true, value: { addEventListener: vi.fn(), removeEventListener: vi.fn() } });
+    const transport = new PumperHidTransport();
+    const started = vi.fn();
+    transport.addEventListener(SPECTRUM_STARTED_EVENT, started);
+    await transport.open(device);
+    const acknowledge = (requestId: number, status = 0) => {
+      const report = createRequest(Opcode.SpectrumStart, requestId);
+      report[3] |= 0x80;
+      report[7] = status;
+      input({ device, data: new DataView(report.buffer) } as unknown as Event);
+    };
+    const first = transport.request(Opcode.SpectrumStart);
+    await Promise.resolve();
+    expect(started).not.toHaveBeenCalled();
+    acknowledge(99); // An unrelated/stale acknowledgement cannot reset assembly.
+    expect(started).not.toHaveBeenCalled();
+    acknowledge(1);
+    expect(started).toHaveBeenCalledOnce();
+    await first;
+    const rejected = transport.request(Opcode.SpectrumStart);
+    await Promise.resolve();
+    acknowledge(2, 6);
+    await expect(rejected).rejects.toThrow();
+    expect(started).toHaveBeenCalledOnce();
+    await transport.close();
   });
 
   it("keeps spectrum telemetry independent of pending control requests", async () => {
