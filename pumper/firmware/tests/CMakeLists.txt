@@ -83,3 +83,9 @@ add_test(NAME resource_report_tests
     -DTEST_DIRECTORY=${CMAKE_CURRENT_BINARY_DIR}/resource-report-test
     -P ${CMAKE_CURRENT_LIST_DIR}/test_resource_report.cmake
 )
+
+add_executable(spectrum_tests test_spectrum.c ../src/spectrum.c ../src/eq_protocol.c ../src/eq_config.c)
+target_include_directories(spectrum_tests PRIVATE ../src)
+target_compile_options(spectrum_tests PRIVATE -Wall -Wextra -Werror)
+target_link_libraries(spectrum_tests PRIVATE m)
+add_test(NAME spectrum_tests COMMAND spectrum_tests)

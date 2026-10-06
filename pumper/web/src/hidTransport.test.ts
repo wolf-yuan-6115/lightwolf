@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { METER_REPORT_EVENT, PumperHidTransport } from "./hidTransport";
+import { METER_REPORT_EVENT, SPECTRUM_REPORT_EVENT, PumperHidTransport } from "./hidTransport";
 import { createRequest, Opcode, USB_PRODUCT_ID, USB_VENDOR_ID } from "./protocol";
 
 const originalHid = Object.getOwnPropertyDescriptor(navigator, "hid");
@@ -53,6 +53,34 @@ describe("Pumper HID transport", () => {
     expect(requestDevice).toHaveBeenCalledWith({
       filters: [{ vendorId: USB_VENDOR_ID, productId: USB_PRODUCT_ID }],
     });
+  });
+
+  it("keeps spectrum telemetry independent of pending control requests", async () => {
+    let input!: EventListener;
+    const device = {
+      opened: true,
+      addEventListener: vi.fn((type, listener) => { if (type === "inputreport") input = listener; }),
+      removeEventListener: vi.fn(), close: vi.fn().mockResolvedValue(undefined),
+      sendReport: vi.fn().mockResolvedValue(undefined),
+    } as unknown as HIDDevice;
+    Object.defineProperty(navigator, "hid", { configurable: true, value: { addEventListener: vi.fn(), removeEventListener: vi.fn() } });
+    const transport = new PumperHidTransport();
+    const listener = vi.fn();
+    transport.addEventListener(SPECTRUM_REPORT_EVENT, listener);
+    await transport.open(device);
+    const pending = transport.request(Opcode.GetStatus);
+    await Promise.resolve();
+    const report = createRequest(Opcode.SpectrumData, 0, new Uint8Array(56));
+    report[3] |= 0x80;
+    input({ device, data: new DataView(report.buffer) } as unknown as Event);
+    expect(listener).toHaveBeenCalledOnce();
+    report[2] = 99; // Bad telemetry framing must not reject the status request.
+    input({ device, data: new DataView(report.buffer) } as unknown as Event);
+    const response = createRequest(Opcode.GetStatus, 1, new Uint8Array(48));
+    response[3] |= 0x80;
+    input({ device, data: new DataView(response.buffer) } as unknown as Event);
+    await expect(pending).resolves.toHaveProperty("requestId", 1);
+    await transport.close();
   });
 
   it("emits unsolicited meter reports without a pending request", async () => {

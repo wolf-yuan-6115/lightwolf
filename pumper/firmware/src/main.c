@@ -26,6 +26,7 @@
 #include "i2s_out.h"
 #include "quirk_os_guessing.h"
 #include "telemetry.h"
+#include "spectrum.h"
 #include "usb_descriptors.h"
 
 #define AUDIO_CHANNELS 2u
@@ -127,6 +128,17 @@ static uint16_t s_meter_timeout_ms = 1250u;
 static uint64_t s_meter_deadline_us = 0u;
 static uint64_t s_meter_next_report_us = 0u;
 static uint32_t s_meter_sequence = 0u;
+static spectrum_frame_t s_spectrum_sending, s_spectrum_waiting;
+static bool s_spectrum_sending_valid, s_spectrum_waiting_valid;
+static uint8_t s_spectrum_chunk;
+static void reset_spectrum_stream(void) {
+  spectrum_reset();
+  s_spectrum_sending_valid = s_spectrum_waiting_valid = false;
+}
+static void stop_spectrum_stream(void) {
+  spectrum_stop();
+  s_spectrum_sending_valid = s_spectrum_waiting_valid = false;
+}
 static audio_feedback_controller_t s_feedback_controller;
 static bool s_feedback_initialized = false;
 static uint64_t s_feedback_next_update_us = 0u;
@@ -201,6 +213,7 @@ static void set_streaming_state(bool streaming) {
   if (streaming) set_performance_clock(true);
 
   s_stream_generation++;
+  reset_spectrum_stream();
   if (streaming)
     telemetry_stream_started(time_us_64(), s_stream_generation);
   else
@@ -251,6 +264,7 @@ static bool handle_sample_rate_change(uint32_t new_rate_hz) {
   if (resume) set_streaming_state(false);
   if (resume) tud_audio_clear_ep_out_ff();
   s_sample_rate_hz = new_rate_hz;
+  reset_spectrum_stream();
   s_feedback_initialized = false;
   i2s_out_set_format(s_sample_rate_hz, s_audio_format);
   if (resume) set_streaming_state(true);
@@ -417,9 +431,12 @@ static void dsp_core_main(void) {
     if (s_streaming_active && block->stream_generation == s_stream_generation) {
       bool const measure_block = s_meter_active;
       eq_block_metrics_t metrics;
+      bool const capture = spectrum_capture_begin(local_sample_rate, block->stream_generation);
+      eq_set_output_observer(capture ? spectrum_capture_pair : NULL);
       uint32_t started_us = time_us_32();
       eq_process_interleaved_stereo(block->data.samples, block->frames, &metrics, measure_block);
       uint32_t elapsed_us = time_us_32() - started_us;
+      spectrum_capture_end(elapsed_us);
       if (elapsed_us > s_dsp_max_block_us) s_dsp_max_block_us = elapsed_us;
       telemetry_record_audio_block(block->stream_generation, block->frames, elapsed_us,
                                    metrics.limiter_active_frames);
@@ -693,8 +710,8 @@ static void hid_response_status(uint8_t opcode, uint16_t request_id) {
   i2s_out_diagnostics_t i2s = i2s_out_diagnostics();
   hid_response_prepare(opcode, request_id, EQ_STATUS_OK, EQ_PROTOCOL_STATUS_PAYLOAD_SIZE);
   uint8_t *payload = &s_hid_response[EQ_PROTOCOL_HEADER_SIZE];
-  payload[0] = 3u;
-  payload[1] = 4u;
+  payload[0] = 4u;
+  payload[1] = 0u;
   payload[2] = EQ_NUM_FILTERS;
   payload[3] = (s_streaming_active ? 0x01u : 0u) | (config_is_dirty() ? 0x02u : 0u) |
                (config.enabled ? 0x04u : 0u);
@@ -1076,6 +1093,23 @@ static void hid_process_command(eq_protocol_packet_t const *packet) {
       }
       break;
 
+    case EQ_OPCODE_SPECTRUM_START:
+    case EQ_OPCODE_SPECTRUM_KEEPALIVE:
+    case EQ_OPCODE_SPECTRUM_STOP:
+      if (packet->payload_length != 0u) {
+        hid_response_prepare(packet->opcode, packet->request_id, EQ_STATUS_INVALID_LENGTH, 0u);
+      } else if (packet->opcode == EQ_OPCODE_SPECTRUM_KEEPALIVE &&
+                 !spectrum_keepalive(time_us_64())) {
+        hid_response_prepare(packet->opcode, packet->request_id, EQ_STATUS_INVALID_COMMAND, 0u);
+      } else {
+        if (packet->opcode == EQ_OPCODE_SPECTRUM_START) {
+          stop_spectrum_stream();
+          spectrum_start(time_us_64());
+        } else if (packet->opcode == EQ_OPCODE_SPECTRUM_STOP) stop_spectrum_stream();
+        hid_response_prepare(packet->opcode, packet->request_id, EQ_STATUS_OK, 0u);
+      }
+      break;
+
     case EQ_OPCODE_RESTART_DEVICE:
     case EQ_OPCODE_ENTER_BOOTSEL:
       if (packet->payload_length != 0u) {
@@ -1085,6 +1119,7 @@ static void hid_process_command(eq_protocol_packet_t const *packet) {
         s_meter_configured = false;
         s_meter_next_report_us = 0u;
         meter_reset();
+        stop_spectrum_stream();
         s_device_reset_action = packet->opcode == EQ_OPCODE_ENTER_BOOTSEL
                                     ? DEVICE_RESET_BOOTSEL
                                     : DEVICE_RESET_RESTART;
@@ -1129,6 +1164,7 @@ void tud_hid_set_report_cb(uint8_t instance, uint8_t report_id, hid_report_type_
 
 static void hid_control_task(void) {
   if (s_flash_write_pending && !s_hid_response_pending) {
+    reset_spectrum_stream();
     bool const resume_stream = s_streaming_active;
     if (resume_stream) {
       telemetry_stream_stopped(time_us_64());
@@ -1219,6 +1255,7 @@ void tud_hid_report_complete_cb(uint8_t instance, uint8_t const *report, uint16_
 }
 
 void tud_umount_cb(void) {
+  stop_spectrum_stream();
   set_streaming_state(false);
   hid_activity_reset(&s_hid_activity);
   s_hid_response_pending = false;
@@ -1280,6 +1317,30 @@ static void meter_stream_task(void) {
 
   s_meter_next_report_us = now + (uint64_t)s_meter_report_interval_ms * 1000u;
   if (tud_hid_report(0u, report, sizeof(report))) telemetry_record_meter_report();
+}
+
+static void spectrum_stream_task(void) {
+  uint64_t now = time_us_64();
+  if (!spectrum_active(now)) {
+    s_spectrum_sending_valid = s_spectrum_waiting_valid = false;
+    return;
+  }
+  if (!s_streaming_active || s_flash_write_pending || s_device_reset_action != DEVICE_RESET_NONE) return;
+  spectrum_task(now, time_us_32);
+  if (spectrum_take_frame(&s_spectrum_waiting)) s_spectrum_waiting_valid = true;
+  if (!s_spectrum_sending_valid && s_spectrum_waiting_valid) {
+    s_spectrum_sending = s_spectrum_waiting;
+    s_spectrum_sending_valid = true;
+    s_spectrum_waiting_valid = false;
+    s_spectrum_chunk = 0u;
+  }
+  if (!s_spectrum_sending_valid || s_hid_response_pending || !tud_hid_ready()) return;
+  uint8_t report[EQ_PROTOCOL_REPORT_SIZE], payload[EQ_PROTOCOL_PAYLOAD_SIZE];
+  uint8_t length = spectrum_encode_chunk(payload, &s_spectrum_sending, s_spectrum_chunk);
+  eq_protocol_response_init(report, EQ_OPCODE_SPECTRUM_DATA, 0u, EQ_STATUS_OK, length);
+  memcpy(report + EQ_PROTOCOL_HEADER_SIZE, payload, length);
+  if (tud_hid_report(0u, report, sizeof(report)) && ++s_spectrum_chunk == 6u)
+    s_spectrum_sending_valid = false;
 }
 
 void tud_audio_feedback_params_cb(uint8_t func_id, uint8_t alt_itf, audio_feedback_params_t *feedback_param) {
@@ -1388,5 +1449,6 @@ int main(void) {
     red_led_set(hid_activity_level(&s_hid_activity, time_us_32(), s_streaming_active));
     audio_task();
     audio_feedback_task();
+    spectrum_stream_task();
   }
 }

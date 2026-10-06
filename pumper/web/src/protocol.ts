@@ -36,6 +36,10 @@ export enum Opcode {
   MeterKeepalive = 0x31,
   MeterStop = 0x32,
   MeterLevel = 0x33,
+  SpectrumStart = 0x34,
+  SpectrumKeepalive = 0x35,
+  SpectrumStop = 0x36,
+  SpectrumData = 0x37,
   RestartDevice = 0x40,
   EnterBootsel = 0x41,
 }
@@ -597,3 +601,27 @@ export const defaultConfig: EqConfig = {
     gainDb,
   })),
 };
+
+export function supportsSpectrum(firmwareVersion: string): boolean {
+  return firmwareAtLeast(firmwareVersion, 3, 5);
+}
+
+export interface SpectrumChunk {
+  sequence: number;
+  sampleRateHz: 44100 | 48000;
+  index: number;
+  levels: Uint8Array;
+}
+
+export function decodeSpectrumChunk(payload: Uint8Array): SpectrumChunk {
+  const index = payload[1];
+  const count = index === 5 ? 36 : 44;
+  if (payload.length !== 12 + count || payload[0] !== 1 || index >= 6 ||
+      payload[2] !== 6 || payload[3] !== count) throw new Error("Invalid spectrum report");
+  const view = new DataView(payload.buffer, payload.byteOffset, payload.byteLength);
+  const rate = view.getUint32(8, true);
+  if ((rate !== 44100 && rate !== 48000) || payload.subarray(12).some((level) => level > 192)) {
+    throw new Error("Invalid spectrum report");
+  }
+  return { sequence: view.getUint32(4, true), sampleRateHz: rate, index, levels: payload.slice(12) };
+}

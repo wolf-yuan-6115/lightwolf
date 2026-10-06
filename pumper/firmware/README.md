@@ -19,6 +19,11 @@ Realtime meter reports also identify limiter gain reduction for controller clip
 indicators. A separate telemetry report exposes device uptime, DSP load, I2S
 buffer health, USB feedback, limiter activity, and transport/storage counters.
 
+Firmware 4.0 provides a live output spectrum that is always displayed by the web
+controller (also supported on firmware 3.5): 256 display points over 20 Hz–20 kHz, targeting 20 updates per
+second. The display measures processed digital audio before the fixed I²S
+output gain; it does not measure the analog DAC output.
+
 ## Requirements
 
 - CMake 3.13 or newer

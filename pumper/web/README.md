@@ -7,6 +7,7 @@ It provides:
 
 - Live ten-band parametric EQ preview with response graph, automatic preamp,
   input/output level meters, and a firmware 3.3 limiter activity indicator.
+- An always-on live output spectrum behind the EQ curve on firmware 3.5 or newer.
 - Ten device profiles with separate load, save, default, and delete actions.
 - USB sample-rate, bit-depth, stream, volume, and mute status.
 - Headphone crossfeed and, on firmware 3.0 or newer, global output processing.
@@ -18,6 +19,17 @@ It provides:
 
 Live edits are sent to the DAC for preview. Flash is changed only by an
 explicit profile, crossfeed, output-processing, default, or delete action.
+
+The output spectrum uses a separate −96–0 dBFS scale and 256 logarithmic
+points from 20 Hz to 20 kHz. Its 4,096-sample analysis window covers about
+85–93 ms of audio, with native frequency spacing of roughly 11–12 Hz;
+the display points do not provide independent resolution below that spacing.
+It combines stereo power and targets 20 updates per second, dropping visual
+updates when necessary to prioritize playback. Spectrum reports share the level
+meter connection lifecycle, with no toggle or browser setting. Animation pauses
+while the page is hidden. The spectrum animates
+between reports with a fast rise and a short decay. Android does not
+have the spectrum feature yet.
 
 ## Requirements
 

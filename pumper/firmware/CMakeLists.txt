@@ -29,6 +29,7 @@ add_executable(rp2350_usb_dac
   src/audio_block_queue.c
   src/hid_activity.c
   src/audio_feedback.c
+  src/spectrum.c
   src/telemetry.c
   src/quirk_os_guessing.c
   src/eq_config.c
@@ -68,7 +69,7 @@ target_link_libraries(rp2350_usb_dac PRIVATE
 target_compile_options(rp2350_usb_dac PRIVATE -fno-trapping-math -fno-rounding-math)
 set_source_files_properties(
   src/main.c src/usb_descriptors.c src/i2s_out.c src/audio_controls.c src/audio_format.c src/audio_block_queue.c
-  src/hid_activity.c src/audio_feedback.c src/telemetry.c src/quirk_os_guessing.c src/eq_config.c
+  src/hid_activity.c src/audio_feedback.c src/telemetry.c src/spectrum.c src/quirk_os_guessing.c src/eq_config.c
   src/eq_dsp.c src/eq_protocol.c src/eq_settings.c
   PROPERTIES COMPILE_OPTIONS "$<$<CONFIG:Release>:-flto>"
 )

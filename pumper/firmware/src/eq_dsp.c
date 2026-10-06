@@ -267,6 +267,9 @@ static void measure_pair(eq_level_metrics_t *level, float left, float right, boo
   }
 }
 
+static void (*s_output_observer)(float, float);
+void eq_set_output_observer(void (*observer)(float, float)) { s_output_observer = observer; }
+
 void eq_process_interleaved_stereo(float *restrict interleaved, size_t frame_count,
                                    eq_block_metrics_t *metrics, bool measure_rms) {
   if (interleaved == NULL || frame_count == 0u) return;
@@ -285,6 +288,7 @@ void eq_process_interleaved_stereo(float *restrict interleaved, size_t frame_cou
       process_stereo(&left, &right, band);
     }
     bool limiter_active = audio_controls_process(&left, &right);
+    if (s_output_observer) s_output_observer(left, right);
     interleaved[frame * 2u] = left;
     interleaved[frame * 2u + 1u] = right;
     if (metrics != NULL) {
@@ -301,6 +305,7 @@ void eq_process_interleaved_stereo(float *restrict interleaved, size_t frame_cou
     for (uint8_t active = 0u; active < s_active_band_count; active++)
       process_stereo(&left, &right, &s_bands[s_active_bands[active]]);
     bool limiter_active = audio_controls_process(&left, &right);
+    if (s_output_observer) s_output_observer(left, right);
     interleaved[frame * 2u] = left;
     interleaved[frame * 2u + 1u] = right;
     if (metrics != NULL) {

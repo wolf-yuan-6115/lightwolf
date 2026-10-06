@@ -15,6 +15,7 @@ interface PendingRequest {
   timeout: ReturnType<typeof setTimeout>;
 }
 
+export const SPECTRUM_REPORT_EVENT = "spectrumreport";
 export const METER_REPORT_EVENT = "meterreport";
 
 export class PumperHidTransport extends EventTarget {
@@ -117,12 +118,15 @@ export class PumperHidTransport extends EventTarget {
 
   private handleInputReport = (event: HIDInputReportEvent): void => {
     if (event.device !== this.device) return;
+    const bytes = new Uint8Array(event.data.buffer, event.data.byteOffset, event.data.byteLength);
     try {
-      const bytes = new Uint8Array(event.data.buffer, event.data.byteOffset, event.data.byteLength);
       const response = parseResponse(bytes);
       if (response.requestId === 0) {
         if (response.opcode === (Opcode.MeterLevel | 0x80) && response.status === 0) {
           this.dispatchEvent(new CustomEvent<ResponsePacket>(METER_REPORT_EVENT, { detail: response }));
+        }
+        if (response.opcode === (Opcode.SpectrumData | 0x80) && response.status === 0) {
+          this.dispatchEvent(new CustomEvent<ResponsePacket>(SPECTRUM_REPORT_EVENT, { detail: response }));
         }
         return;
       }
@@ -133,6 +137,7 @@ export class PumperHidTransport extends EventTarget {
       clearTimeout(pending.timeout);
       pending.resolve(response);
     } catch (error) {
+      if (bytes.length >= 6 && bytes[4] === 0 && bytes[5] === 0 && bytes[3] === (Opcode.SpectrumData | 0x80)) return;
       if (this.pending) this.rejectPending(error instanceof Error ? error : new Error("Malformed HID response"));
     }
   };

@@ -1,4 +1,6 @@
 import { PointerEvent, useMemo, useState } from "react";
+import { OutputSpectrum } from "./OutputSpectrum";
+import type { PumperHidTransport } from "./hidTransport";
 import { responseCurve } from "./eqMath";
 import { EqBand, EqConfig, FilterType } from "./protocol";
 
@@ -16,6 +18,8 @@ export const bandColors = [
 ];
 
 interface EqGraphProps {
+  spectrumTransport?: PumperHidTransport | null;
+  spectrumEnabled?: boolean;
   config: EqConfig;
   sampleRateHz: number;
   selectedBand: number;
@@ -60,7 +64,8 @@ function filterUsesGain(type: FilterType): boolean {
   return type <= FilterType.HighShelf;
 }
 
-export function EqGraph({ config, sampleRateHz, selectedBand, onSelectBand, onChangeBand }: EqGraphProps) {
+export function EqGraph({ spectrumTransport = null, spectrumEnabled = false, config, sampleRateHz, selectedBand, onSelectBand, onChangeBand }: EqGraphProps) {
+  const viewWidth = spectrumEnabled ? width + 35 : width;
   const [dragging, setDragging] = useState<number | null>(null);
   const curve = useMemo(() => responseCurve(config, sampleRateHz), [config, sampleRateHz]);
   const path = useMemo(
@@ -78,8 +83,12 @@ export function EqGraph({ config, sampleRateHz, selectedBand, onSelectBand, onCh
   const updateFromPointer = (event: PointerEvent<SVGSVGElement>) => {
     if (dragging === null) return;
     const rect = event.currentTarget.getBoundingClientRect();
-    const x = clamp(((event.clientX - rect.left) / rect.width) * width, margin.left, width - margin.right);
-    const y = clamp(((event.clientY - rect.top) / rect.height) * height, margin.top, height - margin.bottom);
+    // The default SVG meet scaling can letterbox inside the mobile min-height.
+    const scale = Math.min(rect.width / viewWidth, rect.height / height);
+    const offsetX = (rect.width - viewWidth * scale) / 2;
+    const offsetY = (rect.height - height * scale) / 2;
+    const x = clamp((event.clientX - rect.left - offsetX) / scale, margin.left, width - margin.right);
+    const y = clamp((event.clientY - rect.top - offsetY) / scale, margin.top, height - margin.bottom);
     const band = config.bands[dragging];
     onChangeBand(dragging, {
       frequencyHz: clamp(roundedFrequency(frequencyForX(x)), 20, 20000),
@@ -99,7 +108,7 @@ export function EqGraph({ config, sampleRateHz, selectedBand, onSelectBand, onCh
   return (
     <svg
       className="block aspect-[1000/350] max-h-[440px] min-h-[260px] w-full touch-none select-none sm:min-h-0"
-      viewBox={`0 0 ${width} ${height}`}
+      viewBox={`0 0 ${viewWidth} ${height}`}
       role="img"
       aria-label="Combined equalizer frequency response"
       onPointerMove={updateFromPointer}
@@ -123,6 +132,7 @@ export function EqGraph({ config, sampleRateHz, selectedBand, onSelectBand, onCh
           </text>
         </g>
       ))}
+      <OutputSpectrum transport={spectrumTransport} enabled={spectrumEnabled} left={margin.left} top={margin.top} width={graphWidth} height={graphHeight} />
       <path className="fill-none stroke-base-100/70 [stroke-width:8]" d={path} />
       <path className="fill-none stroke-accent [stroke-width:3]" d={path} />
       {config.bands.map((band, index) => {

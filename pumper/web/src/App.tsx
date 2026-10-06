@@ -35,6 +35,7 @@ import {
   ProfileState,
   ResponsePacket,
   supportsTelemetry,
+  supportsSpectrum,
   WidthMode,
 } from "./protocol";
 
@@ -464,19 +465,37 @@ export default function App() {
     return () => window.clearInterval(timer);
   }, [connected, audioSettings.refresh]);
 
+  const spectrumSupported = !!status && supportsSpectrum(status.firmwareVersion);
+
   useEffect(() => {
     if (!connected) return;
+    let alive = true;
+    let heartbeatPending = false;
 
     const handleMeterReport = (event: Event) => {
       const response = (event as CustomEvent<ResponsePacket>).detail;
       setMeterLevel(decodeMeterLevel(response.payload));
     };
-    const heartbeat = () => transport.current.request(Opcode.MeterKeepalive).catch(() => undefined);
+    const heartbeat = async () => {
+      if (!alive || heartbeatPending) return;
+      heartbeatPending = true;
+      try {
+        await transport.current.request(Opcode.MeterKeepalive).catch(() => undefined);
+        if (alive && spectrumSupported) {
+          await transport.current.request(Opcode.SpectrumKeepalive).catch(() => {
+            if (alive) return transport.current.request(Opcode.SpectrumStart).catch(() => undefined);
+          });
+        }
+      } finally { heartbeatPending = false; }
+    };
 
     transport.current.addEventListener(METER_REPORT_EVENT, handleMeterReport);
     transport.current
       .request(Opcode.MeterStart, encodeMeterConfig(METER_REPORT_INTERVAL_MS, METER_TIMEOUT_MS))
       .catch((reason: unknown) => setError(reason instanceof Error ? reason.message : "Unable to start level metering"));
+    if (spectrumSupported) {
+      void transport.current.request(Opcode.SpectrumStart).catch(() => undefined);
+    }
     const heartbeatTimer = window.setInterval(heartbeat, METER_HEARTBEAT_INTERVAL_MS);
     const handleVisibility = () => {
       if (!document.hidden) void heartbeat();
@@ -484,13 +503,15 @@ export default function App() {
     document.addEventListener("visibilitychange", handleVisibility);
 
     return () => {
+      alive = false;
       window.clearInterval(heartbeatTimer);
       document.removeEventListener("visibilitychange", handleVisibility);
       transport.current.removeEventListener(METER_REPORT_EVENT, handleMeterReport);
       setMeterLevel(null);
       void transport.current.request(Opcode.MeterStop).catch(() => undefined);
+      if (spectrumSupported) void transport.current.request(Opcode.SpectrumStop).catch(() => undefined);
     };
-  }, [connected]);
+  }, [connected, spectrumSupported]);
 
   useEffect(() => {
     if (!autoRef.current) return;
@@ -789,7 +810,7 @@ export default function App() {
                   <span className="truncate">{filterName(selected.type)} · {selected.frequencyHz.toLocaleString()} Hz{filterUsesGain(selected.type) ? ` · ${selected.gainDb > 0 ? "+" : ""}${selected.gainDb.toFixed(1)} dB` : ` · Q ${selected.q.toFixed(2)}`}</span>
                 </div>
               </div>
-              <EqGraph config={config} sampleRateHz={sampleRateHz} selectedBand={selectedBand} onSelectBand={setSelectedBand} onChangeBand={updateBand} />
+              <EqGraph spectrumTransport={transport.current} spectrumEnabled={connected && spectrumSupported} config={config} sampleRateHz={sampleRateHz} selectedBand={selectedBand} onSelectBand={setSelectedBand} onChangeBand={updateBand} />
             </div>
           </article>
 

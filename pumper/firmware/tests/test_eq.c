@@ -213,6 +213,32 @@ static void test_new_filter_responses(void) {
   }
 }
 
+static float s_observed[1024];
+static unsigned s_observed_count;
+static void observe_output(float left, float right) {
+  assert(s_observed_count + 2u <= 1024u);
+  s_observed[s_observed_count++] = left;
+  s_observed[s_observed_count++] = right;
+}
+static void test_output_observer(void) {
+  eq_config_t config = k_eq_default_config;
+  for (unsigned i = 0; i < EQ_NUM_FILTERS; ++i) config.filters[i].enabled = false;
+  eq_init(48000u, &config);
+  audio_controls_init(48000u, &k_crossfeed_default, &k_output_processing_default);
+  config.preamp_db = -6.0206f;
+  assert(eq_set_config(&config)); // Exercise both ramp and steady-state loops.
+  float samples[1024];
+  for (unsigned i = 0; i < 1024u; ++i) samples[i] = i & 1u ? -40000.0f : 40000.0f;
+  s_observed_count = 0u;
+  eq_set_output_observer(observe_output);
+  eq_process_interleaved_stereo(samples, 512u, NULL, false);
+  eq_set_output_observer(NULL);
+  assert(s_observed_count == 1024u);
+  assert(memcmp(samples, s_observed, sizeof(samples)) == 0);
+  for (unsigned i = 0; i < 1024u; ++i) assert(fabsf(s_observed[i]) <= 32768.0f);
+  assert(fabsf(s_observed[0]) > 24576.0f); // Observer excludes the 0.75 I2S gain.
+}
+
 int main(void) {
   test_default_config();
   test_protocol_header();
@@ -220,5 +246,6 @@ int main(void) {
   test_dsp_bypass_and_processing();
   test_dsp_transition_smoothing();
   test_new_filter_responses();
+  test_output_observer();
   return 0;
 }

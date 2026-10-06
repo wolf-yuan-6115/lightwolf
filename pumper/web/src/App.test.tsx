@@ -131,6 +131,36 @@ function getProfileOption(label: string) {
 }
 
 describe("Pumper controller", () => {
+  it("always subscribes to spectrum alongside meters on firmware 4.0", async () => {
+    storedValues.set("pumper-output-spectrum", "off");
+    const { request } = mockConnectedPumper(defaultConfig, undefined, [4, 0]);
+    const view = render(<App />);
+    await waitFor(() => expect(request).toHaveBeenCalledWith(Opcode.SpectrumStart));
+    expect(request.mock.calls.some(([opcode]) => opcode === Opcode.MeterStart)).toBe(true);
+    expect(screen.queryByRole("checkbox", { name: /Output spectrum/ })).not.toBeInTheDocument();
+    await waitFor(() => expect(request).toHaveBeenCalledWith(Opcode.SpectrumKeepalive));
+    expect(request).toHaveBeenCalledWith(Opcode.MeterKeepalive);
+    expect(request.mock.calls.some(([opcode]) => [Opcode.SaveProfile, Opcode.SaveCrossfeed, Opcode.SaveOutputProcessing].includes(opcode))).toBe(false);
+    view.unmount();
+    expect(request).toHaveBeenCalledWith(Opcode.MeterStop);
+    expect(request).toHaveBeenCalledWith(Opcode.SpectrumStop);
+  });
+
+  it("recovers spectrum expiry through the shared meter heartbeat", async () => {
+    const { request } = mockConnectedPumper(defaultConfig, (opcode) => opcode === Opcode.SpectrumKeepalive ? new Error("Expired subscription") : null, [3, 5]);
+    render(<App />);
+    await waitFor(() => expect(request.mock.calls.filter(([opcode]) => opcode === Opcode.SpectrumStart).length).toBeGreaterThan(1));
+    expect(request).toHaveBeenCalledWith(Opcode.MeterKeepalive);
+  });
+
+  it("never subscribes to the spectrum on older firmware", async () => {
+    const { request } = mockConnectedPumper(defaultConfig, undefined, [3, 4]);
+    render(<App />);
+    await waitFor(() => expect(request.mock.calls.some(([opcode]) => opcode === Opcode.MeterStart)).toBe(true));
+    expect(screen.queryByRole("checkbox", { name: /Output spectrum/ })).not.toBeInTheDocument();
+    expect(request.mock.calls.some(([opcode]) => opcode === Opcode.SpectrumStart)).toBe(false);
+  });
+
   it("copies the current EQ as parametric text", async () => {
     const writeText = vi.fn().mockResolvedValue(undefined);
     Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText } });

@@ -94,6 +94,37 @@ changes; do not reset or rewrite user work.
   DSP snapshot; it must not lock, allocate, divide, or rescan samples in the
   audio path. Stream-scoped values reset on stream start, while transport and
   storage counters are boot-scoped.
+- Firmware 3.5 adds opt-in SpectrumStart/Keepalive/Stop/Data (`0x34`–`0x37`).
+  Android intentionally does not subscribe or expose this feature yet. Existing
+  commands, status/telemetry layouts, protocol version, and Android version stay
+  compatible. Spectrum levels reference post-limiter PCM before I2S gain.
+- Firmware 4.0 keeps these commands and layouts compatible. The web controller
+  always subscribes to spectrum on supported firmware alongside level meters,
+  sharing their start/keepalive/stop lifecycle. Android remains unchanged.
+- Spectrum capture is a core-1 producer / core-0 consumer FIFO. Only the producer
+  publishes the write cursor; only the consumer publishes the read cursor. Reset
+  invalidates consumer history and advances a subscription epoch; producer epoch,
+  stream generation, and rate are sequence-checked and acknowledged at block end.
+  Overflow increments a discontinuity counter and never delays playback.
+- Spectrum analysis runs in bounded core-0 steps after USB/audio servicing. Keep
+  the 40 us work target and 50 us slice acceptance ceiling; hardware timing still
+  needs verification. Capture is integrated in both DSP loops without rescanning.
+- Spectrum schema 1 has a 12-byte header: schema, chunk index, chunk count (6),
+  level count, little-endian uint32 frame sequence, and uint32 analysis rate
+  (44100/48000). Chunks carry 44 levels, except the final 36. Codes 0–192 map
+  -96–0 dBFS in half-dB steps. Unsolicited reports use request ID zero. Preserve
+  response > meter > spectrum HID priority and immutable frames during chunking.
+- The 127-tap decimators use mirrored 128-frame rings to keep symmetric tap
+  access contiguous. FFT work advances in small batches independently of
+  decimator calls; retain time checks between batches and single-point mapping.
+- The 4096-point periodic Hann FFT combines stereo power. Logarithmic points use
+  power interpolation for narrow intervals and peak bins for wider intervals;
+  256 points do not imply 256 independent low-frequency bands. Regenerate tables
+  with `python3 firmware/tools/generate_spectrum_tables.py`.
+- `spectrum_diagnostics()` exposes analysis/drop counts, FIFO high-water and worst
+  slice time for debugger inspection. Its capture-block time includes the entire
+  DSP call, not isolated observer overhead; compare spectrum on/off DSP timing on
+  hardware. It deliberately does not change the existing telemetry wire layout.
 - Host USB volume and mute are controlled by the audio host. The controllers
   display them but must not treat them as profile settings.
 
@@ -136,6 +167,11 @@ Do not vendor or commit the patched SDK into Pumper.
 - Crossfeed, output processing, and EQ profiles have independent saved/dirty
   state. Reconnecting reads device state instead of replaying stale browser
   edits.
+- Animate the web spectrum on browser animation frames, independently of HID
+  report cadence. Retarget immediately to the latest complete frame; use dB-height
+  smoothing (20 ms attack, 100 ms release) and cancel animation on hidden pages,
+  disconnect, unsupported firmware, unmount, and stale data. There is no spectrum
+  toggle or browser preference; visibility only pauses rendering. Never queue old visual frames.
 - WebHID works on secure origins and `http://localhost`; no firmware
   development-origin flag is required.
 - Do not add or run Playwright unless explicitly requested. Use Vitest, the

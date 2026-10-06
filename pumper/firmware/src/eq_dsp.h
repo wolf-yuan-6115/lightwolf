@@ -20,6 +20,9 @@ typedef struct {
   uint32_t limiter_active_frames;
 } eq_block_metrics_t;
 
+// Core-1-only observer, called once per processed frame after the limiter.
+// The callback must never block, allocate, or retain audio-block pointers.
+void eq_set_output_observer(void (*observer)(float left, float right));
 void eq_init(uint32_t sample_rate_hz, eq_config_t const *config);
 void eq_set_sample_rate(uint32_t sample_rate_hz);
 void eq_reset_state(void);
