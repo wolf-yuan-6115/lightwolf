@@ -3,7 +3,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 #define SPECTRUM_POINTS 256u
-#define SPECTRUM_FFT_SIZE 4096u
+#define SPECTRUM_FFT_SIZE 2048u
 #define SPECTRUM_FIFO_FRAMES 16384u
 #define SPECTRUM_TIMEOUT_US 1250000u
 

@@ -121,7 +121,7 @@ changes; do not reset or rewrite user work.
 - The 127-tap decimators use mirrored 128-frame rings to keep symmetric tap
   access contiguous. FFT work advances in small batches independently of
   decimator calls; retain time checks between batches and single-point mapping.
-- The 4096-point periodic Hann FFT combines stereo power. Logarithmic points use
+- The 2048-point periodic Hann FFT combines stereo power. Logarithmic points use
   power interpolation for narrow intervals and peak bins for wider intervals;
   256 points do not imply 256 independent low-frequency bands. Regenerate tables
   with `python3 firmware/tools/generate_spectrum_tables.py`.
@@ -174,9 +174,11 @@ Do not vendor or commit the patched SDK into Pumper.
 - An acknowledged SpectrumStart begins a fresh frame-sequence namespace even
   within the same connection. Reset web reassembly and animation at that report
   boundary; stale display expiry alone must retain replay protection.
+- Request meter reports every 20 ms; illuminate segments immediately and fade
+  extinguished segments over 50 ms.
 - Animate the web spectrum on browser animation frames, independently of HID
   report cadence. Retarget immediately to the latest complete frame; use dB-height
-  smoothing (20 ms attack, 100 ms release) and cancel animation on hidden pages,
+  smoothing (8 ms attack, 70 ms release) and cancel animation on hidden pages,
   disconnect, unsupported firmware, unmount, and stale data. There is no spectrum
   toggle or browser preference; visibility only pauses rendering. Never queue old visual frames.
 - WebHID works on secure origins and `http://localhost`; no firmware

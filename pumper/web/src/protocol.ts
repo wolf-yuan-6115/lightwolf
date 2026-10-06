@@ -6,7 +6,7 @@ export const HID_USAGE = 0x01;
 export const REPORT_SIZE = 64;
 export const HEADER_SIZE = 8;
 export const PROTOCOL_VERSION = 1;
-export const METER_REPORT_INTERVAL_MS = 40;
+export const METER_REPORT_INTERVAL_MS = 20;
 export const METER_HEARTBEAT_INTERVAL_MS = 500;
 export const METER_TIMEOUT_MS = 1250;
 

@@ -34,8 +34,8 @@ export class SpectrumAssembler {
 // Animate the plotted dB height, rather than linear power. Power-space decay
 // takes seconds to traverse a large dB range, even with a short time constant.
 const spectrumFloorDb = -96;
-export const spectrumAttackMs = 20;
-export const spectrumReleaseMs = 100;
+export const spectrumAttackMs = 8;
+export const spectrumReleaseMs = 70;
 const spectrumSnapDb = 0.05;
 
 function spectrumDb(power: number): number {

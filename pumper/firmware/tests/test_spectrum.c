@@ -64,12 +64,43 @@ static void test_incremental_cadence(void) {
     spectrum_stop();
   }
 }
+// First complete frame must arrive within 60 ms of contiguous capture at every
+// input rate. The fake clock verifies acquisition/work scheduling, not device time.
+static void test_short_window_latency(void) {
+  uint32_t rates[] = {44100u, 48000u, 88200u, 96000u, 176400u, 192000u};
+  for (unsigned r = 0u; r < 6u; ++r) {
+    uint32_t rate = rates[r];
+    spectrum_start(0u);
+    assert(spectrum_capture_begin(rate, r + 200u));
+    spectrum_capture_pair(0, 0);
+    spectrum_capture_end(1u);
+    drain(0u);
+    bool received = false;
+    for (uint32_t offset = 0u; offset < rate * 60u / 1000u; offset += 128u) {
+      assert(spectrum_capture_begin(rate, r + 200u));
+      for (uint32_t i = 0u; i < 128u; ++i) spectrum_capture_pair(100, -100);
+      spectrum_capture_end(1u);
+      drain((uint64_t)(offset + 128u) * 1000000u / rate);
+      spectrum_frame_t frame;
+      if (spectrum_take_frame(&frame)) {
+        // No partial window may be published to achieve the lower latency.
+        uint32_t analysis_rate = rate % 44100u == 0u ? 44100u : 48000u;
+        assert(offset + 128u >= SPECTRUM_FFT_SIZE * (rate / analysis_rate));
+        received = true;
+        break;
+      }
+    }
+    assert(received);
+    spectrum_stop();
+  }
+}
 int main(void) {
+  test_short_window_latency();
   test_incremental_cadence();
   spectrum_frame_t silence = tone(48000u, 1000, 0, false, 1u);
   assert(maximum(&silence) == 0);
   // A high-frequency bin-centered tone lies in a max-bin logarithmic interval.
-  float hz = 48000.0f * 500.0f / 4096.0f;
+  float hz = 48000.0f * 500.0f / (float)SPECTRUM_FFT_SIZE;
   spectrum_frame_t full = tone(48000u, hz, 1, false, 1u);
   spectrum_frame_t inverted = tone(48000u, hz, 1, true, 1u);
   assert(maximum(&full) >= 191u);
@@ -83,7 +114,7 @@ int main(void) {
   for (unsigned r = 0; r < 6u; ++r) {
     uint32_t rates[] = {44100u, 48000u, 88200u, 96000u, 176400u, 192000u};
     uint32_t rate = rates[r], analysis = rate % 44100u == 0u ? 44100u : 48000u;
-    spectrum_frame_t pass = tone(rate, analysis * floorf(20000.0f * 4096.0f / analysis) / 4096.0f, 1, false, r + 2u);
+    spectrum_frame_t pass = tone(rate, analysis * floorf(20000.0f * (float)SPECTRUM_FFT_SIZE / analysis) / (float)SPECTRUM_FFT_SIZE, 1, false, r + 2u);
     assert(maximum(&pass) >= 189u); // Near 18-20 kHz passband remains within 1.5 dB.
     if (rate > 48000u) {
       spectrum_frame_t alias = tone(rate, analysis - 6000.0f, 1, false, r + 2u);
@@ -92,7 +123,7 @@ int main(void) {
   }
   spectrum_frame_t before_reset = feed_tone(48000u, hz, 1, false, 10u, true);
   spectrum_reset();
-  spectrum_frame_t after_reset = feed_tone(44100u, 44100.0f * 500.0f / 4096.0f, 0.5f, true, 11u, false);
+  spectrum_frame_t after_reset = feed_tone(44100u, 44100.0f * 500.0f / (float)SPECTRUM_FFT_SIZE, 0.5f, true, 11u, false);
   assert(after_reset.sequence > before_reset.sequence);
   assert(maximum(&after_reset) >= 179u && maximum(&after_reset) <= 181u);
   spectrum_stop();

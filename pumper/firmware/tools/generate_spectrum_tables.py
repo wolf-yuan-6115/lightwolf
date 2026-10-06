@@ -1,5 +1,6 @@
 """Regenerate the checked-in spectrum coefficients using Python's standard library."""
 import math
+import re
 from pathlib import Path
 
 def i0(x):
@@ -16,7 +17,9 @@ def array(name, values):
         '  ' + ', '.join(f'{v:.10e}f' for v in values[i:i+6]) + ',\n'
         for i in range(0, len(values), 6)) + '};\n'
 
-n = 4096
+header = Path(__file__).resolve().parents[1].joinpath('src/spectrum.h').read_text()
+n = int(re.search(r'#define SPECTRUM_FFT_SIZE (\d+)u', header).group(1))
+assert n >= 2 and n & (n - 1) == 0, 'FFT size must be a power of two'
 beta = 8.6
 fir = []
 for i in range(127):

@@ -136,7 +136,7 @@ describe("Pumper controller", () => {
     const { request } = mockConnectedPumper(defaultConfig, undefined, [4, 0]);
     const view = render(<App />);
     await waitFor(() => expect(request).toHaveBeenCalledWith(Opcode.SpectrumStart));
-    expect(request.mock.calls.some(([opcode]) => opcode === Opcode.MeterStart)).toBe(true);
+    expect(request).toHaveBeenCalledWith(Opcode.MeterStart, new Uint8Array([20, 0, 0xe2, 0x04]));
     expect(screen.queryByRole("checkbox", { name: /Output spectrum/ })).not.toBeInTheDocument();
     await waitFor(() => expect(request).toHaveBeenCalledWith(Opcode.SpectrumKeepalive));
     expect(request).toHaveBeenCalledWith(Opcode.MeterKeepalive);

@@ -46,7 +46,7 @@ function ChannelMeter({ channel, peak, source, tone }: ChannelMeterProps) {
               : threshold >= -6
                 ? "bg-amber-400 shadow-[0_0_5px_rgba(251,191,36,0.42)]"
                 : nominalColor;
-          return <span className={`min-w-0 rounded-[1px] transition-colors duration-75 ${color}`} key={threshold} />;
+          return <span className={`min-w-0 rounded-[1px] ${lit ? "transition-none" : "transition-colors duration-50"} ${color}`} key={threshold} />;
         })}
       </div>
       <span className="text-right text-[10px] tabular-nums text-base-content/60">{displayDb(currentPeakDb)}</span>

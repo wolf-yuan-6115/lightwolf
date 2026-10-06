@@ -30,6 +30,12 @@ static bool s_result_ready;
 static spectrum_frame_t s_result, s_build;
 static spectrum_diagnostics_t s_diag;
 
+_Static_assert(N >= 2u && (N & (N - 1u)) == 0u, "FFT size must be a power of two");
+_Static_assert(sizeof(spectrum_window) / sizeof(spectrum_window[0]) == N &&
+               sizeof(spectrum_cos) / sizeof(spectrum_cos[0]) == N / 2u &&
+               sizeof(spectrum_sin) / sizeof(spectrum_sin[0]) == N / 2u,
+               "Regenerate spectrum tables after changing FFT size");
+
 _Static_assert(sizeof(s_fifo) + sizeof(s_history) + sizeof(s_fft) + sizeof(s_power) +
                sizeof(s_decimator) + sizeof(spectrum_window) + sizeof(spectrum_cos) +
                sizeof(spectrum_sin) + sizeof(spectrum_fir) + sizeof(spectrum_frequency) +
@@ -142,7 +148,7 @@ static bool decimate(decimator_t *d, pair_t input, pair_t *output) {
 
 static uint32_t reverse_bits(uint32_t x) {
   uint32_t result = 0u;
-  for (uint32_t bit = 0; bit < 12u; ++bit) { result = (result << 1u) | (x & 1u); x >>= 1u; }
+  for (uint32_t bit = 0; (1u << bit) < N; ++bit) { result = (result << 1u) | (x & 1u); x >>= 1u; }
   return result;
 }
 static void gather_one(void) {

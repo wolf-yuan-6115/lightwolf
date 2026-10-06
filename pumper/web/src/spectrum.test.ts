@@ -67,11 +67,11 @@ describe("output spectrum codec and assembly", () => {
     const loud = new Uint8Array(256).fill(192);
     const quiet = new Uint8Array(256);
     const zero = new Float32Array(256);
-    const attack = smoothSpectrum(zero, loud, 20);
-    expect(10 * Math.log10(attack[0])).toBeCloseTo(-96 * Math.exp(-1));
-    const release = smoothSpectrum(new Float32Array(256).fill(1), quiet, 100);
+    const attack = smoothSpectrum(zero, loud, 16);
+    expect(10 * Math.log10(attack[0])).toBeCloseTo(-96 * Math.exp(-2));
+    const release = smoothSpectrum(new Float32Array(256).fill(1), quiet, 70);
     expect(10 * Math.log10(release[0])).toBeCloseTo(-96 * (1 - Math.exp(-1)));
-    const twoSteps = smoothSpectrum(smoothSpectrum(zero, loud, 10), loud, 10);
+    const twoSteps = smoothSpectrum(smoothSpectrum(zero, loud, 8), loud, 8);
     expect(10 * Math.log10(twoSteps[0])).toBeCloseTo(10 * Math.log10(attack[0]), 4);
     const after300Ms = smoothSpectrum(new Float32Array(256).fill(1), quiet, 300);
     expect(10 * Math.log10(after300Ms[0])).toBeLessThan(-91);
