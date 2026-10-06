@@ -52,6 +52,10 @@ changes; do not reset or rewrite user work.
   validation, I2S packing, status reporting, and both controllers: 16-bit
   stereo at 44.1/48/88.2/96/176.4/192 kHz, and packed 24-bit stereo at
   44.1/48/88.2/96 kHz only.
+- The shared USB clock accepts every supported rate while alternate 0 is idle,
+  regardless of the cached previous PCM format. Hosts may set the clock before
+  selecting the next alternate. Validate the PCM/rate pair at stream start and
+  during active rate changes; defer invalid idle I2S configurations.
 - The ten EQ bands support RBJ low-pass, high-pass, notch, and constant-0-dB
   peak band-pass filters in addition to the gain filters. The extra filter
   types use frequency and Q; gain and bandwidth mode are invalid for them.

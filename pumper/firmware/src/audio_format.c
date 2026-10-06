@@ -27,6 +27,12 @@ bool audio_format_rate_valid(audio_sample_format_t format, uint32_t rate_hz) {
   }
 }
 
+bool audio_format_rate_change_valid(audio_sample_format_t format, uint32_t rate_hz,
+                                    bool streaming) {
+  return audio_format_rate_valid(AUDIO_FORMAT_PCM16, rate_hz) &&
+         (!streaming || audio_format_rate_valid(format, rate_hz));
+}
+
 static int32_t read_s24(uint8_t const *p) {
   uint32_t value = (uint32_t)p[0] | (uint32_t)p[1] << 8u | (uint32_t)p[2] << 16u;
   if (value & 0x800000u) value |= 0xff000000u;

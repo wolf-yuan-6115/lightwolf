@@ -17,6 +17,21 @@ static void test_rate_matrix(void) {
   assert(!audio_format_rate_valid(AUDIO_FORMAT_PCM16, 48001u));
 }
 
+static void test_idle_clock_negotiation(void) {
+  // Linux may retain PCM24 after closing a 96 kHz stream, then set the
+  // shared clock to 192 kHz before selecting the PCM16 alternate.
+  assert(audio_format_rate_change_valid(AUDIO_FORMAT_PCM24, 192000u, false));
+  assert(audio_format_rate_change_valid(AUDIO_FORMAT_PCM24, 176400u, false));
+  assert(audio_format_rate_valid(AUDIO_FORMAT_PCM16, 192000u));
+  assert(!audio_format_rate_valid(AUDIO_FORMAT_PCM24, 192000u));
+  assert(!audio_format_rate_change_valid(AUDIO_FORMAT_PCM24, 192000u, true));
+  assert(!audio_format_rate_change_valid(AUDIO_FORMAT_PCM24, 176400u, true));
+  assert(audio_format_rate_change_valid(AUDIO_FORMAT_PCM16, 192000u, true));
+  assert(audio_format_rate_change_valid(AUDIO_FORMAT_PCM24, 96000u, true));
+  assert(!audio_format_rate_change_valid(AUDIO_FORMAT_PCM16, 48001u, false));
+  assert(!audio_format_rate_change_valid(AUDIO_FORMAT_PCM24, 384000u, false));
+}
+
 static void test_decode(void) {
   uint8_t pcm16[] = {0x00, 0x80, 0xff, 0x7f, 0x34, 0x12, 0xcc, 0xed};
   float samples[4];
@@ -54,6 +69,7 @@ static void test_pack(void) {
 
 int main(void) {
   test_rate_matrix();
+  test_idle_clock_negotiation();
   test_decode();
   test_pack();
   return 0;

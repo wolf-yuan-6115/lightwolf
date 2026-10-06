@@ -251,22 +251,19 @@ static bool send_zero_control(uint8_t rhport, tusb_control_request_t const *p_re
   return tud_control_xfer(rhport, p_request, (void *) zero_buf, len);
 }
 
-static bool sample_rate_supported(uint32_t sample_rate_hz) {
-  for (uint8_t i = 0; i < N_SAMPLE_RATES; i++) {
-    if (sample_rates[i] == sample_rate_hz) return true;
-  }
-  return false;
-}
-
 static bool handle_sample_rate_change(uint32_t new_rate_hz) {
-  if (!sample_rate_supported(new_rate_hz) || !audio_format_rate_valid(s_audio_format, new_rate_hz)) return false;
+  if (!audio_format_rate_change_valid(s_audio_format, new_rate_hz, s_streaming_active)) return false;
   bool resume = s_streaming_active;
   if (resume) set_streaming_state(false);
   if (resume) tud_audio_clear_ep_out_ff();
   s_sample_rate_hz = new_rate_hz;
   reset_spectrum_stream();
   s_feedback_initialized = false;
-  i2s_out_set_format(s_sample_rate_hz, s_audio_format);
+  // An idle clock request can precede selection of the next PCM alternate.
+  // Defer I2S reconfiguration if the cached previous format cannot use it;
+  // set_itf validates and configures the new format before starting playback.
+  if (audio_format_rate_valid(s_audio_format, new_rate_hz))
+    i2s_out_set_format(s_sample_rate_hz, s_audio_format);
   if (resume) set_streaming_state(true);
   return true;
 }

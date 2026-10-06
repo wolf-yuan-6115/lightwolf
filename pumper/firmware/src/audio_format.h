@@ -12,6 +12,10 @@ typedef enum {
 
 size_t audio_format_frame_bytes(audio_sample_format_t format);
 bool audio_format_rate_valid(audio_sample_format_t format, uint32_t rate_hz);
+// With alternate 0 selected, the shared clock may be set before a new PCM
+// alternate. Only an active stream constrains the clock to its current format.
+bool audio_format_rate_change_valid(audio_sample_format_t format, uint32_t rate_hz,
+                                    bool streaming);
 size_t audio_format_decode(float *restrict output, size_t output_frames,
                            uint8_t const *restrict input, size_t input_bytes,
                            audio_sample_format_t format);
