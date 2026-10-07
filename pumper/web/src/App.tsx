@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { AlertTriangle, ChartSpline, Check, ClipboardCopy, ClipboardPaste, ListFilter, SlidersHorizontal, Moon, Power, RotateCcw, Save, Sun, Trash2, Upload, Usb, X } from "lucide-react";
+import { AlertTriangle, ChartSpline, Check, ClipboardCopy, ClipboardPaste, ListFilter, SlidersHorizontal, Info, Moon, Power, RotateCcw, Save, Sun, Trash2, Upload, Usb, X } from "lucide-react";
 import { bandColors, EqGraph } from "./EqGraph";
 import { calculateAutoPreamp } from "./eqMath";
 import { parseEqText, serializeEqText } from "./eqText";
@@ -52,10 +52,10 @@ interface PendingGlobalPreviewUpdate extends PendingPreviewUpdate {
   preampDb: number;
 }
 
-const buttonBase = "btn btn-sm";
-const primaryButton = "btn btn-primary btn-sm";
-const secondaryButton = "btn btn-sm";
-const clearButton = "btn btn-square btn-error btn-soft btn-sm shrink-0";
+const buttonBase = "btn btn-sm min-h-10 sm:min-h-8";
+const primaryButton = `${buttonBase} btn-primary`;
+const secondaryButton = buttonBase;
+const clearButton = `${buttonBase} btn-square btn-error btn-soft shrink-0`;
 const rangeClass = "range range-xs min-w-18";
 const themeStorageKey = "pumper-theme";
 const livePreviewIntervalMs = 55;
@@ -717,24 +717,24 @@ export default function App() {
   const clearingOnlyProfile = profileState.presentMask === (1 << selectedProfile);
   return (
     <main className="min-h-screen min-w-0 overflow-x-clip bg-base-200 text-base-content">
-      <header className="sticky top-0 z-30 min-w-0 border-b border-base-300 bg-base-100/80 shadow-sm backdrop-blur-xl">
+      <header className="sticky top-0 z-30 min-w-0 border-b border-base-300 bg-base-100">
         <div className="navbar mx-auto min-h-16 min-w-0 max-w-[1600px] gap-3 px-4 lg:px-6">
           <div className="navbar-start min-w-0 w-auto flex-1">
-            <div className="min-w-0">
-              <p className="text-[11px] font-medium text-base-content/55">LightWolf</p>
-              <h1 className="truncate text-lg leading-tight font-semibold">Pumper <span className="font-normal text-base-content/55">EQ controller</span></h1>
+            <div className="flex min-w-0 flex-wrap items-baseline gap-x-3 gap-y-0.5">
+              <h1 className="text-lg leading-tight font-semibold tracking-tight">Pumper <span className="font-normal text-base-content/70 max-sm:sr-only">EQ controller</span></h1>
+              <p className="text-xs text-base-content/65">LightWolf</p>
             </div>
           </div>
           <div className="navbar-end w-auto gap-2">
             {connected && (
               <button
-                className="btn btn-sm"
+                className={secondaryButton}
                 type="button"
                 onClick={() => setDeviceDialog("info")}
                 aria-haspopup="dialog"
                 title="Device information"
               >
-                DAC info
+                <Info size={16} aria-hidden="true" /> DAC info
               </button>
             )}
             {!connected && supported && (
@@ -744,7 +744,7 @@ export default function App() {
               </button>
             )}
             <div className="tooltip tooltip-bottom" data-tip={theme === "dark" ? "Use light theme" : "Use dark theme"}>
-              <label className="btn btn-ghost btn-square btn-sm swap swap-rotate" title={theme === "dark" ? "Use light theme" : "Use dark theme"}>
+              <label className="btn btn-ghost btn-square btn-sm min-h-10 min-w-10 swap swap-rotate" title={theme === "dark" ? "Use light theme" : "Use dark theme"}>
                 <input type="checkbox" checked={theme === "dark"} onChange={(event) => setTheme(event.target.checked ? "dark" : "light")} aria-label={theme === "dark" ? "Use light theme" : "Use dark theme"} />
                 <Sun className="swap-off" size={18} />
                 <Moon className="swap-on" size={18} />
@@ -775,16 +775,16 @@ export default function App() {
                   <Trash2 size={17} />
                 </button>
               </div>
-              <button className={`${secondaryButton} max-sm:size-9 max-sm:p-0`} onClick={() => setDialog("set-default")} disabled={!connected || writing || audioSettings.saving || hasUnsavedEdits || selectedProfileEmpty || selectedProfileIsDefault} title={selectedProfileIsDefault ? "Current power-on profile" : "Load this profile automatically at power-on"}>
+              <button className={`${secondaryButton} max-sm:size-10 max-sm:p-0`} onClick={() => setDialog("set-default")} disabled={!connected || writing || audioSettings.saving || hasUnsavedEdits || selectedProfileEmpty || selectedProfileIsDefault} title={selectedProfileIsDefault ? "Current power-on profile" : "Load this profile automatically at power-on"}>
                 <Check size={17} />
                 <span className="max-sm:sr-only">{selectedProfileIsDefault ? "Default" : "Make default"}</span>
               </button>
               <span className="h-6 w-px bg-base-300" aria-hidden="true" />
-              <button className={`${secondaryButton} max-sm:size-9 max-sm:p-0`} onClick={() => setDialog("defaults")} disabled={!connected || writing || audioSettings.saving} title="Restore compiled EQ defaults">
+              <button className={`${secondaryButton} max-sm:size-10 max-sm:p-0`} onClick={() => setDialog("defaults")} disabled={!connected || writing || audioSettings.saving} title="Restore compiled EQ defaults">
                 <RotateCcw size={17} />
                 <span className="max-sm:sr-only">Defaults</span>
               </button>
-              <button className={`${connected ? primaryButton : secondaryButton} max-sm:size-9 max-sm:p-0`} onClick={() => setDialog("flash")} disabled={!connected || !needsSave || writing || audioSettings.saving} title="Save profile">
+              <button className={`${connected ? primaryButton : secondaryButton} max-sm:size-10 max-sm:p-0`} onClick={() => setDialog("flash")} disabled={!connected || !needsSave || writing || audioSettings.saving} title="Save profile">
                 {writing ? <span className="loading loading-spinner loading-xs" aria-hidden="true" /> : <Save size={17} />}
                 <span className="max-sm:sr-only">{writing ? "Working..." : "Save profile"}</span>
               </button>
@@ -799,7 +799,15 @@ export default function App() {
         </div>
       )}
 
-      <section className={`mx-auto grid min-w-0 max-w-[1600px] gap-4 px-4 py-4 lg:px-6 lg:py-6 ${connected && !writing && !audioSettings.saving ? "" : "pointer-events-none opacity-55"}`} aria-disabled={!connected || writing || audioSettings.saving}>
+      {!connected && supported && (
+        <div className="mx-auto flex max-w-[1600px] items-center gap-2 px-4 pt-4 text-sm text-base-content/70 lg:px-6">
+          <Usb size={16} className="shrink-0" aria-hidden="true" />
+          <p>{connecting ? "Reading your DAC’s settings…" : "Connect a DAC to start editing."}</p>
+        </div>
+      )}
+
+      <section className={`mx-auto grid min-w-0 max-w-[1600px] gap-4 px-4 py-4 lg:gap-5 lg:px-6 lg:py-6 ${connected && !writing && !audioSettings.saving ? "" : "pointer-events-none"}`} aria-disabled={!connected || writing || audioSettings.saving}>
+        <fieldset className="contents" disabled={!connected || writing || audioSettings.saving}>
         <div className="grid min-w-0 gap-4 xl:grid-cols-[minmax(0,1fr)_22rem]">
           <article className="card card-border min-w-0 overflow-hidden bg-base-100">
             <div className="card-body gap-3 p-4 sm:p-5">
@@ -824,25 +832,25 @@ export default function App() {
                 </label>
               </div>
 
-              <div className="rounded-box bg-base-200 p-3">
+              <div className="rounded-box bg-base-200 p-4">
                 <div className="flex items-center justify-between gap-3">
                   <span className="text-sm font-semibold">Preamp</span>
                   <div className="join" role="group" aria-label="Preamp mode">
-                    <button type="button" className={`btn btn-xs join-item min-w-14 ${autoPreamp ? "btn-ghost" : "btn-active"}`} onClick={() => toggleAuto(false)} disabled={!connected}>Manual</button>
-                    <button type="button" className={`btn btn-xs join-item min-w-14 ${autoPreamp ? "btn-active" : "btn-ghost"}`} onClick={() => toggleAuto(true)} disabled={!connected}>Auto</button>
+                    <button type="button" className={`btn btn-xs join-item min-h-10 min-w-16 sm:min-h-8 ${autoPreamp ? "btn-ghost" : "btn-active"}`} aria-pressed={!autoPreamp} onClick={() => toggleAuto(false)} disabled={!connected}>Manual</button>
+                    <button type="button" className={`btn btn-xs join-item min-h-10 min-w-16 sm:min-h-8 ${autoPreamp ? "btn-active" : "btn-ghost"}`} aria-pressed={autoPreamp} onClick={() => toggleAuto(true)} disabled={!connected}>Auto</button>
                   </div>
                 </div>
                 <div className="mt-3 flex items-center gap-3">
                   <input className={`${rangeClass} min-w-0 flex-1`} aria-label="Preamp gain slider" type="range" min="-24" max="12" step="0.1" value={Math.max(-24, config.preampDb)} onChange={(event) => updateGlobal({ preampDb: Number(event.target.value) })} disabled={!connected || autoPreamp} />
-                  <label className="input input-sm flex w-24 shrink-0 items-center gap-1.5 has-[input[aria-invalid=true]]:input-error">
+                  <label className="input input-sm min-h-10 sm:min-h-8 flex w-24 shrink-0 items-center gap-1.5 has-[input[aria-invalid=true]]:input-error">
                     <NumericInput className="min-w-0 grow" label="Preamp gain" min={-241} max={12} step={0.1} value={config.preampDb} onChange={(preampDb) => updateGlobal({ preampDb })} onInvalid={() => setError(rangeMessage("Preamp gain", -241, 12, "dB"))} readOnly={!connected || autoPreamp} />
-                    <span className="text-xs text-base-content/55">dB</span>
+                    <span className="text-xs text-base-content/70">dB</span>
                   </label>
                 </div>
               </div>
 
               <div className="flex items-center justify-between gap-3 text-sm">
-                <span className="text-base-content/55">Profile state</span>
+                <span className="text-base-content/70">Profile state</span>
                 <SaveStateBadge state={selectedProfileEmpty && !hasUnsavedEdits ? "Empty slot" : needsSave ? "Unsaved" : "Saved"} label="EQ profile save state" />
               </div>
 
@@ -865,9 +873,9 @@ export default function App() {
               </button>
             </div>
           </div>
-          <div className="max-w-full overflow-x-auto">
-            <table className="table table-sm w-full min-w-[930px] table-fixed">
-              <colgroup>
+          <div className="max-w-full">
+            <table className="table table-sm block w-full lg:table lg:table-fixed" aria-label="EQ band settings" role="table">
+              <colgroup className="hidden lg:table-column-group">
                 <col className="w-[11%]" />
                 <col className="w-[16%]" />
                 <col className="w-[14%]" />
@@ -875,8 +883,8 @@ export default function App() {
                 <col className="w-[16%]" />
                 <col className="w-[15%]" />
               </colgroup>
-              <thead><tr><th className="pl-4 sm:pl-5">Band</th><th>Filter</th><th>Frequency</th><th>Gain</th><th>Width</th><th className="pr-4 sm:pr-5">Value</th></tr></thead>
-              <tbody>
+              <thead className="hidden text-xs text-base-content/70 lg:table-header-group" role="rowgroup"><tr role="row"><th className="pl-4 sm:pl-5">Band</th><th>Filter</th><th>Frequency</th><th>Gain</th><th>Width</th><th className="pr-4 sm:pr-5">Value</th></tr></thead>
+              <tbody className="grid sm:grid-cols-2 lg:table-row-group" role="rowgroup">
                 {config.bands.map((band, index) => {
                   const qOnly = filterUsesQOnly(band.type);
                   const usesGain = filterUsesGain(band.type);
@@ -885,13 +893,13 @@ export default function App() {
                   const widthMaximum = qOnly || (band.type === FilterType.Peaking && band.widthMode === WidthMode.Q) ? 20 : band.type === FilterType.Peaking ? 4 : 1;
                   const widthUnit = band.type === FilterType.Peaking && band.widthMode === WidthMode.Bandwidth ? "octaves" : "";
                   return (
-                    <tr className={`transition-colors ${selectedBand === index ? "bg-base-200" : "hover:bg-base-200/60"} ${band.enabled ? "" : "text-base-content/40"}`} key={index} onClick={() => setSelectedBand(index)} onFocus={() => setSelectedBand(index)}>
-                      <th className="pl-4 sm:pl-5" scope="row"><div className="flex items-center gap-3"><input className="toggle toggle-sm" type="checkbox" checked={band.enabled} onChange={(event) => updateBand(index, { enabled: event.target.checked })} aria-label={`Enable band ${index + 1}`} /><span className="grid size-6 place-items-center rounded-full text-[11px] font-bold text-black" style={{ backgroundColor: bandColors[index] }}>{index + 1}</span></div></th>
-                      <td><SelectMenu className="w-full" value={band.type} options={filterOptions} onChange={(value) => updateBandType(index, value)} label={`Band ${index + 1} filter type`} /></td>
-                      <td><label className="input input-sm flex w-full items-center gap-2 has-[input[aria-invalid=true]]:input-error"><NumericInput className="min-w-0 grow" label={`Frequency for band ${index + 1}`} min={20} max={20000} step={1} value={band.frequencyHz} onChange={(frequencyHz) => updateBand(index, { frequencyHz })} onInvalid={() => setError(rangeMessage(`Band ${index + 1} frequency`, 20, 20000, "Hz"))} /><span className="text-xs text-base-content/55">Hz</span></label></td>
-                      <td><div className={`flex items-center gap-3 ${usesGain ? "" : "opacity-45"}`} title={usesGain ? undefined : "Gain is not used by this filter type"}><input className={`${rangeClass} flex-1`} aria-label={`Gain slider for band ${index + 1}`} type="range" min="-24" max="24" step="0.1" value={band.gainDb} disabled={!usesGain} onChange={(event) => updateBand(index, { gainDb: Number(event.target.value) })} /><label className="input input-sm flex w-24 items-center gap-1 has-[input[aria-invalid=true]]:input-error"><NumericInput className="min-w-0 grow" label={`Gain for band ${index + 1}`} min={-24} max={24} step={0.1} value={band.gainDb} readOnly={!usesGain} onChange={(gainDb) => updateBand(index, { gainDb })} onInvalid={() => setError(rangeMessage(`Band ${index + 1} gain`, -24, 24, "dB"))} /><span className="text-[10px] text-base-content/55">{usesGain ? "dB" : "N/A"}</span></label></div></td>
-                      <td>{band.type === FilterType.Peaking ? <SelectMenu className="w-full" value={band.widthMode} options={widthOptions} onChange={(value) => updateBand(index, { widthMode: value })} label={`Width mode for band ${index + 1}`} /> : <span className="text-sm text-base-content/55">{qOnly ? "Q" : "Slope"}</span>}</td>
-                      <td className="pr-4 sm:pr-5"><label className="input input-sm flex w-full items-center gap-1 has-[input[aria-invalid=true]]:input-error"><NumericInput className="min-w-0 grow" label={`${widthLabel} for band ${index + 1}`} min={0.1} max={widthMaximum} step={0.01} value={widthValue} onChange={(value) => updateBand(index, band.type === FilterType.Peaking && band.widthMode === WidthMode.Bandwidth ? { bandwidthOctaves: value } : { q: value })} onInvalid={() => setError(rangeMessage(`Band ${index + 1} ${widthLabel.toLowerCase()}`, 0.1, widthMaximum, widthUnit))} /><span className="text-xs text-base-content/55">{band.type === FilterType.Peaking && band.widthMode === WidthMode.Bandwidth ? "oct" : widthLabel}</span></label></td>
+                    <tr role="row" className={`grid min-w-0 grid-cols-2 items-end gap-x-3 gap-y-3 border-b border-base-200 p-4 motion-safe:transition-colors sm:odd:border-r lg:table-row lg:border-r-0 lg:p-0 ${selectedBand === index ? "bg-base-200" : "hover:bg-base-200/60"} ${band.enabled ? "" : "text-base-content/65"}`} key={index} onClick={() => setSelectedBand(index)} onFocus={() => setSelectedBand(index)}>
+                      <th className="self-center !p-0 lg:!py-3 lg:!pl-5 lg:!pr-2" scope="row" role="rowheader"><div className="flex items-center gap-3"><input className="toggle toggle-sm" type="checkbox" checked={band.enabled} onChange={(event) => updateBand(index, { enabled: event.target.checked })} aria-label={`Enable band ${index + 1}`} /><span className="grid size-6 place-items-center rounded-full text-[11px] font-bold text-black" style={{ backgroundColor: bandColors[index] }}>{index + 1}</span><span className="text-xs font-medium lg:sr-only">Band {index + 1}</span></div></th>
+                      <td className="min-w-0 !p-0 lg:!p-2" role="cell"><SelectMenu className="w-full" value={band.type} options={filterOptions} onChange={(value) => updateBandType(index, value)} label={`Band ${index + 1} filter type`} /></td>
+                      <td className="col-span-2 min-w-0 !p-0 lg:!p-2" role="cell"><span className="mb-1.5 block text-xs font-medium text-base-content/70 lg:hidden">Frequency</span><label className="input input-sm min-h-10 sm:min-h-8 flex w-full items-center gap-2 has-[input[aria-invalid=true]]:input-error"><NumericInput className="min-w-0 grow" label={`Frequency for band ${index + 1}`} min={20} max={20000} step={1} value={band.frequencyHz} onChange={(frequencyHz) => updateBand(index, { frequencyHz })} onInvalid={() => setError(rangeMessage(`Band ${index + 1} frequency`, 20, 20000, "Hz"))} /><span className="text-xs text-base-content/70">Hz</span></label></td>
+                      <td className="col-span-2 min-w-0 !p-0 lg:!p-2" role="cell"><span className="mb-1.5 block text-xs font-medium text-base-content/70 lg:hidden">Gain</span><div className={`flex items-center gap-3 ${usesGain ? "" : "opacity-45"}`} title={usesGain ? undefined : "Gain is not used by this filter type"}><input className={`${rangeClass} flex-1`} aria-label={`Gain slider for band ${index + 1}`} type="range" min="-24" max="24" step="0.1" value={band.gainDb} disabled={!usesGain} onChange={(event) => updateBand(index, { gainDb: Number(event.target.value) })} /><label className="input input-sm min-h-10 sm:min-h-8 flex w-24 shrink-0 items-center gap-1 has-[input[aria-invalid=true]]:input-error"><NumericInput className="min-w-0 grow" label={`Gain for band ${index + 1}`} min={-24} max={24} step={0.1} value={band.gainDb} readOnly={!usesGain} onChange={(gainDb) => updateBand(index, { gainDb })} onInvalid={() => setError(rangeMessage(`Band ${index + 1} gain`, -24, 24, "dB"))} /><span className="text-[10px] text-base-content/70">{usesGain ? "dB" : "N/A"}</span></label></div></td>
+                      <td className="min-w-0 !p-0 lg:!p-2" role="cell"><span className="mb-1.5 block text-xs font-medium text-base-content/70 lg:hidden">Width</span>{band.type === FilterType.Peaking ? <SelectMenu className="w-full" value={band.widthMode} options={widthOptions} onChange={(value) => updateBand(index, { widthMode: value })} label={`Width mode for band ${index + 1}`} /> : <span className="text-sm text-base-content/70">{qOnly ? "Q" : "Slope"}</span>}</td>
+                      <td className="min-w-0 !p-0 lg:!py-3 lg:!pl-2 lg:!pr-5" role="cell"><span className="mb-1.5 block text-xs font-medium text-base-content/70 lg:hidden">{widthLabel}</span><label className="input input-sm min-h-10 sm:min-h-8 flex w-full items-center gap-1 has-[input[aria-invalid=true]]:input-error"><NumericInput className="min-w-0 grow" label={`${widthLabel} for band ${index + 1}`} min={0.1} max={widthMaximum} step={0.01} value={widthValue} onChange={(value) => updateBand(index, band.type === FilterType.Peaking && band.widthMode === WidthMode.Bandwidth ? { bandwidthOctaves: value } : { q: value })} onInvalid={() => setError(rangeMessage(`Band ${index + 1} ${widthLabel.toLowerCase()}`, 0.1, widthMaximum, widthUnit))} /><span className="text-xs text-base-content/70">{band.type === FilterType.Peaking && band.widthMode === WidthMode.Bandwidth ? "oct" : widthLabel}</span></label></td>
                     </tr>
                   );
                 })}
@@ -900,11 +908,11 @@ export default function App() {
           </div>
         </section>
 
-        <div className="grid min-w-0 gap-4 xl:grid-cols-2">
+        <div className="grid min-w-0 gap-4 lg:grid-cols-2">
           <CrossfeedSettings settings={audioSettings} connected={connected} busy={writing || connecting || deviceActionPending || audioSettings.saving} onError={setError} />
           <OutputProcessingSettings settings={audioSettings} connected={connected} busy={writing || connecting || deviceActionPending || audioSettings.saving} onError={setError} />
         </div>
-
+        </fieldset>
       </section>
 
       {(error || notice) && (
@@ -947,7 +955,7 @@ export default function App() {
               autoFocus
             />
             {importError && <p className="mt-2 text-sm text-error" role="alert">{importError}</p>}
-            <p className="mt-2 text-xs text-base-content/55">Types: PK, LS, HS, LP, HP, NO, BP. Use Q for width, or BW with peaking filters.</p>
+            <p className="mt-2 text-xs text-base-content/70">Types: PK, LS, HS, LP, HP, NO, BP. Use Q for width, or BW with peaking filters.</p>
             <div className="modal-action">
               <button className={secondaryButton} onClick={() => setImportDialogOpen(false)}>Cancel</button>
               <button className={primaryButton} onClick={importEqText} disabled={!importText.trim()}>Import to preview</button>

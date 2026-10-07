@@ -1,4 +1,4 @@
-import { PointerEvent, useMemo, useState } from "react";
+import { PointerEvent, useEffect, useMemo, useRef, useState } from "react";
 import { OutputSpectrum } from "./OutputSpectrum";
 import type { PumperHidTransport } from "./hidTransport";
 import { responseCurve } from "./eqMath";
@@ -27,29 +27,9 @@ interface EqGraphProps {
   onChangeBand: (index: number, patch: Partial<EqBand>) => void;
 }
 
-const width = 1000;
-const height = 350;
 const margin = { left: 55, right: 18, top: 20, bottom: 38 };
-const graphWidth = width - margin.left - margin.right;
-const graphHeight = height - margin.top - margin.bottom;
 const minimumGain = -30;
 const maximumGain = 18;
-
-function xForFrequency(frequencyHz: number): number {
-  return margin.left + (Math.log10(frequencyHz / 20) / 3) * graphWidth;
-}
-
-function frequencyForX(x: number): number {
-  return 20 * 1000 ** ((x - margin.left) / graphWidth);
-}
-
-function yForGain(gainDb: number): number {
-  return margin.top + ((maximumGain - gainDb) / (maximumGain - minimumGain)) * graphHeight;
-}
-
-function gainForY(y: number): number {
-  return maximumGain - ((y - margin.top) / graphHeight) * (maximumGain - minimumGain);
-}
 
 function clamp(value: number, minimum: number, maximum: number): number {
   return Math.max(minimum, Math.min(maximum, value));
@@ -65,7 +45,29 @@ function filterUsesGain(type: FilterType): boolean {
 }
 
 export function EqGraph({ spectrumTransport = null, spectrumEnabled = false, config, sampleRateHz, selectedBand, onSelectBand, onChangeBand }: EqGraphProps) {
+  const svgRef = useRef<SVGSVGElement>(null);
+  const [width, setWidth] = useState(1000);
+  const height = width < 640 ? 280 : 350;
   const viewWidth = spectrumEnabled ? width + 35 : width;
+  const graphWidth = width - margin.left - margin.right;
+  const graphHeight = height - margin.top - margin.bottom;
+  const xForFrequency = (frequencyHz: number) => margin.left + (Math.log10(frequencyHz / 20) / 3) * graphWidth;
+  const yForGain = (gainDb: number) => margin.top + ((maximumGain - gainDb) / (maximumGain - minimumGain)) * graphHeight;
+  const frequencyForX = (x: number) => 20 * 1000 ** ((x - margin.left) / graphWidth);
+  const gainForY = (y: number) => maximumGain - ((y - margin.top) / graphHeight) * (maximumGain - minimumGain);
+
+  useEffect(() => {
+    const svg = svgRef.current;
+    if (!svg || typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(([entry]) => {
+      if (entry.contentRect.width > 0) {
+        setWidth(Math.max(280, Math.min(1000, Math.round(entry.contentRect.width) - (spectrumEnabled ? 35 : 0))));
+      }
+    });
+    observer.observe(svg);
+    return () => observer.disconnect();
+  }, [spectrumEnabled]);
+
   const [dragging, setDragging] = useState<number | null>(null);
   const curve = useMemo(() => responseCurve(config, sampleRateHz), [config, sampleRateHz]);
   const path = useMemo(
@@ -77,13 +79,13 @@ export function EqGraph({ spectrumTransport = null, spectrumEnabled = false, con
           return `${index === 0 ? "M" : "L"}${x.toFixed(2)},${y.toFixed(2)}`;
         })
         .join(" "),
-    [curve],
+    [curve, graphWidth, graphHeight],
   );
 
   const updateFromPointer = (event: PointerEvent<SVGSVGElement>) => {
     if (dragging === null) return;
     const rect = event.currentTarget.getBoundingClientRect();
-    // The default SVG meet scaling can letterbox inside the mobile min-height.
+    // Account for meet scaling when the SVG is constrained by its container.
     const scale = Math.min(rect.width / viewWidth, rect.height / height);
     const offsetX = (rect.width - viewWidth * scale) / 2;
     const offsetY = (rect.height - height * scale) / 2;
@@ -102,12 +104,14 @@ export function EqGraph({ spectrumTransport = null, spectrumEnabled = false, con
     onSelectBand(index);
   };
 
-  const frequencyTicks = [20, 50, 100, 200, 500, 1000, 2000, 5000, 10000, 20000];
+  const frequencyTicks = width < 640 ? [20, 100, 1000, 20000] : [20, 50, 100, 200, 500, 1000, 2000, 5000, 10000, 20000];
   const gainTicks = [-24, -18, -12, -6, 0, 6, 12, 18];
 
   return (
     <svg
-      className="block aspect-[1000/350] max-h-[440px] min-h-[260px] w-full touch-none select-none sm:min-h-0"
+      ref={svgRef}
+      className="block max-h-[440px] w-full touch-none select-none"
+      style={{ aspectRatio: `${viewWidth} / ${height}` }}
       viewBox={`0 0 ${viewWidth} ${height}`}
       role="img"
       aria-label="Combined equalizer frequency response"
@@ -119,7 +123,7 @@ export function EqGraph({ spectrumTransport = null, spectrumEnabled = false, con
       {frequencyTicks.map((frequency) => (
         <g key={frequency}>
           <line className="stroke-base-300 [stroke-width:1]" x1={xForFrequency(frequency)} x2={xForFrequency(frequency)} y1={margin.top} y2={height - margin.bottom} />
-          <text className="fill-base-content/45 text-[11px] font-semibold" x={xForFrequency(frequency)} y={height - 13} textAnchor="middle">
+          <text className="fill-base-content/70 text-[11px] font-medium tabular-nums" x={xForFrequency(frequency)} y={height - 13} textAnchor="middle">
             {frequency >= 1000 ? `${frequency / 1000}k` : frequency}
           </text>
         </g>
@@ -127,7 +131,7 @@ export function EqGraph({ spectrumTransport = null, spectrumEnabled = false, con
       {gainTicks.map((gain) => (
         <g key={gain}>
           <line className={gain === 0 ? "stroke-base-content/45 [stroke-width:1.5]" : "stroke-base-300 [stroke-width:1]"} x1={margin.left} x2={width - margin.right} y1={yForGain(gain)} y2={yForGain(gain)} />
-          <text className="fill-base-content/45 text-[11px] font-semibold" x={margin.left - 10} y={yForGain(gain) + 4} textAnchor="end">
+          <text className="fill-base-content/70 text-[11px] font-medium tabular-nums" x={margin.left - 10} y={yForGain(gain) + 4} textAnchor="end">
             {gain > 0 ? `+${gain}` : gain}
           </text>
         </g>

@@ -105,7 +105,7 @@ export function SelectMenu<T extends string | number>({ value, options, onChange
     <>
       <button
         ref={triggerRef}
-        className={`select select-sm ${className}`}
+        className={`select select-sm min-h-10 text-left sm:min-h-8 ${className}`}
         type="button"
         value={String(value)}
         disabled={disabled}
@@ -121,7 +121,7 @@ export function SelectMenu<T extends string | number>({ value, options, onChange
       </button>
       <ul
         ref={popoverRef}
-        className="dropdown dropdown-start menu menu-sm max-h-64 overflow-y-auto rounded-box border border-base-300 bg-base-100 p-1 shadow-lg"
+        className="dropdown dropdown-start menu menu-sm max-h-72 overflow-y-auto rounded-box bg-base-100 p-1.5 shadow-lg"
         id={popoverId}
         popover="auto"
         role="listbox"
@@ -135,7 +135,7 @@ export function SelectMenu<T extends string | number>({ value, options, onChange
             <li role="none" key={String(option.value)}>
               <button
                 ref={(element) => { optionRefs.current[index] = element; }}
-                className={selected ? "menu-active" : ""}
+                className={`min-h-10 gap-3 sm:min-h-8 ${selected ? "menu-active" : ""}`}
                 type="button"
                 role="option"
                 aria-selected={selected}

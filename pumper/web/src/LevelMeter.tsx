@@ -35,7 +35,7 @@ function ChannelMeter({ channel, peak, source, tone }: ChannelMeterProps) {
 
   return (
     <div className="grid min-w-0 grid-cols-[18px_minmax(0,1fr)_76px] items-center gap-2.5 max-sm:grid-cols-[14px_minmax(0,1fr)_64px] max-sm:gap-1.5" aria-label={`${channel} ${source} ${displayDb(currentPeakDb)}`}>
-      <strong className="text-[11px] text-base-content/60">{channel}</strong>
+      <strong className="text-[11px] text-base-content/70">{channel}</strong>
       <div className="grid h-3.5 min-w-0 grid-cols-24 gap-[3px] max-sm:gap-0.5" aria-hidden="true">
         {thresholdsDb.map((threshold) => {
           const lit = displayedPeakDb >= threshold;
@@ -49,7 +49,7 @@ function ChannelMeter({ channel, peak, source, tone }: ChannelMeterProps) {
           return <span className={`min-w-0 rounded-[1px] ${lit ? "transition-none" : "transition-colors duration-50"} ${color}`} key={threshold} />;
         })}
       </div>
-      <span className="text-right text-[10px] tabular-nums text-base-content/60">{displayDb(currentPeakDb)}</span>
+      <span className="text-right text-[10px] tabular-nums text-base-content/70">{displayDb(currentPeakDb)}</span>
     </div>
   );
 }

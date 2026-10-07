@@ -1,11 +1,40 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { EqGraph } from "./EqGraph";
 import { defaultConfig, FilterType, WidthMode } from "./protocol";
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.unstubAllGlobals();
+});
 
 describe("EQ graph editing", () => {
+  it("keeps drag coordinates and axis labels correct after a phone resize", () => {
+    let resize!: ResizeObserverCallback;
+    const disconnect = vi.fn();
+    vi.stubGlobal("ResizeObserver", class {
+      constructor(callback: ResizeObserverCallback) { resize = callback; }
+      observe() {}
+      disconnect = disconnect;
+    });
+    const onChangeBand = vi.fn();
+    const view = render(<EqGraph config={defaultConfig} sampleRateHz={48000} selectedBand={0} onSelectBand={vi.fn()} onChangeBand={onChangeBand} spectrumEnabled />);
+    act(() => resize([{ contentRect: { width: 360 } } as ResizeObserverEntry], {} as ResizeObserver));
+    const svg = view.container.querySelector("svg")!;
+    expect(svg).toHaveAttribute("viewBox", "0 0 360 280");
+    expect(svg).toHaveTextContent("20k");
+    expect(svg).not.toHaveTextContent("10k");
+    Object.defineProperty(svg, "getBoundingClientRect", { value: () => ({ left: 10, top: 20, width: 360, height: 280 }) });
+    const handle = screen.getByLabelText("Band 1 graph handle");
+    Object.defineProperty(handle, "setPointerCapture", { value: vi.fn() });
+    fireEvent.pointerDown(handle, { pointerId: 1 });
+    // At this size, x=181 is the log-frequency midpoint and y=75.5 is +6 dB.
+    fireEvent.pointerMove(svg, { clientX: 191, clientY: 95.5 });
+    expect(onChangeBand).toHaveBeenCalledWith(0, { frequencyHz: 630, gainDb: 6 });
+    view.unmount();
+    expect(disconnect).toHaveBeenCalledOnce();
+  });
+
   it("pins gain-independent handles to zero and changes only frequency while dragging", () => {
     const config = {
       ...defaultConfig,

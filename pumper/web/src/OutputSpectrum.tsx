@@ -20,7 +20,7 @@ export function OutputSpectrum({ transport, enabled, left, top, width, height }:
     <g pointerEvents="none" aria-label="Output spectrum in dBFS">
       {path && <path d={`${path} L${left + width},${top + height} L${left},${top + height} Z`} className="fill-info/12 stroke-info/35 [stroke-width:1]" />}
       {enabled && <>
-        {[0, -24, -48, -72, -96].map((db) => <text key={db} x={left + width + 8} y={y(db) + (db === 0 ? 12 : db === -96 ? -4 : 3)} textAnchor="start" className="fill-base-content/50 text-[11px]">{db}</text>)}
+        {[0, -24, -48, -72, -96].map((db) => <text key={db} x={left + width + 8} y={y(db) + (db === 0 ? 12 : db === -96 ? -4 : 3)} textAnchor="start" className="fill-base-content/70 text-[11px]">{db}</text>)}
       </>}
     </g>
   );

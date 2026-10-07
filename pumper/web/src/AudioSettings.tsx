@@ -17,7 +17,7 @@ const modeOptions = [
 function ChannelState({ label, control }: { label: string; control: AudioChannelControl | null }) {
   return (
     <div className="flex min-w-0 items-center justify-between gap-3 rounded-box bg-base-200 px-3 py-2.5">
-      <span className="flex items-center gap-2 text-sm text-base-content/65">
+      <span className="flex items-center gap-2 text-sm text-base-content/70">
         {control?.muted ? <VolumeX size={16} aria-hidden="true" /> : <Volume2 size={16} aria-hidden="true" />}{label}
       </span>
       <span className="flex items-center gap-2 text-sm font-semibold tabular-nums">
@@ -42,23 +42,23 @@ export function UsbAudioState({ settings, connected, busy, sampleRateHz, bitDept
       <h3 className="flex items-center gap-2 text-sm font-semibold" id="usb-audio-title"><Usb size={16} aria-hidden="true" />USB audio</h3>
       <dl className="grid min-w-0 gap-3">
         <div className="flex min-w-0 items-center justify-between gap-3 rounded-box bg-base-200 px-3 py-2.5">
-          <dt className="flex items-center gap-2 text-sm text-base-content/65"><Clock3 size={16} aria-hidden="true" />Sample rate</dt>
+          <dt className="flex items-center gap-2 text-sm text-base-content/70"><Clock3 size={16} aria-hidden="true" />Sample rate</dt>
           <dd className="text-sm font-semibold tabular-nums">{(sampleRateHz / 1000).toFixed(sampleRateHz % 1000 ? 1 : 0)} kHz</dd>
         </div>
         {bitDepth !== null && <div className="flex min-w-0 items-center justify-between gap-3 rounded-box bg-base-200 px-3 py-2.5">
-          <dt className="flex items-center gap-2 text-sm text-base-content/65"><AudioLines size={16} aria-hidden="true" />Bit depth</dt>
+          <dt className="flex items-center gap-2 text-sm text-base-content/70"><AudioLines size={16} aria-hidden="true" />Bit depth</dt>
           <dd className="text-sm font-semibold tabular-nums">{bitDepth}-bit</dd>
         </div>}
         <div className="flex min-w-0 items-center justify-between gap-3 rounded-box bg-base-200 px-3 py-2.5">
-          <dt className="flex items-center gap-2 text-sm text-base-content/65"><Activity size={16} aria-hidden="true" />Stream state</dt>
+          <dt className="flex items-center gap-2 text-sm text-base-content/70"><Activity size={16} aria-hidden="true" />Stream state</dt>
           <dd className="text-sm font-semibold">{streaming ? "Streaming" : "Idle"}</dd>
         </div>
       </dl>
       <div className="grid min-w-0 gap-2" role="group" aria-label="Host USB audio controls" aria-disabled={!!unavailable || busy}>
         <ChannelState label="Master volume" control={audio?.master ?? null} />
       </div>
-      {unavailable && <p className="grow-0 text-xs text-base-content/55">{unavailable}</p>}
-      {!unavailable && !audio && <p className="grow-0 text-xs text-base-content/55">Reading USB audio state…</p>}
+      {unavailable && <p className="grow-0 text-xs text-base-content/70">{unavailable}</p>}
+      {!unavailable && !audio && <p className="grow-0 text-xs text-base-content/70">Reading USB audio state…</p>}
     </section>
   );
 }
@@ -83,8 +83,8 @@ export function CrossfeedSettings({ settings, connected, busy, onError }: Props)
           <h2 className="card-title text-base" id="crossfeed-title"><Headphones size={18} aria-hidden="true" />Headphone crossfeed</h2>
           {crossfeed && <SaveStateBadge state={crossfeed.dirty ? "Unsaved" : "Saved"} label="Crossfeed save state" />}
         </div>
-        {unavailable && <p className="grow-0 text-xs text-base-content/55">{unavailable}</p>}
-        {!unavailable && !crossfeed && <p className="grow-0 text-xs text-base-content/55">Reading crossfeed settings…</p>}
+        {unavailable && <p className="grow-0 text-xs text-base-content/70">{unavailable}</p>}
+        {!unavailable && !crossfeed && <p className="grow-0 text-xs text-base-content/70">Reading crossfeed settings…</p>}
         <fieldset className="grid min-w-0 gap-4" disabled={disabled}>
           <div className="flex flex-wrap items-center justify-between gap-3">
             <span className="text-sm font-semibold">Mode</span>
@@ -95,16 +95,16 @@ export function CrossfeedSettings({ settings, connected, busy, onError }: Props)
               <span className="text-sm font-semibold">{label.replace("Crossfeed ", "").replace(/^./, (letter) => letter.toUpperCase())}</span>
               <div className="flex min-w-0 items-center gap-3">
                 <input className="range range-xs min-w-18 flex-1" type="range" aria-label={`${label} slider`} min={min} max={max} step={step} value={displayed[key]} disabled={parametersDisabled} onChange={(event) => { if (!parametersDisabled) settings.update({ [key]: Number(event.target.value) }); }} />
-                <label className="input input-sm flex w-28 shrink-0 items-center gap-1.5 has-[input[aria-invalid=true]]:input-error">
+                <label className="input input-sm min-h-10 sm:min-h-8 flex w-24 shrink-0 items-center gap-1.5 has-[input[aria-invalid=true]]:input-error">
                   <NumericInput className="min-w-0 grow" label={label} min={min} max={max} step={step} value={displayed[key]} readOnly={parametersDisabled} onChange={(value) => { if (!parametersDisabled) settings.update({ [key]: value }); }} onInvalid={() => onError(`${label} must be between ${min.toLocaleString("en-US")} and ${max.toLocaleString("en-US")} ${unit}.`)} />
-                  <span className="text-xs text-base-content/55">{unit}</span>
+                  <span className="text-xs text-base-content/70">{unit}</span>
                 </label>
               </div>
             </div>
           ))}
         </fieldset>
         <div className="mt-auto flex flex-wrap items-center justify-end gap-3 border-t border-base-200 pt-4">
-          <button className="btn btn-primary btn-sm" disabled={disabled || !crossfeed?.dirty} onClick={() => void settings.save()}>
+          <button className="btn btn-primary btn-sm min-h-10 sm:min-h-8" disabled={disabled || !crossfeed?.dirty} onClick={() => void settings.save()}>
             {saving ? <span className="loading loading-spinner loading-xs" aria-hidden="true" /> : <Save size={16} aria-hidden="true" />}
             <span>{saving ? "Saving…" : "Save crossfeed"}</span>
           </button>
@@ -133,40 +133,40 @@ export function OutputProcessingSettings({ settings, connected, busy, onError }:
           <h2 className="card-title text-base" id="output-processing-title"><SlidersHorizontal size={18} aria-hidden="true" />Output processing</h2>
           {outputProcessing && <SaveStateBadge state={outputProcessing.dirty ? "Unsaved" : "Saved"} label="Output processing save state" />}
         </div>
-        {unavailable && <p className="grow-0 text-xs text-base-content/55">{unavailable}</p>}
-        {!unavailable && !outputProcessing && <p className="grow-0 text-xs text-base-content/55">Reading output settings…</p>}
+        {unavailable && <p className="grow-0 text-xs text-base-content/70">{unavailable}</p>}
+        {!unavailable && !outputProcessing && <p className="grow-0 text-xs text-base-content/70">Reading output settings…</p>}
         <fieldset className="grid min-w-0 gap-4" disabled={disabled}>
-          <div className="grid gap-2 sm:grid-cols-2">
+          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
             {toggles.map(({ key, label }) => (
-              <label className="flex cursor-pointer items-center justify-between gap-3 rounded-box bg-base-200 px-3 py-2.5 text-sm font-medium" key={key}>
+              <label className="flex cursor-pointer items-center justify-between gap-3 min-h-11 rounded-box bg-base-200 px-3 py-2.5 text-sm font-medium" key={key}>
                 {label}
                 <input className="toggle toggle-sm" type="checkbox" checked={live[key]} onChange={(event) => settings.updateOutput({ [key]: event.target.checked })} />
               </label>
             ))}
           </div>
           <div className="grid min-w-0 gap-2">
-            <div className="flex items-center justify-between gap-3 text-sm font-semibold"><span>Balance</span><span className="text-xs font-normal text-base-content/55">Left · Center · Right</span></div>
+            <div className="flex items-center justify-between gap-3 text-sm font-semibold"><span>Balance</span><span className="text-xs font-normal text-base-content/70">Left · Center · Right</span></div>
             <div className="flex min-w-0 items-center gap-3">
               <input className="range range-xs min-w-18 flex-1" type="range" aria-label="Balance slider" min={-100} max={100} step={1} value={live.balancePercent} onChange={(event) => settings.updateOutput({ balancePercent: Number(event.target.value) })} />
-              <label className="input input-sm flex w-28 shrink-0 items-center gap-1.5 has-[input[aria-invalid=true]]:input-error">
+              <label className="input input-sm min-h-10 sm:min-h-8 flex w-24 shrink-0 items-center gap-1.5 has-[input[aria-invalid=true]]:input-error">
                 <NumericInput className="min-w-0 grow" label="Balance" min={-100} max={100} step={1} value={live.balancePercent} onChange={(balancePercent) => settings.updateOutput({ balancePercent })} onInvalid={() => onError("Balance must be between -100 and 100 %.")} />
-                <span className="text-xs text-base-content/55">%</span>
+                <span className="text-xs text-base-content/70">%</span>
               </label>
             </div>
           </div>
           <div className="grid min-w-0 gap-2">
-            <div className="flex items-center justify-between gap-3 text-sm font-semibold"><span>Stereo width</span><span className="text-xs font-normal text-base-content/55">100% is neutral</span></div>
+            <div className="flex items-center justify-between gap-3 text-sm font-semibold"><span>Stereo width</span><span className="text-xs font-normal text-base-content/70">100% is neutral</span></div>
             <div className="flex min-w-0 items-center gap-3">
               <input className="range range-xs min-w-18 flex-1" type="range" aria-label="Stereo width slider" min={0} max={200} step={1} value={live.widthPercent} disabled={disabled || live.mono} onChange={(event) => settings.updateOutput({ widthPercent: Number(event.target.value) })} />
-              <label className="input input-sm flex w-28 shrink-0 items-center gap-1.5 has-[input[aria-invalid=true]]:input-error">
+              <label className="input input-sm min-h-10 sm:min-h-8 flex w-24 shrink-0 items-center gap-1.5 has-[input[aria-invalid=true]]:input-error">
                 <NumericInput className="min-w-0 grow" label="Stereo width" min={0} max={200} step={1} value={live.widthPercent} readOnly={disabled || live.mono} onChange={(widthPercent) => settings.updateOutput({ widthPercent })} onInvalid={() => onError("Stereo width must be between 0 and 200 %.")} />
-                <span className="text-xs text-base-content/55">%</span>
+                <span className="text-xs text-base-content/70">%</span>
               </label>
             </div>
           </div>
         </fieldset>
         <div className="mt-auto flex flex-wrap items-center justify-end gap-3 border-t border-base-200 pt-4">
-          <button className="btn btn-primary btn-sm" disabled={disabled || !outputProcessing?.dirty} onClick={() => void settings.saveOutput()}>
+          <button className="btn btn-primary btn-sm min-h-10 sm:min-h-8" disabled={disabled || !outputProcessing?.dirty} onClick={() => void settings.saveOutput()}>
             {saving ? <span className="loading loading-spinner loading-xs" aria-hidden="true" /> : <Save size={16} aria-hidden="true" />}
             <span>{saving ? "Saving…" : "Save output"}</span>
           </button>

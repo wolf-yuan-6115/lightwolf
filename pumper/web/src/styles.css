@@ -20,6 +20,18 @@ button:disabled {
   :root {
     font-synthesis: none;
     text-rendering: optimizeLegibility;
+    scrollbar-color: color-mix(in oklab, var(--color-base-content) 30%, transparent) var(--color-base-200);
+    scrollbar-width: thin;
+  }
+
+  ::selection {
+    background: var(--color-primary);
+    color: var(--color-primary-content);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 3px;
   }
 
   * {

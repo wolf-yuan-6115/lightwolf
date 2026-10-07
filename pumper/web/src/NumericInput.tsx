@@ -82,7 +82,7 @@ export function NumericInput({ value, onChange, label, min, max, step, onInvalid
 
   return (
     <input
-      className={className}
+      className={`tabular-nums caret-primary ${className}`}
       type="text"
       inputMode="decimal"
       role="spinbutton"
