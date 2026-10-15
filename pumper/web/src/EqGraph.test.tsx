@@ -9,6 +9,53 @@ afterEach(() => {
 });
 
 describe("EQ graph editing", () => {
+  it("fine-tunes frequency and gain from the keyboard, with larger Shift steps", () => {
+    const onChangeBand = vi.fn();
+    const onSelectBand = vi.fn();
+    render(<EqGraph config={defaultConfig} sampleRateHz={48000} selectedBand={0} onSelectBand={onSelectBand} onChangeBand={onChangeBand} />);
+    const handle = screen.getByRole("button", { name: "Band 1 graph handle" });
+    fireEvent.keyDown(handle, { key: "ArrowUp" });
+    expect(onChangeBand).toHaveBeenLastCalledWith(0, { gainDb: 0.1 });
+    fireEvent.keyDown(handle, { key: "ArrowDown", shiftKey: true });
+    expect(onChangeBand).toHaveBeenLastCalledWith(0, { gainDb: -1 });
+    fireEvent.keyDown(handle, { key: "ArrowRight" });
+    expect(onChangeBand).toHaveBeenLastCalledWith(0, { frequencyHz: 69 });
+    fireEvent.keyDown(handle, { key: "ArrowRight", shiftKey: true });
+    expect(onChangeBand).toHaveBeenLastCalledWith(0, { frequencyHz: 76 });
+    expect(onSelectBand).toHaveBeenCalledWith(0);
+  });
+
+  it("keeps keyboard edits in bounds and gain-independent filters frequency-only", () => {
+    const config = { ...defaultConfig, bands: defaultConfig.bands.map((band, index) => index === 0 ? { ...band, frequencyHz: 20000, gainDb: 24 } : index === 1 ? { ...band, type: FilterType.LowPass, widthMode: WidthMode.Q } : band) };
+    const onChangeBand = vi.fn();
+    render(<EqGraph config={config} sampleRateHz={48000} selectedBand={0} onSelectBand={vi.fn()} onChangeBand={onChangeBand} />);
+    fireEvent.keyDown(screen.getByLabelText("Band 1 graph handle"), { key: "ArrowUp", shiftKey: true });
+    expect(onChangeBand).toHaveBeenLastCalledWith(0, { gainDb: 24 });
+    fireEvent.keyDown(screen.getByLabelText("Band 1 graph handle"), { key: "ArrowRight", shiftKey: true });
+    expect(onChangeBand).toHaveBeenLastCalledWith(0, { frequencyHz: 20000 });
+    onChangeBand.mockClear();
+    fireEvent.keyDown(screen.getByLabelText("Band 2 graph handle"), { key: "ArrowUp" });
+    expect(onChangeBand).not.toHaveBeenCalled();
+    fireEvent.keyDown(screen.getByLabelText("Band 2 graph handle"), { key: "ArrowLeft" });
+    expect(onChangeBand.mock.calls[0][1]).toHaveProperty("frequencyHz");
+    expect(onChangeBand.mock.calls[0][1]).not.toHaveProperty("gainDb");
+  });
+
+  it("blocks graph interaction while disconnected or saving", () => {
+    const onChangeBand = vi.fn();
+    const onSelectBand = vi.fn();
+    const { container } = render(<EqGraph config={defaultConfig} sampleRateHz={48000} selectedBand={0} onSelectBand={onSelectBand} onChangeBand={onChangeBand} interactive={false} />);
+    const handle = screen.getByLabelText("Band 1 graph handle");
+    expect(handle).toHaveAttribute("tabindex", "-1");
+    expect(handle).toHaveAttribute("aria-disabled", "true");
+    fireEvent.keyDown(handle, { key: "ArrowUp" });
+    fireEvent.click(handle);
+    fireEvent.pointerDown(handle, { pointerId: 1 });
+    fireEvent.pointerMove(container.querySelector("svg")!, { clientX: 200, clientY: 20 });
+    expect(onChangeBand).not.toHaveBeenCalled();
+    expect(onSelectBand).not.toHaveBeenCalled();
+  });
+
   it("keeps drag coordinates and axis labels correct after a phone resize", () => {
     let resize!: ResizeObserverCallback;
     const disconnect = vi.fn();
@@ -21,6 +68,8 @@ describe("EQ graph editing", () => {
     const view = render(<EqGraph config={defaultConfig} sampleRateHz={48000} selectedBand={0} onSelectBand={vi.fn()} onChangeBand={onChangeBand} spectrumEnabled />);
     act(() => resize([{ contentRect: { width: 360 } } as ResizeObserverEntry], {} as ResizeObserver));
     const svg = view.container.querySelector("svg")!;
+    const capture = vi.fn();
+    Object.defineProperty(svg, "setPointerCapture", { value: capture });
     expect(svg).toHaveAttribute("viewBox", "0 0 360 280");
     expect(svg).toHaveTextContent("20k");
     expect(svg).not.toHaveTextContent("10k");
@@ -28,6 +77,7 @@ describe("EQ graph editing", () => {
     const handle = screen.getByLabelText("Band 1 graph handle");
     Object.defineProperty(handle, "setPointerCapture", { value: vi.fn() });
     fireEvent.pointerDown(handle, { pointerId: 1 });
+    expect(capture).toHaveBeenCalledWith(1);
     // At this size, x=181 is the log-frequency midpoint and y=75.5 is +6 dB.
     fireEvent.pointerMove(svg, { clientX: 191, clientY: 95.5 });
     expect(onChangeBand).toHaveBeenCalledWith(0, { frequencyHz: 630, gainDb: 6 });

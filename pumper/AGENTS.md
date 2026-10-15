@@ -156,6 +156,11 @@ Do not vendor or commit the patched SDK into Pumper.
 
 ## Web controller rules
 
+- Desktop is the web controller’s design and verification target. Prioritize
+  mouse and keyboard use, compact EQ tables, and desktop screenshots. Narrow
+  desktop windows may scroll the table; do not switch bands to mobile cards
+  or spend design work on mobile-device layouts.
+
 - Use React, TypeScript, Tailwind CSS 4, daisyUI, and Lucide icons. Keep the UI
   utility-first with dark `stone` surfaces where the existing design calls for
   them.

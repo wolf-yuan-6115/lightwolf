@@ -131,6 +131,27 @@ function getProfileOption(label: string) {
 }
 
 describe("Pumper controller", () => {
+  it("selects overlapping bands without editing, then previews graph keyboard edits without saving", async () => {
+    const { request } = mockConnectedPumper();
+    render(<App />);
+    const selectBand = screen.getByRole("button", { name: "Select band 8" });
+    await waitFor(() => expect(selectBand).toBeEnabled());
+    await waitFor(() => expect(screen.getByRole("button", { name: "Band 8 graph handle" })).toHaveAttribute("aria-disabled", "false"));
+    request.mockClear();
+    fireEvent.click(selectBand);
+    expect(selectBand).toHaveAttribute("aria-pressed", "true");
+    expect(request.mock.calls.some(([opcode]) => opcode === Opcode.SetBand)).toBe(false);
+    const handle = screen.getByRole("button", { name: "Band 8 graph handle" });
+    expect(handle).toHaveAttribute("tabindex", "0");
+    fireEvent.keyDown(handle, { key: "ArrowUp" });
+    await waitFor(() => expect(request.mock.calls.some(([opcode]) => opcode === Opcode.SetBand)).toBe(true));
+    const payload = request.mock.calls.find(([opcode]) => opcode === Opcode.SetBand)![1]!;
+    expect(decodeBand(payload).index).toBe(7);
+    expect(decodeBand(payload).band.gainDb).toBeCloseTo(0.1);
+    expect(screen.getByRole("status", { name: "EQ profile save state" })).toHaveTextContent("Unsaved");
+    expect(request.mock.calls.some(([opcode]) => [Opcode.SaveProfile, Opcode.SaveCrossfeed, Opcode.SaveOutputProcessing].includes(opcode))).toBe(false);
+  });
+
   it("always subscribes to spectrum alongside meters on firmware 4.0", async () => {
     storedValues.set("pumper-output-spectrum", "off");
     const { request } = mockConnectedPumper(defaultConfig, undefined, [4, 0]);

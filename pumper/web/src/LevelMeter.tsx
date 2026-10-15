@@ -1,4 +1,3 @@
-import { Activity } from "lucide-react";
 import { MeterLevel, StereoMeterLevel } from "./protocol";
 
 const thresholdsDb = [
@@ -30,21 +29,22 @@ function ChannelMeter({ channel, peak, source, tone }: ChannelMeterProps) {
   const currentPeakDb = peakDb(peak);
   const displayedPeakDb = roundDb(currentPeakDb);
   const nominalColor = tone === "indigo"
-    ? "bg-indigo-500 shadow-[0_0_5px_rgba(99,102,241,0.42)]"
-    : "bg-emerald-500 shadow-[0_0_5px_rgba(16,185,129,0.38)]";
+    ? "bg-indigo-500"
+    : "bg-emerald-500";
 
   return (
     <div className="grid min-w-0 grid-cols-[18px_minmax(0,1fr)_76px] items-center gap-2.5 max-sm:grid-cols-[14px_minmax(0,1fr)_64px] max-sm:gap-1.5" aria-label={`${channel} ${source} ${displayDb(currentPeakDb)}`}>
       <strong className="text-[11px] text-base-content/70">{channel}</strong>
-      <div className="grid h-3.5 min-w-0 grid-cols-24 gap-[3px] max-sm:gap-0.5" aria-hidden="true">
+      {/* Fixed pixel tracks keep compact meter segments from rounding to unequal widths. */}
+      <div className="grid h-3.5 w-max grid-cols-[repeat(24,4px)] gap-[2px]" aria-hidden="true">
         {thresholdsDb.map((threshold) => {
           const lit = displayedPeakDb >= threshold;
           const color = !lit
             ? "bg-base-300"
             : threshold >= -1
-              ? "bg-red-500 shadow-[0_0_6px_rgba(239,68,68,0.5)]"
+              ? "bg-red-500"
               : threshold >= -6
-                ? "bg-amber-400 shadow-[0_0_5px_rgba(251,191,36,0.42)]"
+                ? "bg-amber-400"
                 : nominalColor;
           return <span className={`min-w-0 rounded-[1px] ${lit ? "transition-none" : "transition-colors duration-50"} ${color}`} key={threshold} />;
         })}
@@ -64,14 +64,14 @@ interface MeterRowProps {
 
 function MeterRow({ title, source, tone, level, limiterIndicator }: MeterRowProps) {
   return (
-    <div className="grid min-w-0 gap-3 p-4 sm:p-5">
-      <strong className="text-xs font-semibold">{title}</strong>
-      <div className={limiterIndicator ? "grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-3" : "grid min-w-0"}>
-        <div className="grid min-w-0 gap-1.5">
-          <ChannelMeter channel="L" peak={level?.leftPeak ?? 0} source={source} tone={tone} />
-          <ChannelMeter channel="R" peak={level?.rightPeak ?? 0} source={source} tone={tone} />
-        </div>
+    <div className="grid min-w-0 gap-2 p-4">
+      <div className="flex items-center justify-between gap-3">
+        <strong className="text-xs font-semibold">{title}</strong>
         {limiterIndicator}
+      </div>
+      <div className="grid min-w-0 gap-1.5">
+        <ChannelMeter channel="L" peak={level?.leftPeak ?? 0} source={source} tone={tone} />
+        <ChannelMeter channel="R" peak={level?.rightPeak ?? 0} source={source} tone={tone} />
       </div>
     </div>
   );
@@ -81,12 +81,12 @@ function LimiterIndicator({ active }: { active: boolean }) {
   const label = active ? "Limiter active" : "Limiter inactive";
   return (
     <span
-      className={`badge badge-sm h-7 gap-1.5 px-2 text-[9px] font-semibold tracking-wider ${active ? "badge-error badge-soft" : "badge-ghost text-base-content/45"}`}
+      className={`badge badge-sm h-5 gap-1.5 px-2 text-[9px] font-semibold tracking-wider ${active ? "badge-error badge-soft" : "badge-ghost text-base-content/45"}`}
       role="status"
       aria-label={label}
     >
       <span
-        className={`status ${active ? "status-error shadow-[0_0_6px_color-mix(in_oklab,var(--color-error)_65%,transparent)]" : "bg-current opacity-45"}`}
+        className={`status ${active ? "status-error" : "bg-current opacity-45"}`}
         aria-hidden="true"
       />
       LIM
@@ -96,11 +96,9 @@ function LimiterIndicator({ active }: { active: boolean }) {
 
 export function LevelMeter({ level }: { level: MeterLevel | null }) {
   return (
-    <section className="card card-border min-w-0 overflow-hidden bg-base-100 text-base-content" aria-label="Realtime input and output levels">
-      <div className="border-b border-base-200 px-4 py-3 sm:px-5">
-        <h2 className="card-title text-base"><Activity size={18} aria-hidden="true" />Signal levels</h2>
-      </div>
-      <div className="grid min-w-0 divide-y divide-base-200 md:grid-cols-2 md:divide-x md:divide-y-0">
+    <section className="mt-auto min-w-0 border-t border-base-300 bg-base-200/40 text-base-content" aria-label="Realtime input and output levels">
+      <h2 className="sr-only">Signal levels</h2>
+      <div className="grid min-w-0 divide-y divide-base-200">
         <MeterRow title="INPUT" source="input" tone="indigo" level={level?.preEq ?? null} />
         <MeterRow
           title="OUTPUT"

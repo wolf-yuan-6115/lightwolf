@@ -47,6 +47,7 @@ button:disabled {
   select {
     font: inherit;
     letter-spacing: 0;
+    caret-color: var(--color-primary);
   }
 
   button,

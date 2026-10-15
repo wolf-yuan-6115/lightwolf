@@ -16,7 +16,7 @@ const modeOptions = [
 
 function ChannelState({ label, control }: { label: string; control: AudioChannelControl | null }) {
   return (
-    <div className="flex min-w-0 items-center justify-between gap-3 rounded-box bg-base-200 px-3 py-2.5">
+    <div className="flex min-w-0 items-center justify-between gap-3 border-b border-base-200 py-2.5">
       <span className="flex items-center gap-2 text-sm text-base-content/70">
         {control?.muted ? <VolumeX size={16} aria-hidden="true" /> : <Volume2 size={16} aria-hidden="true" />}{label}
       </span>
@@ -40,18 +40,18 @@ export function UsbAudioState({ settings, connected, busy, sampleRateHz, bitDept
   return (
     <section className="grid min-w-0 gap-3 border-t border-base-200 pt-4" aria-labelledby="usb-audio-title">
       <h3 className="flex items-center gap-2 text-sm font-semibold" id="usb-audio-title"><Usb size={16} aria-hidden="true" />USB audio</h3>
-      <dl className="grid min-w-0 gap-3">
-        <div className="flex min-w-0 items-center justify-between gap-3 rounded-box bg-base-200 px-3 py-2.5">
+      <dl className="grid min-w-0 gap-1">
+        <div className="flex min-w-0 items-center justify-between gap-3 border-b border-base-200 py-2.5">
           <dt className="flex items-center gap-2 text-sm text-base-content/70"><Clock3 size={16} aria-hidden="true" />Sample rate</dt>
-          <dd className="text-sm font-semibold tabular-nums">{(sampleRateHz / 1000).toFixed(sampleRateHz % 1000 ? 1 : 0)} kHz</dd>
+          <dd className="text-sm font-semibold tabular-nums">{connected ? `${(sampleRateHz / 1000).toFixed(sampleRateHz % 1000 ? 1 : 0)} kHz` : "—"}</dd>
         </div>
-        {bitDepth !== null && <div className="flex min-w-0 items-center justify-between gap-3 rounded-box bg-base-200 px-3 py-2.5">
+        {bitDepth !== null && <div className="flex min-w-0 items-center justify-between gap-3 border-b border-base-200 py-2.5">
           <dt className="flex items-center gap-2 text-sm text-base-content/70"><AudioLines size={16} aria-hidden="true" />Bit depth</dt>
           <dd className="text-sm font-semibold tabular-nums">{bitDepth}-bit</dd>
         </div>}
-        <div className="flex min-w-0 items-center justify-between gap-3 rounded-box bg-base-200 px-3 py-2.5">
+        <div className="flex min-w-0 items-center justify-between gap-3 border-b border-base-200 py-2.5">
           <dt className="flex items-center gap-2 text-sm text-base-content/70"><Activity size={16} aria-hidden="true" />Stream state</dt>
-          <dd className="text-sm font-semibold">{streaming ? "Streaming" : "Idle"}</dd>
+          <dd className="text-sm font-semibold">{!connected ? "—" : streaming ? "Streaming" : "Idle"}</dd>
         </div>
       </dl>
       <div className="grid min-w-0 gap-2" role="group" aria-label="Host USB audio controls" aria-disabled={!!unavailable || busy}>
@@ -77,7 +77,7 @@ export function CrossfeedSettings({ settings, connected, busy, onError }: Props)
   ];
 
   return (
-    <section className="card card-border min-w-0 bg-base-100" aria-labelledby="crossfeed-title">
+    <section className="min-w-0 rounded-2xl border border-base-300 bg-base-100" aria-labelledby="crossfeed-title">
       <div className="card-body gap-4 p-4 sm:p-5">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <h2 className="card-title text-base" id="crossfeed-title"><Headphones size={18} aria-hidden="true" />Headphone crossfeed</h2>
@@ -127,7 +127,7 @@ export function OutputProcessingSettings({ settings, connected, busy, onError }:
   ];
 
   return (
-    <section className="card card-border min-w-0 bg-base-100" aria-labelledby="output-processing-title">
+    <section className="min-w-0 rounded-2xl border border-base-300 bg-base-100" aria-labelledby="output-processing-title">
       <div className="card-body gap-4 p-4 sm:p-5">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <h2 className="card-title text-base" id="output-processing-title"><SlidersHorizontal size={18} aria-hidden="true" />Output processing</h2>
@@ -138,7 +138,7 @@ export function OutputProcessingSettings({ settings, connected, busy, onError }:
         <fieldset className="grid min-w-0 gap-4" disabled={disabled}>
           <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
             {toggles.map(({ key, label }) => (
-              <label className="flex cursor-pointer items-center justify-between gap-3 min-h-11 rounded-box bg-base-200 px-3 py-2.5 text-sm font-medium" key={key}>
+              <label className="flex cursor-pointer items-center justify-between gap-3 min-h-11 border-b border-base-200 py-2.5 text-sm font-medium" key={key}>
                 {label}
                 <input className="toggle toggle-sm" type="checkbox" checked={live[key]} onChange={(event) => settings.updateOutput({ [key]: event.target.checked })} />
               </label>
