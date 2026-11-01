@@ -144,6 +144,7 @@ fun EqualizerScreen(state: ControllerUiState, controller: PumperControllerViewMo
                 index = index,
                 band = band,
                 bandCount = state.config.bands.size,
+                sampleRateHz = state.status?.sampleRateHz ?: 48_000,
                 supportsFirmware3Controls = state.status?.supportsFirmware3Controls == true,
                 controller = controller,
                 onSelect = { next ->
@@ -357,6 +358,7 @@ private fun BandEditorSheet(
     index: Int,
     band: EqBand,
     bandCount: Int,
+    sampleRateHz: Long,
     supportsFirmware3Controls: Boolean,
     controller: PumperControllerViewModel,
     onSelect: (Int) -> Unit,
@@ -413,6 +415,13 @@ private fun BandEditorSheet(
                     },
                 )
             }
+            Text("Band response · without preamp", style = MaterialTheme.typography.titleSmall)
+            EqGraph(
+                config = dev.wolf.yuan.pumper.protocol.EqConfig(true, 0.0, listOf(band)),
+                sampleRateHz = sampleRateHz,
+                bandIndex = index,
+                modifier = Modifier.fillMaxWidth().height(180.dp),
+            )
             FilterTypeDropdown(
                 selected = band.type,
                 supportsFirmware3Controls = supportsFirmware3Controls,

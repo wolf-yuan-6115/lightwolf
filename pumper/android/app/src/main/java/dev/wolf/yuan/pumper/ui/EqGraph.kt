@@ -84,6 +84,7 @@ fun EqGraph(
     config: EqConfig,
     sampleRateHz: Long,
     modifier: Modifier = Modifier,
+    bandIndex: Int? = null,
 ) {
     val curve = remember(config, sampleRateHz) { EqMath.responseCurve(config, sampleRateHz) }
     val markers = remember(config, sampleRateHz) {
@@ -101,14 +102,14 @@ fun EqGraph(
     val labelStyle = MaterialTheme.typography.labelSmall.copy(color = MaterialTheme.colorScheme.onSurfaceVariant)
     val gridColor = MaterialTheme.colorScheme.outlineVariant
     val zeroColor = MaterialTheme.colorScheme.outline
-    val curveColor = MaterialTheme.colorScheme.primary
+    val curveColor = bandIndex?.let { BandColors[it % BandColors.size] } ?: MaterialTheme.colorScheme.primary
     val curveHalo = MaterialTheme.colorScheme.surface
     val backdrop = MaterialTheme.colorScheme.surfaceContainerLow
 
     Canvas(
         modifier
             .fillMaxWidth()
-            .semantics { contentDescription = "Equalizer response from 20 hertz to 20 kilohertz" },
+            .semantics { contentDescription = if (bandIndex == null) "Equalizer response from 20 hertz to 20 kilohertz" else "Band ${bandIndex + 1} response, without preamp" },
     ) {
         val plotLeft = 44.dp.toPx()
         val plotRight = size.width - 8.dp.toPx()
@@ -173,7 +174,7 @@ fun EqGraph(
                 center = center,
             )
             drawCircle(
-                color = BandColors[index % BandColors.size].copy(alpha = if (enabled) 1f else 0.34f),
+                color = BandColors[(bandIndex ?: index) % BandColors.size].copy(alpha = if (enabled) 1f else 0.34f),
                 radius = 4.dp.toPx(),
                 center = center,
             )
