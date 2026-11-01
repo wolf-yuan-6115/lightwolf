@@ -221,6 +221,26 @@ class PumperControllerViewModel(application: Application) : AndroidViewModel(app
         }
     }
 
+    fun importEqText(text: String): String? {
+        val current = _state.value
+        if (!current.connected || current.deviceOperationBusy) return "Connect Pumper and wait for the current operation."
+        val next = runCatching {
+            dev.wolf.yuan.pumper.protocol.EqText.parse(text, current.config.bands.size).also { config ->
+                require(current.status?.supportsFirmware3Controls == true || config.bands.all { it.type.value <= 2 }) {
+                    "Low-pass, high-pass, notch, and band-pass filters require firmware 3.0 or newer."
+                }
+            }
+        }.getOrElse { return it.message ?: "Invalid EQ text." }
+        clearPendingPreview()
+        _state.update { it.copy(autoPreamp = false, selectedBand = 0) }
+        commitConfig(next)
+        pendingGlobal = next
+        next.bands.forEachIndexed { index, band -> pendingBands[index] = band }
+        schedulePreview()
+        _state.update { it.copy(message = "Parametric EQ imported into live preview.") }
+        return null
+    }
+
     fun selectProfile(index: Int) {
         val current = _state.value
         if (index !in 0 until current.profiles.count || index == current.selectedProfile) return

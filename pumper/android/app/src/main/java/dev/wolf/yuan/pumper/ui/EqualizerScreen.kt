@@ -193,6 +193,7 @@ private fun EqualizerOverview(
                 modifier = Modifier.padding(PumperSpacing.medium),
             )
         }
+        EqTextActions(state, controller)
         Text("Response", style = MaterialTheme.typography.titleLargeEmphasized)
         EqGraph(
             config = state.config,
