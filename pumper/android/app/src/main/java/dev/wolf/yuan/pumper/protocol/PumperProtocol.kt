@@ -39,6 +39,10 @@ enum class Opcode(val value: Int) {
     MeterKeepalive(0x31),
     MeterStop(0x32),
     MeterLevel(0x33),
+    SpectrumStart(0x34),
+    SpectrumKeepalive(0x35),
+    SpectrumStop(0x36),
+    SpectrumData(0x37),
     RestartDevice(0x40),
     EnterBootsel(0x41),
 }
@@ -122,6 +126,7 @@ data class DeviceStatus(
     val supportsDeviceReset: Boolean get() = firmwareMajor > 1 || (firmwareMajor == 1 && firmwareMinor >= 7)
     val supportsAudioControls: Boolean get() = firmwareMajor > 2 || (firmwareMajor == 2 && firmwareMinor >= 2)
     val supportsFirmware3Controls: Boolean get() = firmwareMajor >= 3
+    val supportsSpectrum: Boolean get() = firmwareMajor > 3 || (firmwareMajor == 3 && firmwareMinor >= 5)
     val supportsTelemetry: Boolean get() = firmwareMajor > 3 || (firmwareMajor == 3 && firmwareMinor >= 4)
 }
 

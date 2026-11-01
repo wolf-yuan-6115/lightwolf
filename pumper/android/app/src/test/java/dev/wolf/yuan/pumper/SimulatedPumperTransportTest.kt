@@ -24,7 +24,7 @@ class SimulatedPumperTransportTest {
         val status = PumperProtocol.decodeStatus(client.request(Opcode.Hello).payload)
         val audio = PumperProtocol.decodeAudioControls(client.request(Opcode.GetAudioControls).payload)
 
-        assertEquals("3.4", status.firmwareVersion)
+        assertEquals("4.0", status.firmwareVersion)
         assertEquals(16, status.bitDepth)
         assertTrue(status.supportsAudioControls)
         assertTrue(status.supportsFirmware3Controls)

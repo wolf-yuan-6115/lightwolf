@@ -99,12 +99,12 @@ changes; do not reset or rewrite user work.
   audio path. Stream-scoped values reset on stream start, while transport and
   storage counters are boot-scoped.
 - Firmware 3.5 adds opt-in SpectrumStart/Keepalive/Stop/Data (`0x34`–`0x37`).
-  Android intentionally does not subscribe or expose this feature yet. Existing
-  commands, status/telemetry layouts, protocol version, and Android version stay
-  compatible. Spectrum levels reference post-limiter PCM before I2S gain.
+  Both controllers support this feature while keeping existing commands,
+  status/telemetry layouts, and protocol version compatible. Spectrum levels reference post-limiter PCM before I2S gain.
 - Firmware 4.0 keeps these commands and layouts compatible. The web controller
   always subscribes to spectrum on supported firmware alongside level meters,
-  sharing their start/keepalive/stop lifecycle. Android remains unchanged.
+  sharing their start/keepalive/stop lifecycle. Android subscribes while connected
+  in the foreground and renders spectrum only on the EQ screen.
 - Spectrum capture is a core-1 producer / core-0 consumer FIFO. Only the producer
   publishes the write cursor; only the consumer publishes the read cursor. Reset
   invalidates consumer history and advances a subscription epoch; producer epoch,
@@ -197,12 +197,19 @@ Do not vendor or commit the patched SDK into Pumper.
   Jetpack Compose/Material 3. Keep debug-only simulator code out of release
   builds.
 - Set the Android `versionName` to `1.<firmware major>.<firmware minor>` for
-  the newest firmware version it supports (currently `1.3.4` for firmware
-  3.4). Update it when supported firmware changes, and increment `versionCode`
+  the newest firmware version it supports (currently `1.4.0` for firmware
+  4.0). Update it when supported firmware changes, and increment `versionCode`
   for every release.
 - Use the same fixed-size HID protocol and persistence semantics as the web
   controller. Crossfeed, output processing, and EQ profile saves remain
   independent operations.
+- Keep the main EQ graph display-only. The band editor shows its own filter
+  response without global preamp. EQ text import/export uses the web format;
+  imports validate before replacing preview and never save implicitly.
+- Spectrum uses schema-1 reassembly with replay protection, a fresh sequence
+  namespace at acknowledged start, and a 500 ms stale display timeout. Animate
+  dB height on Compose frames with 8 ms attack / 70 ms release. Stop rendering
+  when the EQ screen leaves composition and clear data on disconnect.
 - Live previews must not write flash. The simulator should exercise the real
   report codec and controller state, but it cannot stand in for Android USB
   permission, HID discovery, or physical-device tests.

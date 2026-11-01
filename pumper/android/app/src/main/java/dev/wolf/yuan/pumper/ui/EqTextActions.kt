@@ -6,6 +6,8 @@ import android.content.Context
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.ContentCopy
@@ -39,6 +41,7 @@ internal fun EqTextActions(state: ControllerUiState, controller: PumperControlle
             clipboard.setPrimaryClip(ClipData.newPlainText("Pumper EQ", EqText.serialize(state.config)))
         }) {
             Icon(Icons.Outlined.ContentCopy, contentDescription = null)
+            Spacer(Modifier.width(PumperSpacing.small))
             Text("Copy EQ")
         }
         TextButton(enabled = state.connected && !state.deviceOperationBusy, onClick = {
@@ -47,6 +50,7 @@ internal fun EqTextActions(state: ControllerUiState, controller: PumperControlle
             importing = true
         }) {
             Icon(Icons.Outlined.ContentPaste, contentDescription = null)
+            Spacer(Modifier.width(PumperSpacing.small))
             Text("Import EQ")
         }
     }

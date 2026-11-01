@@ -28,8 +28,8 @@ It combines stereo power and targets 20 updates per second, dropping visual
 updates when necessary to prioritize playback. Spectrum reports share the level
 meter connection lifecycle, with no toggle or browser setting. Animation pauses
 while the page is hidden. The spectrum animates
-between reports with a fast rise and a short decay. Android does not
-have the spectrum feature yet.
+between reports with a fast rise and a short decay. The Android controller
+also supports live output spectrum on firmware 3.5 or newer.
 
 ## Requirements
 

@@ -196,8 +196,13 @@ private fun EqualizerOverview(
         }
         EqTextActions(state, controller)
         Text("Response", style = MaterialTheme.typography.titleLargeEmphasized)
+        if (state.status?.supportsSpectrum == true) {
+            Text("Output spectrum: −96 to 0 dBFS", style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.tertiary)
+        }
         EqGraph(
             config = state.config,
+            spectrum = if (state.connected && state.status?.supportsSpectrum == true) controller.spectrum else null,
             sampleRateHz = state.status?.sampleRateHz ?: 48_000,
             modifier = Modifier.fillMaxWidth().height(graphHeight),
         )

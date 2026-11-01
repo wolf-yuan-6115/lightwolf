@@ -85,7 +85,10 @@ fun EqGraph(
     sampleRateHz: Long,
     modifier: Modifier = Modifier,
     bandIndex: Int? = null,
+    spectrum: kotlinx.coroutines.flow.StateFlow<dev.wolf.yuan.pumper.protocol.SpectrumFrame?>? = null,
 ) {
+    val spectrumLevels = rememberSpectrumAnimation(spectrum)
+    val spectrumColor = MaterialTheme.colorScheme.tertiary
     val curve = remember(config, sampleRateHz) { EqMath.responseCurve(config, sampleRateHz) }
     val markers = remember(config, sampleRateHz) {
         config.bands.map { band ->
@@ -125,6 +128,17 @@ fun EqGraph(
             size = Size(plotWidth, plotHeight),
             cornerRadius = CornerRadius(8.dp.toPx()),
         )
+        spectrumLevels.value?.let { levels ->
+            val spectrumPath = Path().apply {
+                moveTo(plotLeft, plotBottom)
+                levels.forEachIndexed { index, db ->
+                    lineTo(plotLeft + index / 255f * plotWidth, plotBottom - (db + 96f) / 96f * plotHeight)
+                }
+                lineTo(plotRight, plotBottom)
+                close()
+            }
+            drawPath(spectrumPath, spectrumColor.copy(alpha = 0.25f))
+        }
         FrequencyGridTicks.forEach { frequency ->
             val x = xForFrequency(frequency, plotLeft, plotWidth)
             drawLine(gridColor, Offset(x, plotTop), Offset(x, plotBottom), 1.dp.toPx())

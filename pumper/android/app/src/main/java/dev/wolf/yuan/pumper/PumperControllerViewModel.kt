@@ -51,6 +51,9 @@ class PumperControllerViewModel(application: Application) : AndroidViewModel(app
     private val _meter = MutableStateFlow<MeterLevel?>(null)
     val meter = _meter.asStateFlow()
 
+    private val _spectrum = MutableStateFlow<dev.wolf.yuan.pumper.protocol.SpectrumFrame?>(null)
+    val spectrum = _spectrum.asStateFlow()
+
     private var client: PumperClient? = null
     private var sessionScope: CoroutineScope? = null
     private var savedConfig: EqConfig? = null
@@ -140,6 +143,7 @@ class PumperControllerViewModel(application: Application) : AndroidViewModel(app
     fun disconnect() {
         if (_state.value.connection == ConnectionState.Disconnected) return
         viewModelScope.launch {
+            if (_state.value.status?.supportsSpectrum == true) runCatching { client?.request(Opcode.SpectrumStop, timeoutMs = 300) }
             runCatching { client?.request(Opcode.MeterStop, timeoutMs = 300) }
             closeSession()
             _state.update {
@@ -466,6 +470,19 @@ class PumperControllerViewModel(application: Application) : AndroidViewModel(app
     }
 
     private fun startSessionTasks(scope: CoroutineScope, activeClient: PumperClient) {
+        scope.launch { activeClient.spectrum.collect { _spectrum.value = it } }
+        scope.launch {
+            if (_state.value.status?.supportsSpectrum == true) {
+                var started = false
+                while (isActive) {
+                    started = runCatching {
+                        activeClient.request(if (started) Opcode.SpectrumKeepalive else Opcode.SpectrumStart)
+                    }.isSuccess
+                    delay(METER_HEARTBEAT_INTERVAL_MS)
+                }
+            }
+        }
+
         scope.launch {
             activeClient.meterLevels.catch { }.collect { level -> _meter.value = level }
         }
@@ -787,6 +804,8 @@ class PumperControllerViewModel(application: Application) : AndroidViewModel(app
     private fun sampleRate(): Long = _state.value.status?.sampleRateHz ?: 48_000L
 
     private suspend fun closeSession() {
+        _spectrum.value = null
+        _meter.value = null
         clearPendingPreview()
         clearPendingCrossfeed()
         clearPendingOutputProcessing()

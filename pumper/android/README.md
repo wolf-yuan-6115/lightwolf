@@ -8,6 +8,10 @@ The app provides:
 
 - Live ten-band parametric EQ preview, response graph, automatic preamp,
   signal meters, and a firmware 3.3 limiter activity indicator.
+- Live output spectrum behind the response graph on firmware 3.5 or newer.
+- Copy/export and paste/import of parametric EQ text, compatible with the web
+  controller. Imports replace live preview; saving remains a separate action.
+- An individual filter response graph in each band editor, without global preamp.
 - Audio status including USB sample rate, bit depth, stream state, and host
   master volume/mute.
 - Headphone crossfeed with Off, Low, Medium, High, and Custom modes.

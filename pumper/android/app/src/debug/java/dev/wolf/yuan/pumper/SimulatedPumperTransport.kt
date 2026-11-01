@@ -50,6 +50,9 @@ internal class SimulatedPumperTransport : PumperTransport {
     private var savedCrossfeed = DefaultCrossfeedConfig
     private var liveOutputProcessing = DefaultOutputProcessingConfig
     private var savedOutputProcessing = DefaultOutputProcessingConfig
+    private var spectrumJob: Job? = null
+    private var spectrumSequence = 0L
+    @Volatile private var spectrumDeadline = 0L
     private var meterJob: Job? = null
     private var meterIntervalMs = 20L
     private var meterSequence = 0L
@@ -84,6 +87,10 @@ internal class SimulatedPumperTransport : PumperTransport {
         val requestId = report.u16(4)
         val payloadSize = report.u8(6)
         val payload = report.copyOfRange(8, 8 + payloadSize)
+        if (opcode == Opcode.SpectrumKeepalive && System.nanoTime() >= spectrumDeadline) {
+            _reports.emit(response(opcode, requestId, byteArrayOf()).also { it[7] = 2 })
+            return
+        }
         val responsePayload = handle(opcode, payload)
         _reports.emit(response(opcode, requestId, responsePayload))
         if (opcode == Opcode.RestartDevice || opcode == Opcode.EnterBootsel) {
@@ -177,6 +184,39 @@ internal class SimulatedPumperTransport : PumperTransport {
             startMetering()
             byteArrayOf()
         }
+        Opcode.SpectrumStart -> {
+            spectrumJob?.cancel()
+            spectrumSequence = 0
+            spectrumDeadline = System.nanoTime() + 1_250_000_000L
+            spectrumJob = scope.launch {
+                while (isActive && System.nanoTime() < spectrumDeadline) {
+                    delay(50)
+                    val sequence = ++spectrumSequence
+                    repeat(6) { chunk ->
+                        val count = if (chunk == 5) 36 else 44
+                        val data = ByteArray(12 + count)
+                        data[0] = 1; data[1] = chunk.toByte(); data[2] = 6; data[3] = count.toByte()
+                        data.putU32(4, sequence); data.putU32(8, 48_000)
+                        repeat(count) { i ->
+                            val point = chunk * 44 + i
+                            data[12 + i] = (80 + 45 * sin(point * 0.06 + sequence * 0.12)).toInt().toByte()
+                        }
+                        _reports.emit(response(Opcode.SpectrumData, 0, data))
+                    }
+                }
+            }
+            byteArrayOf()
+        }
+        Opcode.SpectrumKeepalive -> {
+            spectrumDeadline = System.nanoTime() + 1_250_000_000L
+            byteArrayOf()
+        }
+        Opcode.SpectrumStop -> {
+            spectrumJob?.cancel()
+            spectrumJob = null
+            byteArrayOf()
+        }
+        Opcode.SpectrumData -> byteArrayOf()
         Opcode.MeterKeepalive -> byteArrayOf()
         Opcode.MeterStop -> {
             meterJob?.cancel()
@@ -199,8 +239,8 @@ internal class SimulatedPumperTransport : PumperTransport {
     }
 
     private fun encodeStatus(): ByteArray = ByteArray(48).also { payload ->
-        payload[0] = 3
-        payload[1] = 4
+        payload[0] = 4
+        payload[1] = 0
         payload[2] = config.bands.size.toByte()
         var flags = 0x01
         if (config != storedProfiles[activeProfile]) flags = flags or 0x02

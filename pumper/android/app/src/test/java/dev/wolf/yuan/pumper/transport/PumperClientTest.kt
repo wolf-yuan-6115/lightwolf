@@ -47,6 +47,34 @@ class PumperClientTest {
     }
 
     @Test
+    fun `spectrum frames reset only at acknowledged subscription boundaries`() = runTest {
+        val transport = FakeTransport()
+        val client = PumperClient(transport, backgroundScope)
+        runCurrent()
+        transport.emitSpectrum(9)
+        runCurrent()
+        assertEquals(null, client.spectrum.value)
+        client.request(Opcode.SpectrumStart)
+        transport.emitSpectrum(9)
+        runCurrent()
+        val first = requireNotNull(client.spectrum.value)
+        assertEquals(256, first.levels.size)
+        transport.emitSpectrum(8)
+        runCurrent()
+        assertEquals(first, client.spectrum.value)
+        client.request(Opcode.SpectrumStart)
+        assertEquals(null, client.spectrum.value)
+        transport.emitSpectrum(0)
+        runCurrent()
+        assertTrue(requireNotNull(client.spectrum.value).epoch > first.epoch)
+        client.request(Opcode.SpectrumStop)
+        transport.emitSpectrum(1)
+        runCurrent()
+        assertEquals(null, client.spectrum.value)
+        client.close()
+    }
+
+    @Test
     fun `slow meter consumer receives latest report without a backlog`() = runTest {
         val transport = FakeTransport()
         val client = PumperClient(transport, backgroundScope)
@@ -91,6 +119,17 @@ private class FakeTransport : PumperTransport {
         val payload = ByteArray(28)
         ByteBuffer.wrap(payload).order(ByteOrder.LITTLE_ENDIAN).putInt(0, sequence)
         _reports.emit(response(Opcode.MeterLevel.value, 0, payload))
+    }
+
+    suspend fun emitSpectrum(sequence: Int) {
+        repeat(6) { index ->
+            val count = if (index == 5) 36 else 44
+            val payload = ByteArray(12 + count)
+            payload[0] = 1; payload[1] = index.toByte(); payload[2] = 6; payload[3] = count.toByte()
+            ByteBuffer.wrap(payload).order(ByteOrder.LITTLE_ENDIAN).putInt(4, sequence).putInt(8, 48000)
+            payload.fill(120, 12)
+            _reports.emit(response(Opcode.SpectrumData.value, 0, payload))
+        }
     }
 
     override suspend fun close() = Unit
