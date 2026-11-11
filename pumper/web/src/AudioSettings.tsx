@@ -14,14 +14,14 @@ const modeOptions = [
   { value: CrossfeedMode.Custom, label: "Custom" },
 ];
 
-function ChannelState({ label, control }: { label: string; control: AudioChannelControl | null }) {
+function ChannelState({ label, control, pinned = false }: { label: string; control: AudioChannelControl | null; pinned?: boolean }) {
   return (
     <div className="flex min-w-0 items-center justify-between gap-3 border-b border-base-200 py-2.5">
       <span className="flex items-center gap-2 text-sm text-base-content/70">
         {control?.muted ? <VolumeX size={16} aria-hidden="true" /> : <Volume2 size={16} aria-hidden="true" />}{label}
       </span>
       <span className="flex items-center gap-2 text-sm font-semibold tabular-nums">
-        {control ? <>{control.muted ? "Muted · " : ""}{control.volumeDb.toLocaleString("en-US", { maximumFractionDigits: 2 })} dB</> : "—"}
+        {control ? <>{control.muted ? "Muted · " : ""}{pinned ? "Pinned" : `${control.volumeDb.toLocaleString("en-US", { maximumFractionDigits: 2 })} dB`}</> : "—"}
       </span>
     </div>
   );
@@ -55,7 +55,7 @@ export function UsbAudioState({ settings, connected, busy, sampleRateHz, bitDept
         </div>
       </dl>
       <div className="grid min-w-0 gap-2" role="group" aria-label="Host USB audio controls" aria-disabled={!!unavailable || busy}>
-        <ChannelState label="Master volume" control={audio?.master ?? null} />
+        <ChannelState pinned={settings.acknowledgedPin} label="Master volume" control={audio?.master ?? null} />
       </div>
       {unavailable && <p className="grow-0 text-xs text-base-content/70">{unavailable}</p>}
       {!unavailable && !audio && <p className="grow-0 text-xs text-base-content/70">Reading USB audio state…</p>}
@@ -136,6 +136,10 @@ export function OutputProcessingSettings({ settings, connected, busy, onError }:
         {unavailable && <p className="grow-0 text-xs text-base-content/70">{unavailable}</p>}
         {!unavailable && !outputProcessing && <p className="grow-0 text-xs text-base-content/70">Reading output settings…</p>}
         <fieldset className="grid min-w-0 gap-4" disabled={disabled}>
+          {settings.pinSupported && <label className="flex cursor-pointer items-center justify-between gap-3 min-h-11 border-b border-base-200 py-2.5 text-sm font-medium">
+            Follow USB volume
+            <input className="toggle toggle-sm" type="checkbox" checked={!live.pinUsbVolume} onChange={(event) => settings.updateOutput({ pinUsbVolume: !event.target.checked })} />
+          </label>}
           <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
             {toggles.map(({ key, label }) => (
               <label className="flex cursor-pointer items-center justify-between gap-3 min-h-11 border-b border-base-200 py-2.5 text-sm font-medium" key={key}>

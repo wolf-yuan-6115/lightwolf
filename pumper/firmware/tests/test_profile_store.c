@@ -214,7 +214,7 @@ static void test_output_processing_storage(void) {
   uint32_t generation;
   assert(!eq_settings_load(&loaded, &generation));
   output_processing_config_t output = {
-      OUTPUT_PROCESSING_SWAP | OUTPUT_PROCESSING_INVERT_RIGHT, -2500, 15000};
+      OUTPUT_PROCESSING_PIN_USB_VOLUME | OUTPUT_PROCESSING_SWAP | OUTPUT_PROCESSING_INVERT_RIGHT, -2500, 15000};
   assert(eq_settings_save_output_processing(&output));
   output_processing_config_t saved;
   eq_settings_get_output_processing(&saved);
@@ -273,7 +273,7 @@ static void test_version_two_migration(void) {
   assert(program_calls == calls); // Read-only import never migrates flash.
   c.mode = 2;
   assert(eq_settings_save_crossfeed(&c));
-  assert(eq_protocol_read_u16(g_fake_flash + LEGACY_STORAGE_OFFSET + 4) == 4);
+  assert(eq_protocol_read_u16(g_fake_flash + LEGACY_STORAGE_OFFSET + 4) == 5);
   assert(eq_settings_load(&loaded, &generation));
   assert(eq_config_equal(&eq, &loaded));
   eq_settings_get_crossfeed(&c);
@@ -337,7 +337,29 @@ static void test_interrupted_writes(void) {
     assert(c.mode == 1);
   }
 }
+static void test_version_four_output_migration(void) {
+  memset(g_fake_flash, 0xff, sizeof(g_fake_flash));
+  eq_config_t loaded;
+  uint32_t generation;
+  assert(!eq_settings_load(&loaded, &generation));
+  output_processing_config_t output = {OUTPUT_PROCESSING_SWAP, -1200, 13000}, saved;
+  assert(eq_settings_save_output_processing(&output));
+  uint8_t *header = g_fake_flash + PROFILE_STORAGE_OFFSET;
+  eq_protocol_write_u16(header + 4, 4);
+  eq_protocol_write_u32(header + 16, test_crc32(header, 16));
+  unsigned calls = program_calls;
+  assert(!eq_settings_load(&loaded, &generation));
+  eq_settings_get_output_processing(&saved);
+  assert(output_processing_equal(&output, &saved));
+  assert(program_calls == calls);
+  output.flags |= OUTPUT_PROCESSING_PIN_USB_VOLUME;
+  assert(eq_settings_save_output_processing(&output));
+  assert(!eq_settings_load(&loaded, &generation));
+  eq_settings_get_output_processing(&saved);
+  assert(output_processing_equal(&output, &saved));
+}
 int main(void) {
+  test_version_four_output_migration();
   test_alternating_profile_banks();
   test_legacy_profile_migration();
   test_profile_deletion();

@@ -24,7 +24,7 @@ class SimulatedPumperTransportTest {
         val status = PumperProtocol.decodeStatus(client.request(Opcode.Hello).payload)
         val audio = PumperProtocol.decodeAudioControls(client.request(Opcode.GetAudioControls).payload)
 
-        assertEquals("4.0", status.firmwareVersion)
+        assertEquals("4.1", status.firmwareVersion)
         assertEquals(16, status.bitDepth)
         assertTrue(status.supportsAudioControls)
         assertTrue(status.supportsFirmware3Controls)
@@ -43,7 +43,7 @@ class SimulatedPumperTransportTest {
     fun `output preview remains independent and persists only through output save`() = runTest {
         val client = PumperClient(SimulatedPumperTransport(), backgroundScope)
         runCurrent()
-        val custom = OutputProcessingConfig(true, true, false, true, -24.0, 135.0)
+        val custom = OutputProcessingConfig(true, true, false, true, -24.0, 135.0, pinUsbVolume = true)
 
         val preview = PumperProtocol.decodeOutputProcessingState(
             client.request(Opcode.SetOutputProcessing, PumperProtocol.encodeOutputProcessing(custom)).payload,

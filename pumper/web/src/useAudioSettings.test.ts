@@ -14,7 +14,7 @@ async function setup(version = "2.2") {
   const transport = { request: mock.handle } as unknown as PumperHidTransport;
   const hook = renderHook(({ connected }) => useAudioSettings(transport, connected, version, onError, onNotice), { initialProps: { connected: true } });
   await waitFor(() => expect(hook.result.current.crossfeed).not.toBeNull());
-  if (version === "3.0") await waitFor(() => expect(hook.result.current.outputProcessing).not.toBeNull());
+  if (Number(version) >= 3) await waitFor(() => expect(hook.result.current.outputProcessing).not.toBeNull());
   mock.handle.mockClear();
   return { ...hook, mock, onError, onNotice };
 }
@@ -194,4 +194,23 @@ describe("independent audio settings", () => {
       Opcode.GetOutputProcessing,
     ]);
   });
+});
+
+it("pins only after acknowledgement and saves with output settings", async () => {
+  const { result } = await setup("4.1");
+  expect(result.current.pinSupported).toBe(true);
+  act(() => result.current.updateOutput({ pinUsbVolume: true }));
+  expect(result.current.acknowledgedPin).toBe(false);
+  expect(result.current.outputProcessing?.dirty).toBe(true);
+  await waitFor(() => expect(result.current.acknowledgedPin).toBe(true));
+  await act(() => result.current.saveOutput());
+  expect(result.current.outputProcessing?.saved.pinUsbVolume).toBe(true);
+  expect(result.current.outputProcessing?.dirty).toBe(false);
+});
+it("does not send pinning to older firmware", async () => {
+  const { result, mock } = await setup("3.0");
+  expect(result.current.pinSupported).toBe(false);
+  act(() => result.current.updateOutput({ pinUsbVolume: true }));
+  expect(result.current.outputProcessing?.live.pinUsbVolume).toBe(false);
+  expect(mock.handle).not.toHaveBeenCalled();
 });

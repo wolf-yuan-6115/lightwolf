@@ -70,3 +70,11 @@ hardware. It is not included in release builds.
 The simulator does not validate Android USB permissions, HID endpoint
 discovery, or compatibility with a physical DAC. Those paths require an
 Android USB-host device and Pumper hardware.
+
+Firmware 4.1 supports **Follow USB volume** in output settings. Turn it off to
+pin the USB-volume stage to 100%; Master volume displays **Pinned**. USB mute
+still works. Changes preview immediately; use **Save output** to retain them
+after power cycling. Re-enabling follows the latest computer volume. Disabling
+can increase loudness. EQ, output processing, and the output safety ceiling still
+apply. Use updated controllers with pinned devices; older controllers cannot
+decode the new setting.

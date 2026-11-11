@@ -235,10 +235,10 @@ class PumperProtocolTest {
 
     @Test
     fun `output processing record and dirty state round trip`() {
-        val live = OutputProcessingConfig(true, true, true, true, -37.0, 142.0)
+        val live = OutputProcessingConfig(true, true, true, true, -37.0, 142.0, pinUsbVolume = true)
         val saved = DefaultOutputProcessingConfig
         val record = PumperProtocol.encodeOutputProcessing(live)
-        assertArrayEquals(byteArrayOf(0x0f, 0, 0x8c.toByte(), 0xf1.toByte(), 0x78, 0x37, 0, 0), record)
+        assertArrayEquals(byteArrayOf(0x1f, 0, 0x8c.toByte(), 0xf1.toByte(), 0x78, 0x37, 0, 0), record)
         assertEquals(live, PumperProtocol.decodeOutputProcessing(record))
 
         val state = OutputProcessingState(live, saved, true)
@@ -264,7 +264,7 @@ class PumperProtocolTest {
             }
         }
         assertThrows(ProtocolException::class.java) {
-            PumperProtocol.decodeOutputProcessing(valid.copyOf().also { it[0] = 0x10 })
+            PumperProtocol.decodeOutputProcessing(valid.copyOf().also { it[0] = 0x20 })
         }
         assertThrows(ProtocolException::class.java) {
             PumperProtocol.encodeOutputProcessing(DefaultOutputProcessingConfig.copy(balancePercent = -100.01))

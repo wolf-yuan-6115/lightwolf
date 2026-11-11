@@ -57,8 +57,18 @@ static void test_host_volume(void) {
   assert(audio_host_control_set(0, 1, payload, 1, volume, mute));
   assert(mute[0] == 1);
   float gain[2];
-  audio_effective_gains(volume, mute, gain);
+  audio_effective_gains(volume, mute, false, gain);
   assert(gain[0] == 0.0f && gain[1] == 0.0f);
+  audio_effective_gains(volume, mute, true, gain);
+  assert(gain[0] == 0.0f && gain[1] == 0.0f);
+  mute[0] = 0;
+  audio_effective_gains(volume, mute, true, gain);
+  assert(gain[0] == 1.0f && gain[1] == 1.0f);
+  volume[0] = -2560;
+  audio_effective_gains(volume, mute, true, gain);
+  assert(gain[0] == 1.0f && gain[1] == 1.0f);
+  audio_effective_gains(volume, mute, false, gain);
+  assert(fabsf(gain[0] - powf(10.0f, -0.5f)) < 0.00001f);
 }
 
 static void process_after_settle(unsigned rate, float in_l, float in_r, float *left,

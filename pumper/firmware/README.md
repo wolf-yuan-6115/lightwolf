@@ -126,3 +126,11 @@ ctest --test-dir /tmp/pumper-firmware-tests --output-on-failure
 - If USB audio or its isochronous endpoint does not work, verify the TinyUSB
   fixes above, configure a fresh build directory, and flash the newly built
   UF2.
+
+Firmware 4.1 supports **Follow USB volume** in output settings. Turn it off to
+pin the USB-volume stage to 100%; Master volume displays **Pinned**. USB mute
+still works. Changes preview immediately; use **Save output** to retain them
+after power cycling. Re-enabling follows the latest computer volume. Disabling
+can increase loudness. EQ, output processing, and the output safety ceiling still
+apply. Use updated controllers with pinned devices; older controllers cannot
+decode the new setting.

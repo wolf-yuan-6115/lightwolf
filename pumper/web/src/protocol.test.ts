@@ -55,8 +55,8 @@ describe("Pumper HID protocol", () => {
   });
 
   it("round-trips output processing and decodes live, saved, and dirty state", () => {
-    const config = { mono: true, swap: true, invertLeft: true, invertRight: false, balancePercent: -25.5, widthPercent: 150.25 };
-    expect(Array.from(encodeOutputProcessing(config))).toEqual([7, 0, 0x0a, 0xf6, 0xb1, 0x3a, 0, 0]);
+    const config = { pinUsbVolume: true, mono: true, swap: true, invertLeft: true, invertRight: false, balancePercent: -25.5, widthPercent: 150.25 };
+    expect(Array.from(encodeOutputProcessing(config))).toEqual([23, 0, 0x0a, 0xf6, 0xb1, 0x3a, 0, 0]);
     expect(decodeOutputProcessing(encodeOutputProcessing(config))).toEqual(config);
     const payload = new Uint8Array(17);
     payload.set(encodeOutputProcessing(config));
@@ -70,7 +70,7 @@ describe("Pumper HID protocol", () => {
       expect(() => encodeOutputProcessing({ ...defaultOutputProcessing, ...patch })).toThrow();
     }
     const payload = encodeOutputProcessing(defaultOutputProcessing);
-    payload[0] = 0x10;
+    payload[0] = 0x20;
     expect(() => decodeOutputProcessing(payload)).toThrow();
     payload[0] = 0;
     payload[6] = 1;

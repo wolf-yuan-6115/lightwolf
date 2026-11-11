@@ -197,8 +197,8 @@ Do not vendor or commit the patched SDK into Pumper.
   Jetpack Compose/Material 3. Keep debug-only simulator code out of release
   builds.
 - Set the Android `versionName` to `1.<firmware major>.<firmware minor>` for
-  the newest firmware version it supports (currently `1.4.0` for firmware
-  4.0). Update it when supported firmware changes, and increment `versionCode`
+  the newest firmware version it supports (currently `1.4.1` for firmware
+  4.1). Update it when supported firmware changes, and increment `versionCode`
   for every release.
 - Use the same fixed-size HID protocol and persistence semantics as the web
   controller. Crossfeed, output processing, and EQ profile saves remain
@@ -251,3 +251,13 @@ Run Android verification from `android/`:
 
 Before handing off, run `git diff --check` and report any verification that
 could not be performed.
+
+### USB volume pinning (firmware 4.1)
+
+- Output-processing flag `0x10` pins USB gain to unity while honoring mute.
+  Preserve host requested volume for USB/HID readback and restoring follow mode.
+- Follow USB volume defaults on; pinning previews through the 10 ms gain ramp
+  and persists only through SaveOutputProcessing, using flash schema 5. Older
+  banks migrate with pinning off and without unsolicited writes.
+- Controllers gate the toggle at 4.1 and show `Pinned` from acknowledged state.
+  The output record size and protocol/status/telemetry layouts remain unchanged.

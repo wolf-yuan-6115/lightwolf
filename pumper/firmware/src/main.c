@@ -314,7 +314,7 @@ static void publish_audio_controls(void) {
   __atomic_add_fetch(&snapshot->sequence, 1u, __ATOMIC_RELAXED);
   snapshot->crossfeed = s_crossfeed_live;
   snapshot->output = s_output_live;
-  audio_effective_gains(s_volume_q8, s_mute, snapshot->gains);
+  audio_effective_gains(s_volume_q8, s_mute, (s_output_live.flags & OUTPUT_PROCESSING_PIN_USB_VOLUME) != 0, snapshot->gains);
   snapshot->generation = ++s_audio_controls_generation;
   __atomic_add_fetch(&snapshot->sequence, 1u, __ATOMIC_RELEASE);
   __atomic_store_n(&s_controls_snapshot_index, index, __ATOMIC_RELEASE);
@@ -708,7 +708,7 @@ static void hid_response_status(uint8_t opcode, uint16_t request_id) {
   hid_response_prepare(opcode, request_id, EQ_STATUS_OK, EQ_PROTOCOL_STATUS_PAYLOAD_SIZE);
   uint8_t *payload = &s_hid_response[EQ_PROTOCOL_HEADER_SIZE];
   payload[0] = 4u;
-  payload[1] = 0u;
+  payload[1] = 1u;
   payload[2] = EQ_NUM_FILTERS;
   payload[3] = (s_streaming_active ? 0x01u : 0u) | (config_is_dirty() ? 0x02u : 0u) |
                (config.enabled ? 0x04u : 0u);

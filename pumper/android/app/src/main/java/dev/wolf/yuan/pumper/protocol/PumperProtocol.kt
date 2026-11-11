@@ -125,6 +125,7 @@ data class DeviceStatus(
     val firmwareVersion: String get() = "$firmwareMajor.$firmwareMinor"
     val supportsDeviceReset: Boolean get() = firmwareMajor > 1 || (firmwareMajor == 1 && firmwareMinor >= 7)
     val supportsAudioControls: Boolean get() = firmwareMajor > 2 || (firmwareMajor == 2 && firmwareMinor >= 2)
+    val supportsUsbVolumePinning: Boolean get() = firmwareMajor > 4 || (firmwareMajor == 4 && firmwareMinor >= 1)
     val supportsFirmware3Controls: Boolean get() = firmwareMajor >= 3
     val supportsSpectrum: Boolean get() = firmwareMajor > 3 || (firmwareMajor == 3 && firmwareMinor >= 5)
     val supportsTelemetry: Boolean get() = firmwareMajor > 3 || (firmwareMajor == 3 && firmwareMinor >= 4)
@@ -193,6 +194,7 @@ data class OutputProcessingConfig(
     val invertRight: Boolean,
     val balancePercent: Double,
     val widthPercent: Double,
+    val pinUsbVolume: Boolean = false,
 )
 
 data class OutputProcessingState(
@@ -480,6 +482,7 @@ object PumperProtocol {
             if (config.swap) flags = flags or 0x02
             if (config.invertLeft) flags = flags or 0x04
             if (config.invertRight) flags = flags or 0x08
+            if (config.pinUsbVolume) flags = flags or 0x10
             payload[0] = flags.toByte()
             payload.putI16(2, (config.balancePercent * 100.0).roundToInt())
             payload.putU16(4, (config.widthPercent * 100.0).roundToInt())
@@ -489,10 +492,11 @@ object PumperProtocol {
     @Throws(ProtocolException::class)
     fun decodeOutputProcessing(payload: ByteArray): OutputProcessingConfig {
         if (payload.size != 8 || payload.u8(1) != 0 || payload.u8(6) != 0 || payload.u8(7) != 0 ||
-            payload.u8(0) and 0xf0 != 0
+            payload.u8(0) and 0xe0 != 0
         ) throw ProtocolException("Invalid output processing response")
         val flags = payload.u8(0)
         return OutputProcessingConfig(
+            pinUsbVolume = flags and 0x10 != 0,
             mono = flags and 0x01 != 0,
             swap = flags and 0x02 != 0,
             invertLeft = flags and 0x04 != 0,

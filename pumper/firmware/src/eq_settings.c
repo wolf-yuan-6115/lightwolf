@@ -10,7 +10,7 @@
 
 #define PROFILE_BANK_MAGIC 0x32424c50u
 #define PROFILE_RECORD_MAGIC 0x32465250u
-#define PROFILE_SCHEMA_VERSION 4u
+#define PROFILE_SCHEMA_VERSION 5u
 #define CROSSFEED_PAGE_OFFSET ((EQ_PROFILE_COUNT + 1u) * FLASH_PAGE_SIZE)
 #define CROSSFEED_MAGIC 0x33464350u
 #define OUTPUT_PAGE_OFFSET ((EQ_PROFILE_COUNT + 2u) * FLASH_PAGE_SIZE)
@@ -136,6 +136,7 @@ static bank_header_t read_bank_header(uint8_t bank) {
         !output_processing_decode(record + 4u, OUTPUT_PROCESSING_RECORD_SIZE, &result.output))
       return result;
   }
+  if (result.schema < 5u) result.output.flags &= ~OUTPUT_PROCESSING_PIN_USB_VOLUME;
   result.valid = true;
   result.default_profile = header[7];
   result.generation = eq_protocol_read_u32(header + 8u);

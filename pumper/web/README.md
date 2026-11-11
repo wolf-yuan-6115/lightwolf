@@ -84,3 +84,11 @@ pnpm deploy
 
 Configure the Worker's custom domain separately in Cloudflare if deploying to
 `pumper.wolf-yuan.dev`.
+
+Firmware 4.1 supports **Follow USB volume** in output settings. Turn it off to
+pin the USB-volume stage to 100%; Master volume displays **Pinned**. USB mute
+still works. Changes preview immediately; use **Save output** to retain them
+after power cycling. Re-enabling follows the latest computer volume. Disabling
+can increase loudness. EQ, output processing, and the output safety ceiling still
+apply. Use updated controllers with pinned devices; older controllers cannot
+decode the new setting.

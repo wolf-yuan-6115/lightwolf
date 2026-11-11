@@ -7,6 +7,7 @@
 #define CROSSFEED_STATE_SIZE 17u
 #define OUTPUT_PROCESSING_RECORD_SIZE 8u
 #define OUTPUT_PROCESSING_STATE_SIZE 17u
+#define OUTPUT_PROCESSING_PIN_USB_VOLUME 0x10u
 #define OUTPUT_PROCESSING_MONO 0x01u
 #define OUTPUT_PROCESSING_SWAP 0x02u
 #define OUTPUT_PROCESSING_INVERT_LEFT 0x04u
@@ -48,7 +49,7 @@ bool output_processing_decode(uint8_t const *payload, size_t length,
                               output_processing_config_t *config);
 void output_processing_state_encode(uint8_t *payload, output_processing_config_t const *live,
                                     output_processing_config_t const *saved);
-void audio_effective_gains(int16_t const volume[3], int8_t const mute[3], float gains[2]);
+void audio_effective_gains(int16_t const volume[3], int8_t const mute[3], bool pinned, float gains[2]);
 void audio_controls_init(uint32_t rate, crossfeed_config_t const *crossfeed,
                          output_processing_config_t const *output);
 void audio_controls_reset(uint32_t rate);

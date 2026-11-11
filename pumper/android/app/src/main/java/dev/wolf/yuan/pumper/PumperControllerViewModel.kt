@@ -155,7 +155,7 @@ class PumperControllerViewModel(application: Application) : AndroidViewModel(app
                     audioControls = null,
                     crossfeed = null,
                     crossfeedSaving = false,
-                    outputProcessing = null,
+                    outputProcessing = null, acknowledgedPin = false,
                     outputProcessingSaving = false,
                     busy = false,
                     confirmation = null,
@@ -361,6 +361,7 @@ class PumperControllerViewModel(application: Application) : AndroidViewModel(app
             _state.update { it.copy(error = error.message ?: "Invalid output processing settings.") }
             return
         }
+        if (config.pinUsbVolume && !current.status.supportsUsbVolumePinning) return
         val state = current.outputProcessing ?: return
         outputProcessingRevision++
         pendingOutputProcessing = verified
@@ -390,7 +391,7 @@ class PumperControllerViewModel(application: Application) : AndroidViewModel(app
                 )
                 if (activeSession != sessionRevision) return@launch
                 outputProcessingRevision++
-                _state.update { it.copy(outputProcessing = verified, message = "Output processing saved for power-on.") }
+                _state.update { it.copy(acknowledgedPin = verified.live.pinUsbVolume, outputProcessing = verified, message = "Output processing saved for power-on.") }
             } catch (error: Throwable) {
                 if (activeSession == sessionRevision) {
                     rereadOutputProcessing()
@@ -459,6 +460,7 @@ class PumperControllerViewModel(application: Application) : AndroidViewModel(app
                 telemetry = nextTelemetry,
                 audioControls = nextAudio,
                 crossfeed = nextCrossfeed,
+                acknowledgedPin = if (it.outputProcessing == null) nextOutputProcessing?.live?.pinUsbVolume == true else it.acknowledgedPin,
                 outputProcessing = nextOutputProcessing,
                 profiles = nextProfiles,
                 selectedProfile = nextProfiles.activeProfile,
@@ -498,7 +500,7 @@ class PumperControllerViewModel(application: Application) : AndroidViewModel(app
                         audioControls = null,
                         crossfeed = null,
                         crossfeedSaving = false,
-                        outputProcessing = null,
+                        outputProcessing = null, acknowledgedPin = false,
                         outputProcessingSaving = false,
                         busy = false,
                         error = "Pumper disconnected.",
@@ -542,7 +544,7 @@ class PumperControllerViewModel(application: Application) : AndroidViewModel(app
                             !status.supportsFirmware3Controls
                         ) {
                             clearPendingOutputProcessing()
-                            _state.update { it.copy(outputProcessing = null, outputProcessingSaving = false) }
+                            _state.update { it.copy(outputProcessing = null, acknowledgedPin = false, outputProcessingSaving = false) }
                         }
                         _state.update { it.copy(status = status, telemetry = telemetry) }
                         if (_state.value.autoPreamp && oldRate != status.sampleRateHz) {
@@ -636,7 +638,7 @@ class PumperControllerViewModel(application: Application) : AndroidViewModel(app
                 activeClient.request(Opcode.SetOutputProcessing, PumperProtocol.encodeOutputProcessing(config)).payload,
             )
             if (activeSession == sessionRevision && editRevision == outputProcessingRevision) {
-                _state.update { it.copy(outputProcessing = verified) }
+                _state.update { it.copy(acknowledgedPin = verified.live.pinUsbVolume, outputProcessing = verified) }
             }
             return true
         } catch (error: Throwable) {
@@ -701,7 +703,7 @@ class PumperControllerViewModel(application: Application) : AndroidViewModel(app
                 PumperProtocol.decodeOutputProcessingState(activeClient.request(Opcode.GetOutputProcessing).payload)
             }.onSuccess { output ->
                 if (outputEditRevision == outputProcessingRevision && pendingOutputProcessing == null) {
-                    _state.update { it.copy(outputProcessing = output) }
+                    _state.update { it.copy(acknowledgedPin = output.live.pinUsbVolume, outputProcessing = output) }
                 }
             }
         }
@@ -736,7 +738,7 @@ class PumperControllerViewModel(application: Application) : AndroidViewModel(app
         ) return
         outputProcessingRevision++
         pendingOutputProcessing = null
-        _state.update { it.copy(outputProcessing = verified) }
+        _state.update { it.copy(acknowledgedPin = verified.live.pinUsbVolume, outputProcessing = verified) }
     }
 
     private fun clearPendingOutputProcessing() {

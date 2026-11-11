@@ -17,6 +17,7 @@ import {
   type OutputProcessingState,
   outputProcessingConfigsEqual,
   supportsAudioControls,
+  supportsUsbVolumePinning,
   supportsFirmware3Controls,
 } from "./protocol";
 
@@ -30,6 +31,8 @@ export function useAudioSettings(
   onNotice: (message: string) => void,
 ) {
   const supported = firmwareVersion !== undefined && supportsAudioControls(firmwareVersion);
+  const pinSupported = firmwareVersion !== undefined && supportsUsbVolumePinning(firmwareVersion);
+  const [acknowledgedPin, setAcknowledgedPin] = useState(false);
   const outputSupported = firmwareVersion !== undefined && supportsFirmware3Controls(firmwareVersion);
   const [audio, setAudio] = useState<AudioControls | null>(null);
   const [crossfeed, setCrossfeed] = useState<CrossfeedState | null>(null);
@@ -60,6 +63,7 @@ export function useAudioSettings(
   const applyOutputState = useCallback((next: OutputProcessingState) => {
     currentOutput.current = next;
     setOutputProcessing(next);
+    setAcknowledgedPin(next.live.pinUsbVolume);
   }, []);
 
   const enqueue = useCallback((operation: (isCurrent: () => boolean) => Promise<void>) => {
@@ -114,6 +118,7 @@ export function useAudioSettings(
     setAudio(null);
     setCrossfeed(null);
     setOutputProcessing(null);
+    setAcknowledgedPin(false);
     setSavingCrossfeed(false);
     setSavingOutput(false);
     void refresh();
@@ -224,10 +229,13 @@ export function useAudioSettings(
 
   const updateOutput = useCallback((patch: Partial<OutputProcessingConfig>) => {
     if (!outputActive.current || !currentOutput.current || savingOutputRef.current) return;
+    if (patch.pinUsbVolume && !pinSupported) return;
     try {
       const live = decodeOutputProcessing(encodeOutputProcessing({ ...currentOutput.current.live, ...patch }));
       outputRevision.current++;
-      applyOutputState({ ...currentOutput.current, live, dirty: !outputProcessingConfigsEqual(live, currentOutput.current.saved) });
+      const next = { ...currentOutput.current, live, dirty: !outputProcessingConfigsEqual(live, currentOutput.current.saved) };
+      currentOutput.current = next;
+      setOutputProcessing(next);
       pendingOutput.current = live;
       if (outputTimer.current === null) {
         outputTimer.current = setTimeout(() => { void flushOutput().catch(() => undefined); }, previewIntervalMs);
@@ -235,7 +243,7 @@ export function useAudioSettings(
     } catch (reason) {
       onError(reason instanceof Error ? reason.message : "Invalid output processing settings");
     }
-  }, [applyOutputState, flushOutput, onError]);
+  }, [applyOutputState, flushOutput, onError, pinSupported]);
 
   const saveOutput = useCallback(async () => {
     if (!outputActive.current || !currentOutput.current?.dirty || savingOutputRef.current) return;
@@ -267,6 +275,8 @@ export function useAudioSettings(
   return {
     supported,
     outputSupported,
+    pinSupported,
+    acknowledgedPin,
     audio,
     crossfeed,
     outputProcessing,

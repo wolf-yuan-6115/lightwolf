@@ -32,6 +32,7 @@ data class ControllerUiState(
     val audioControls: AudioControls? = null,
     val crossfeed: CrossfeedState? = null,
     val crossfeedSaving: Boolean = false,
+    val acknowledgedPin: Boolean = false,
     val outputProcessing: OutputProcessingState? = null,
     val outputProcessingSaving: Boolean = false,
     val profiles: ProfileState = ProfileState(10, 0, 0, 0, 0),

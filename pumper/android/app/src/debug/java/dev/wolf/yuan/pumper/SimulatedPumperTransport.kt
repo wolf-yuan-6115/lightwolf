@@ -240,7 +240,7 @@ internal class SimulatedPumperTransport : PumperTransport {
 
     private fun encodeStatus(): ByteArray = ByteArray(48).also { payload ->
         payload[0] = 4
-        payload[1] = 0
+        payload[1] = 1
         payload[2] = config.bands.size.toByte()
         var flags = 0x01
         if (config != storedProfiles[activeProfile]) flags = flags or 0x02

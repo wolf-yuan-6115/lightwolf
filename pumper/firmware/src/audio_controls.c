@@ -36,7 +36,7 @@ bool crossfeed_decode(uint8_t const *p, size_t n, crossfeed_config_t *c) {
 }
 
 bool output_processing_validate(output_processing_config_t const *c) {
-  return c && !(c->flags & 0xf0u) && c->balance_bp >= -10000 && c->balance_bp <= 10000 &&
+  return c && !(c->flags & 0xe0u) && c->balance_bp >= -10000 && c->balance_bp <= 10000 &&
          c->width_bp <= 20000u;
 }
 bool output_processing_equal(output_processing_config_t const *a,
@@ -82,10 +82,10 @@ void output_processing_state_encode(uint8_t *p, output_processing_config_t const
   output_processing_encode(p, live); output_processing_encode(p + 8, saved);
   p[16] = !output_processing_equal(live, saved);
 }
-void audio_effective_gains(int16_t const v[3], int8_t const m[3], float g[2]) {
+void audio_effective_gains(int16_t const v[3], int8_t const m[3], bool pinned, float g[2]) {
   for (unsigned i = 0; i < 2; i++) {
     int db = (int)v[0] + v[i + 1];
-    g[i] = (m[0] || m[i + 1]) ? 0.0f : db == 0 ? 1.0f : powf(10.0f, (float)db / 5120.0f);
+    g[i] = (m[0] || m[i + 1]) ? 0.0f : (pinned || db == 0) ? 1.0f : powf(10.0f, (float)db / 5120.0f);
   }
 }
 

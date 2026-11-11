@@ -127,7 +127,7 @@ private fun UsbAudioCard(state: ControllerUiState, supported: Boolean, modifier:
                     LabeledValue(
                         "Master volume",
                         master?.let {
-                            val volume = "${formatDb(it.volumeDb)} dB"
+                            val volume = if (state.acknowledgedPin) "Pinned" else "${formatDb(it.volumeDb)} dB"
                             if (it.muted) "Muted · $volume" else volume
                         } ?: "-",
                     ),
@@ -242,6 +242,12 @@ private fun OutputProcessingCard(
         }
         val config = state.outputProcessing?.live ?: DefaultOutputProcessingConfig
         val editable = !state.outputProcessingSaving && !state.busy
+        if (state.status?.supportsUsbVolumePinning == true) {
+            OutputSwitch("Follow USB volume", "output-follow-usb-volume", !config.pinUsbVolume, editable && state.outputProcessing != null) {
+                haptics.toggle(it)
+                onChange(config.copy(pinUsbVolume = !it))
+            }
+        }
         OutputSwitch("Mono", "output-mono", config.mono, editable) {
             haptics.toggle(it)
             onChange(config.copy(mono = it))

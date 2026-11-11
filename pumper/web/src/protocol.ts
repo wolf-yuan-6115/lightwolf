@@ -127,6 +127,7 @@ export const defaultCrossfeed: CrossfeedConfig = {
 };
 
 export enum OutputProcessingFlag {
+  PinUsbVolume = 0x10,
   Mono = 0x01,
   Swap = 0x02,
   InvertLeft = 0x04,
@@ -134,6 +135,7 @@ export enum OutputProcessingFlag {
 }
 
 export interface OutputProcessingConfig {
+  pinUsbVolume: boolean;
   mono: boolean;
   swap: boolean;
   invertLeft: boolean;
@@ -149,6 +151,7 @@ export interface OutputProcessingState {
 }
 
 export const defaultOutputProcessing: OutputProcessingConfig = {
+  pinUsbVolume: false,
   mono: false,
   swap: false,
   invertLeft: false,
@@ -156,6 +159,8 @@ export const defaultOutputProcessing: OutputProcessingConfig = {
   balancePercent: 0,
   widthPercent: 100,
 };
+
+export function supportsUsbVolumePinning(version: string): boolean { return firmwareAtLeast(version, 4, 1); }
 
 function firmwareAtLeast(firmwareVersion: string, requiredMajor: number, requiredMinor: number): boolean {
   const match = /^(\d+)\.(\d+)$/.exec(firmwareVersion);
@@ -265,7 +270,8 @@ export function encodeOutputProcessing(config: OutputProcessingConfig): Uint8Arr
   payload[0] = (config.mono ? OutputProcessingFlag.Mono : 0) |
     (config.swap ? OutputProcessingFlag.Swap : 0) |
     (config.invertLeft ? OutputProcessingFlag.InvertLeft : 0) |
-    (config.invertRight ? OutputProcessingFlag.InvertRight : 0);
+    (config.invertRight ? OutputProcessingFlag.InvertRight : 0) |
+    (config.pinUsbVolume ? OutputProcessingFlag.PinUsbVolume : 0);
   view.setInt16(2, Math.round(config.balancePercent * 100), true);
   view.setUint16(4, Math.round(config.widthPercent * 100), true);
   return payload;
@@ -273,12 +279,13 @@ export function encodeOutputProcessing(config: OutputProcessingConfig): Uint8Arr
 
 export function decodeOutputProcessing(payload: Uint8Array): OutputProcessingConfig {
   if (payload.length !== 8 || payload[1] !== 0 || payload[6] !== 0 || payload[7] !== 0 ||
-      (payload[0] & ~0x0f) !== 0) {
+      (payload[0] & ~0x1f) !== 0) {
     throw new Error("Invalid output processing response");
   }
   const view = viewFor(payload);
   const flags = payload[0];
   const config = {
+    pinUsbVolume: (flags & OutputProcessingFlag.PinUsbVolume) !== 0,
     mono: (flags & OutputProcessingFlag.Mono) !== 0,
     swap: (flags & OutputProcessingFlag.Swap) !== 0,
     invertLeft: (flags & OutputProcessingFlag.InvertLeft) !== 0,
@@ -300,7 +307,7 @@ export function decodeOutputProcessingState(payload: Uint8Array): OutputProcessi
 }
 
 export function outputProcessingConfigsEqual(left: OutputProcessingConfig, right: OutputProcessingConfig): boolean {
-  return left.mono === right.mono && left.swap === right.swap && left.invertLeft === right.invertLeft &&
+  return left.pinUsbVolume === right.pinUsbVolume && left.mono === right.mono && left.swap === right.swap && left.invertLeft === right.invertLeft &&
     left.invertRight === right.invertRight && left.balancePercent === right.balancePercent &&
     left.widthPercent === right.widthPercent;
 }
