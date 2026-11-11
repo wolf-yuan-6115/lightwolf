@@ -93,7 +93,7 @@ internal class SimulatedPumperTransport : PumperTransport {
         }
         val responsePayload = handle(opcode, payload)
         _reports.emit(response(opcode, requestId, responsePayload))
-        if (opcode == Opcode.RestartDevice || opcode == Opcode.EnterBootsel) {
+        if (opcode == Opcode.FactoryReset || opcode == Opcode.RestartDevice || opcode == Opcode.EnterBootsel) {
             scope.launch {
                 delay(80)
                 _disconnects.emit(Unit)
@@ -223,6 +223,21 @@ internal class SimulatedPumperTransport : PumperTransport {
             meterJob = null
             byteArrayOf()
         }
+        Opcode.FactoryReset -> {
+            require(payload.isEmpty())
+            storedProfiles.clear()
+            config = DefaultEqConfig
+            activeProfile = 0
+            persistedProfile = 0
+            configGeneration = 1L
+            savedGeneration = 1L
+            bankGeneration = 0L
+            liveCrossfeed = DefaultCrossfeedConfig
+            savedCrossfeed = DefaultCrossfeedConfig
+            liveOutputProcessing = DefaultOutputProcessingConfig
+            savedOutputProcessing = DefaultOutputProcessingConfig
+            byteArrayOf()
+        }
         Opcode.RestartDevice, Opcode.EnterBootsel -> byteArrayOf()
         Opcode.WriteFlash, Opcode.MeterLevel -> byteArrayOf()
     }
@@ -240,7 +255,7 @@ internal class SimulatedPumperTransport : PumperTransport {
 
     private fun encodeStatus(): ByteArray = ByteArray(48).also { payload ->
         payload[0] = 4
-        payload[1] = 1
+        payload[1] = 2
         payload[2] = config.bands.size.toByte()
         var flags = 0x01
         if (config != storedProfiles[activeProfile]) flags = flags or 0x02

@@ -78,3 +78,8 @@ after power cycling. Re-enabling follows the latest computer volume. Disabling
 can increase loudness. EQ, output processing, and the output safety ceiling still
 apply. Use updated controllers with pinned devices; older controllers cannot
 decode the new setting.
+
+Firmware 4.2 adds **Factory reset** beside Restart and firmware update in the
+controllers. After confirmation, it permanently erases all saved profiles,
+default-profile selection, crossfeed, and output settings, then restarts.
+Unlike live EQ Restore defaults, this clears saved settings.

@@ -16,6 +16,7 @@ typedef struct {
 } eq_profile_state_t;
 
 void eq_settings_core_init(void);
+bool eq_settings_factory_reset(void);
 void eq_settings_get_crossfeed(crossfeed_config_t *config);
 bool eq_settings_save_crossfeed(crossfeed_config_t const *config);
 void eq_settings_get_output_processing(output_processing_config_t *config);

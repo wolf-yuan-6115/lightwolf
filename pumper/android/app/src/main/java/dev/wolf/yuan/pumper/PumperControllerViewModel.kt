@@ -276,6 +276,9 @@ class PumperControllerViewModel(application: Application) : AndroidViewModel(app
     }
 
     fun requestRestoreDefaults() = requestConfirmation(Confirmation.RestoreDefaults)
+    fun requestFactoryReset() {
+        if (_state.value.status?.supportsFactoryReset == true) requestConfirmation(Confirmation.FactoryReset)
+    }
     fun requestRestart() = requestConfirmation(Confirmation.Restart)
     fun requestBootsel() = requestConfirmation(Confirmation.Bootsel)
 
@@ -291,6 +294,10 @@ class PumperControllerViewModel(application: Application) : AndroidViewModel(app
                 Confirmation.SaveProfile -> saveProfile()
                 Confirmation.RestoreDefaults -> restoreDefaults()
                 is Confirmation.SwitchProfile -> loadProfile(action.index)
+                Confirmation.FactoryReset -> {
+                    check(_state.value.status?.supportsFactoryReset == true)
+                    resetDevice(Opcode.FactoryReset, "Factory reset complete. Pumper is restarting.")
+                }
                 Confirmation.Restart -> resetDevice(Opcode.RestartDevice, "Pumper is restarting.")
                 Confirmation.Bootsel -> resetDevice(Opcode.EnterBootsel, "Pumper entered BOOTSEL. Copy a UF2 to the RP2350 USB drive.")
             }

@@ -154,6 +154,7 @@ static device_reset_action_t s_device_reset_action = DEVICE_RESET_NONE;
 static bool s_device_reset_response_in_flight = false;
 static uint64_t s_device_reset_deadline_us = 0u;
 typedef enum {
+  FLASH_ACTION_FACTORY_RESET,
   FLASH_ACTION_SAVE_PROFILE,
   FLASH_ACTION_SET_DEFAULT_PROFILE,
   FLASH_ACTION_DELETE_PROFILE,
@@ -708,7 +709,7 @@ static void hid_response_status(uint8_t opcode, uint16_t request_id) {
   hid_response_prepare(opcode, request_id, EQ_STATUS_OK, EQ_PROTOCOL_STATUS_PAYLOAD_SIZE);
   uint8_t *payload = &s_hid_response[EQ_PROTOCOL_HEADER_SIZE];
   payload[0] = 4u;
-  payload[1] = 1u;
+  payload[1] = 2u;
   payload[2] = EQ_NUM_FILTERS;
   payload[3] = (s_streaming_active ? 0x01u : 0u) | (config_is_dirty() ? 0x02u : 0u) |
                (config.enabled ? 0x04u : 0u);
@@ -966,6 +967,19 @@ static void hid_process_command(eq_protocol_packet_t const *packet) {
       break;
     }
 
+    case EQ_OPCODE_FACTORY_RESET:
+      if (packet->payload_length != 0u) {
+        hid_response_prepare(packet->opcode, packet->request_id, EQ_STATUS_INVALID_LENGTH, 0u);
+      } else if (s_flash_write_pending) {
+        hid_response_prepare(packet->opcode, packet->request_id, EQ_STATUS_BUSY, 0u);
+      } else {
+        s_flash_write_pending = true;
+        s_flash_request_opcode = packet->opcode;
+        s_flash_request_id = packet->request_id;
+        s_flash_action = FLASH_ACTION_FACTORY_RESET;
+      }
+      break;
+
     case EQ_OPCODE_WRITE_FLASH:
       if (packet->payload_length != 0u) {
         hid_response_prepare(packet->opcode, packet->request_id, EQ_STATUS_INVALID_LENGTH, 0u);
@@ -1178,6 +1192,32 @@ static void hid_control_task(void) {
     uint32_t generation;
     eq_config_t config = config_snapshot(&generation);
     bool succeeded;
+    if (s_flash_action == FLASH_ACTION_FACTORY_RESET) {
+      succeeded = eq_settings_factory_reset();
+      if (succeeded) {
+        s_meter_active = false;
+        s_meter_configured = false;
+        meter_reset();
+        stop_spectrum_stream();
+        s_device_reset_action = DEVICE_RESET_RESTART;
+        hid_response_prepare(s_flash_request_opcode, s_flash_request_id, EQ_STATUS_OK, 0u);
+      } else {
+        telemetry_record_flash_failure();
+        eq_settings_get_crossfeed(&s_crossfeed_saved);
+        eq_settings_get_output_processing(&s_output_saved);
+        hid_response_prepare(s_flash_request_opcode, s_flash_request_id, EQ_STATUS_STORAGE_ERROR, 0u);
+        if (resume_stream) {
+          tud_audio_clear_ep_out_ff();
+          s_stream_generation++;
+          telemetry_stream_started(time_us_64(), s_stream_generation);
+          s_streaming_active = true;
+          s_feedback_next_update_us = 0u;
+        }
+        i2s_out_exit_flash_mute(resume_stream);
+      }
+      s_flash_write_pending = false;
+      return;
+    }
     if (s_flash_action == FLASH_ACTION_SAVE_PROFILE) {
       succeeded = eq_settings_save_profile(s_flash_profile_index, &config, generation);
     } else if (s_flash_action == FLASH_ACTION_SET_DEFAULT_PROFILE) {

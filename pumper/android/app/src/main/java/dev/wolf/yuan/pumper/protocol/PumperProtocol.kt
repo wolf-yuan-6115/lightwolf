@@ -45,6 +45,7 @@ enum class Opcode(val value: Int) {
     SpectrumData(0x37),
     RestartDevice(0x40),
     EnterBootsel(0x41),
+    FactoryReset(0x42),
 }
 
 enum class ProtocolStatus(val value: Int) {
@@ -123,6 +124,7 @@ data class DeviceStatus(
     val i2sLowWaterFrames: Long?,
 ) {
     val firmwareVersion: String get() = "$firmwareMajor.$firmwareMinor"
+    val supportsFactoryReset: Boolean get() = firmwareMajor > 4 || (firmwareMajor == 4 && firmwareMinor >= 2)
     val supportsDeviceReset: Boolean get() = firmwareMajor > 1 || (firmwareMajor == 1 && firmwareMinor >= 7)
     val supportsAudioControls: Boolean get() = firmwareMajor > 2 || (firmwareMajor == 2 && firmwareMinor >= 2)
     val supportsUsbVolumePinning: Boolean get() = firmwareMajor > 4 || (firmwareMajor == 4 && firmwareMinor >= 1)

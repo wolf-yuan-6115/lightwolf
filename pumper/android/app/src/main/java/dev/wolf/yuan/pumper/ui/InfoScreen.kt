@@ -102,6 +102,13 @@ fun InfoScreen(
         ),
         InfoAction(
             icon = Icons.Outlined.RestartAlt,
+            label = "Factory reset",
+            supporting = if (status?.supportsFactoryReset == true) "Erase all saved settings and restart" else "Requires firmware 4.2 or newer",
+            onClick = controller::requestFactoryReset,
+            enabled = !state.deviceOperationBusy && status?.supportsFactoryReset == true,
+        ),
+        InfoAction(
+            icon = Icons.Outlined.RestartAlt,
             label = "Restart",
             supporting = if (status?.supportsDeviceReset == true) {
                 "Restart Pumper firmware"

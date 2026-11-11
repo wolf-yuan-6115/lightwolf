@@ -711,6 +711,46 @@ describe("Pumper controller", () => {
     expect(request).toHaveBeenCalledWith(Opcode.EnterBootsel);
   });
 
+  it("confirms factory reset and permits cancellation before sending", async () => {
+    const { request } = mockConnectedPumper(defaultConfig, undefined, [4, 2]);
+    render(<App />);
+    const info = await screen.findByRole("button", { name: "DAC info" });
+    await waitFor(() => expect(info).toBeEnabled());
+    fireEvent.click(info);
+    fireEvent.click(screen.getByRole("button", { name: "Factory reset" }));
+    expect(screen.getByText(/This cannot be undone/)).toBeInTheDocument();
+    expect(request).not.toHaveBeenCalledWith(Opcode.FactoryReset);
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(request).not.toHaveBeenCalledWith(Opcode.FactoryReset);
+    fireEvent.click(screen.getByRole("button", { name: "Factory reset" }));
+    fireEvent.click(screen.getByRole("button", { name: "Factory reset" }));
+    await waitFor(() => expect(request).toHaveBeenCalledWith(Opcode.FactoryReset));
+    expect(await screen.findByText("Factory reset complete. Pumper is restarting.")).toBeInTheDocument();
+  });
+
+  it("keeps factory reset errors visible without reporting success", async () => {
+    mockConnectedPumper(defaultConfig, (opcode) => opcode === Opcode.FactoryReset ? new Error("Storage erase failed") : null, [4, 2]);
+    render(<App />);
+    const info = await screen.findByRole("button", { name: "DAC info" });
+    await waitFor(() => expect(info).toBeEnabled());
+    fireEvent.click(info);
+    fireEvent.click(screen.getByRole("button", { name: "Factory reset" }));
+    fireEvent.click(screen.getByRole("button", { name: "Factory reset" }));
+    expect(await screen.findByText("Storage erase failed")).toBeInTheDocument();
+    expect(screen.queryByText("Factory reset complete. Pumper is restarting.")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Cancel" })).toBeEnabled();
+  });
+
+  it("disables factory reset on older firmware", async () => {
+    mockConnectedPumper(defaultConfig, undefined, [4, 1]);
+    render(<App />);
+    const info = await screen.findByRole("button", { name: "DAC info" });
+    await waitFor(() => expect(info).toBeEnabled());
+    fireEvent.click(info);
+    expect(screen.getByRole("button", { name: "Factory reset" })).toBeDisabled();
+    expect(screen.getByText("Requires firmware 4.2 or newer")).toBeInTheDocument();
+  });
+
   it("shows a static idle pipeline when telemetry is unavailable", async () => {
     mockConnectedPumper(defaultConfig, undefined, [3, 3]);
     render(<App />);

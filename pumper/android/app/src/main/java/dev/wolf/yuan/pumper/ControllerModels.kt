@@ -18,6 +18,7 @@ sealed interface Confirmation {
     data object SaveProfile : Confirmation
     data object RestoreDefaults : Confirmation
     data class SwitchProfile(val index: Int) : Confirmation
+    data object FactoryReset : Confirmation
     data object Restart : Confirmation
     data object Bootsel : Confirmation
 }

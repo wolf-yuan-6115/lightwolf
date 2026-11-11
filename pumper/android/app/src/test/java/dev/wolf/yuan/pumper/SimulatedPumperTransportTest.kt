@@ -17,6 +17,19 @@ import org.junit.Test
 @OptIn(ExperimentalCoroutinesApi::class)
 class SimulatedPumperTransportTest {
     @Test
+    fun `factory reset acknowledges then exposes empty settings`() = runTest {
+        val client = PumperClient(SimulatedPumperTransport(), backgroundScope)
+        runCurrent()
+        val status = PumperProtocol.decodeStatus(client.request(Opcode.Hello).payload)
+        assertTrue(status.supportsFactoryReset)
+        assertFalse(status.copy(firmwareMinor = 1).supportsFactoryReset)
+        assertTrue(client.request(Opcode.FactoryReset).payload.isEmpty())
+        val profiles = PumperProtocol.decodeProfileState(client.request(Opcode.GetProfiles).payload)
+        assertEquals(0, profiles.presentMask)
+        client.close()
+    }
+
+    @Test
     fun `simulator exposes firmware 3 master audio state`() = runTest {
         val client = PumperClient(SimulatedPumperTransport(), backgroundScope)
         runCurrent()
@@ -24,7 +37,7 @@ class SimulatedPumperTransportTest {
         val status = PumperProtocol.decodeStatus(client.request(Opcode.Hello).payload)
         val audio = PumperProtocol.decodeAudioControls(client.request(Opcode.GetAudioControls).payload)
 
-        assertEquals("4.1", status.firmwareVersion)
+        assertEquals("4.2", status.firmwareVersion)
         assertEquals(16, status.bitDepth)
         assertTrue(status.supportsAudioControls)
         assertTrue(status.supportsFirmware3Controls)

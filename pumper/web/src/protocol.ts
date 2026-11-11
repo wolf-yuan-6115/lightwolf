@@ -42,6 +42,7 @@ export enum Opcode {
   SpectrumData = 0x37,
   RestartDevice = 0x40,
   EnterBootsel = 0x41,
+  FactoryReset = 0x42,
 }
 
 export enum ProtocolStatus {
@@ -159,6 +160,8 @@ export const defaultOutputProcessing: OutputProcessingConfig = {
   balancePercent: 0,
   widthPercent: 100,
 };
+
+export function supportsFactoryReset(version: string): boolean { return firmwareAtLeast(version, 4, 2); }
 
 export function supportsUsbVolumePinning(version: string): boolean { return firmwareAtLeast(version, 4, 1); }
 

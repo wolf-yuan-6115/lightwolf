@@ -272,7 +272,21 @@ export function useAudioSettings(
     }
   }, [applyOutputState, enqueue, flushOutput, onError, onNotice, transport]);
 
+  const cancelPendingPreviews = () => {
+    session.current++;
+    refreshing.current = false;
+    crossfeedRevision.current++;
+    outputRevision.current++;
+    if (crossfeedTimer.current !== null) clearTimeout(crossfeedTimer.current);
+    if (outputTimer.current !== null) clearTimeout(outputTimer.current);
+    crossfeedTimer.current = null;
+    outputTimer.current = null;
+    pendingCrossfeed.current = null;
+    pendingOutput.current = null;
+  };
+
   return {
+    cancelPendingPreviews,
     supported,
     outputSupported,
     pinSupported,

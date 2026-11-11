@@ -35,12 +35,13 @@ import {
   ProfileState,
   ResponsePacket,
   supportsTelemetry,
+  supportsFactoryReset,
   supportsSpectrum,
   WidthMode,
 } from "./protocol";
 
 type Dialog = "clear" | "flash" | "defaults" | "set-default" | "switch" | null;
-type DeviceDialog = "info" | "restart" | "bootsel" | "bootsel-ready" | null;
+type DeviceDialog = "info" | "factory-reset" | "restart" | "bootsel" | "bootsel-ready" | null;
 type Theme = "light" | "dark";
 
 interface PendingPreviewUpdate {
@@ -690,20 +691,22 @@ export default function App() {
   };
 
   const confirmDeviceAction = async () => {
-    if (deviceDialog !== "restart" && deviceDialog !== "bootsel") return;
+    if (deviceActionPending || (deviceDialog !== "restart" && deviceDialog !== "bootsel" && deviceDialog !== "factory-reset")) return;
+    if (deviceDialog === "factory-reset" && !supportsFactoryReset(status?.firmwareVersion ?? "")) return;
     const action = deviceDialog;
     setDeviceActionPending(true);
     setError(null);
     clearTimers();
+    audioSettings.cancelPendingPreviews();
     expectedDisconnect.current = true;
     try {
-      await transport.current.request(action === "bootsel" ? Opcode.EnterBootsel : Opcode.RestartDevice);
+      await transport.current.request(action === "factory-reset" ? Opcode.FactoryReset : action === "bootsel" ? Opcode.EnterBootsel : Opcode.RestartDevice);
       window.setTimeout(() => { expectedDisconnect.current = false; }, 3000);
       if (action === "bootsel") {
         setDeviceDialog("bootsel-ready");
       } else {
         setDeviceDialog(null);
-        setNotice("Pumper is restarting");
+        setNotice(action === "factory-reset" ? "Factory reset complete. Pumper is restarting." : "Pumper is restarting");
       }
     } catch (reason) {
       expectedDisconnect.current = false;
@@ -988,6 +991,12 @@ export default function App() {
 
 
                 <div className="modal-action flex-col sm:flex-row">
+                  <div>
+                    <button className="btn btn-error btn-soft w-full" type="button" onClick={() => setDeviceDialog("factory-reset")} disabled={writing || audioSettings.saving || deviceActionPending || !supportsFactoryReset(status?.firmwareVersion ?? "")}>
+                      <Trash2 size={17} /> Factory reset
+                    </button>
+                    {!supportsFactoryReset(status?.firmwareVersion ?? "") && <p className="mt-1 text-xs text-base-content/70">Requires firmware 4.2 or newer</p>}
+                  </div>
                   <button className="btn btn-error btn-soft w-full sm:w-auto" type="button" onClick={() => setDeviceDialog("restart")} disabled={writing || audioSettings.saving}>
                     <Power size={17} /> Restart
                   </button>
@@ -1002,10 +1011,10 @@ export default function App() {
                   {deviceDialog === "bootsel-ready" ? <Upload size={22} /> : <AlertTriangle size={22} />}
                 </div>
                 <h2 className="text-lg font-semibold" id="device-dialog-title">
-                  {deviceDialog === "restart" ? "Restart DAC?" : deviceDialog === "bootsel" ? "Enter BOOTSEL mode?" : "Firmware update"}
+                  {deviceDialog === "factory-reset" ? "Factory reset Pumper?" : deviceDialog === "restart" ? "Restart DAC?" : deviceDialog === "bootsel" ? "Enter BOOTSEL mode?" : "Firmware update"}
                 </h2>
                 <p className="mt-2 text-sm leading-relaxed text-base-content/70">
-                  {deviceDialog === "restart"
+                  {deviceDialog === "factory-reset" ? "This permanently deletes all saved EQ profiles, the default profile selection, crossfeed settings, and output-processing settings. Audio will stop and Pumper will restart with factory defaults. This cannot be undone." : deviceDialog === "restart"
                     ? "Audio and the controller will disconnect. Unsaved live EQ, crossfeed, and output-processing edits will be lost; saved settings are unchanged."
                     : deviceDialog === "bootsel"
                       ? "Audio and the controller will disconnect, and unsaved live EQ, crossfeed, and output-processing edits will be lost. The DAC will appear as an RP2350 USB drive."
@@ -1016,10 +1025,10 @@ export default function App() {
                     <button className={secondaryButton} onClick={() => setDeviceDialog(null)}>Close</button>
                   ) : (
                     <>
-                      <button className={secondaryButton} onClick={() => setDeviceDialog("info")} disabled={deviceActionPending}>Back</button>
+                      <button className={secondaryButton} onClick={() => setDeviceDialog("info")} disabled={deviceActionPending}>{deviceDialog === "factory-reset" ? "Cancel" : "Back"}</button>
                       <button className={`${buttonBase} btn-error`} onClick={confirmDeviceAction} disabled={deviceActionPending}>
                         {deviceActionPending && <span className="loading loading-spinner loading-xs" aria-hidden="true" />}
-                        {deviceDialog === "restart" ? "Restart" : "Enter BOOTSEL"}
+                        {deviceDialog === "factory-reset" ? "Factory reset" : deviceDialog === "restart" ? "Restart" : "Enter BOOTSEL"}
                       </button>
                     </>
                   )}

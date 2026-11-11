@@ -340,6 +340,12 @@ private fun ConfirmationDialog(
             confirmLabel = "Discard and load"
             icon = Icons.Outlined.FolderOpen
         }
+        Confirmation.FactoryReset -> {
+            title = "Factory reset Pumper?"
+            body = "This permanently deletes all saved EQ profiles, the default profile selection, crossfeed settings, and output-processing settings. Audio will stop and Pumper will restart with factory defaults. This cannot be undone."
+            confirmLabel = "Factory reset"
+            icon = Icons.Outlined.PowerSettingsNew
+        }
         Confirmation.Restart -> {
             title = "Restart Pumper?"
             body = "Audio and this controller connection will stop while the DAC restarts. Unsaved EQ, crossfeed, and output-processing changes will be lost."

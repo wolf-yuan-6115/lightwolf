@@ -261,3 +261,8 @@ could not be performed.
   banks migrate with pinning off and without unsolicited writes.
 - Controllers gate the toggle at 4.1 and show `Pinned` from acknowledged state.
   The output record size and protocol/status/telemetry layouts remain unchanged.
+
+### Factory reset (firmware 4.2)
+
+- FactoryReset (`0x42`) takes an empty payload and erases/verifies the entire final 8 KiB settings region through the deferred flash-safe path. Success has an empty response before delayed reboot; failure returns storage error without reboot. No replacement bank is written.
+- Both controllers gate the destructive confirmation action at 4.2. Android version is 1.4.2 (code 7). Interrupted erasure is not atomic.

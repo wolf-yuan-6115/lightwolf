@@ -278,6 +278,27 @@ static void flash_write_callback(void *param) {
   flash_range_program(params->offset, params->image, FLASH_PAGE_SIZE);
 }
 
+static void flash_erase_settings_callback(void *param) {
+  (void)param;
+  flash_range_erase(PROFILE_STORAGE_OFFSET, PROFILE_STORAGE_SIZE);
+}
+
+bool eq_settings_factory_reset(void) {
+#ifndef EQ_SETTINGS_TEST
+  if ((uintptr_t)&__flash_binary_end - (uintptr_t)XIP_BASE > PROFILE_STORAGE_OFFSET) return false;
+#endif
+  bool succeeded = flash_safe_execute(flash_erase_settings_callback, NULL, UINT_MAX) == PICO_OK;
+  uint8_t const *data = flash_pointer(PROFILE_STORAGE_OFFSET);
+  for (size_t i = 0; i < PROFILE_STORAGE_SIZE; i++) {
+    if (data[i] != 0xffu) succeeded = false;
+  }
+  // Reload even on failure: a partial erase may have removed the current bank.
+  eq_config_t config;
+  uint32_t generation;
+  (void)eq_settings_load(&config, &generation);
+  return succeeded;
+}
+
 void eq_settings_core_init(void) {
   (void)flash_safe_execute_core_init();
 }

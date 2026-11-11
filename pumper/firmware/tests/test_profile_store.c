@@ -18,10 +18,11 @@ uint8_t __flash_binary_end;
 static size_t program_budget = SIZE_MAX;
 static unsigned program_calls;
 static bool fail_execute;
+static bool fail_erase;
 
 void flash_range_erase(uint32_t offset, size_t count) {
   assert(offset + count <= sizeof(g_fake_flash));
-  memset(g_fake_flash + offset, 0xff, count);
+  if (!fail_erase) memset(g_fake_flash + offset, 0xff, count);
 }
 
 void flash_range_program(uint32_t offset, uint8_t const *data, size_t count) {
@@ -358,7 +359,45 @@ static void test_version_four_output_migration(void) {
   eq_settings_get_output_processing(&saved);
   assert(output_processing_equal(&output, &saved));
 }
+static void test_factory_reset(void) {
+  memset(g_fake_flash, 0xff, sizeof(g_fake_flash));
+  eq_config_t loaded;
+  uint32_t generation;
+  (void)eq_settings_load(&loaded, &generation);
+  assert(eq_settings_save_profile(0, &k_eq_default_config, 1));
+  assert(eq_settings_save_profile(1, &k_eq_default_config, 2));
+  g_fake_flash[PROFILE_STORAGE_OFFSET - 1] = 0x42;
+  unsigned calls = program_calls;
+  fail_execute = true;
+  assert(!eq_settings_factory_reset());
+  fail_execute = false;
+  assert(eq_settings_load(&loaded, &generation));
+  fail_erase = true;
+  assert(!eq_settings_factory_reset());
+  fail_erase = false;
+  assert(eq_settings_factory_reset());
+  for (size_t i = PROFILE_STORAGE_OFFSET; i < TEST_FLASH_SIZE; i++) assert(g_fake_flash[i] == 0xff);
+  assert(g_fake_flash[PROFILE_STORAGE_OFFSET - 1] == 0x42);
+  assert(program_calls == calls);
+  assert(!eq_settings_load(&loaded, &generation));
+  eq_profile_state_t state;
+  eq_settings_get_profile_state(&state);
+  assert(state.present_mask == 0);
+  crossfeed_config_t crossfeed;
+  output_processing_config_t output;
+  eq_settings_get_crossfeed(&crossfeed);
+  eq_settings_get_output_processing(&output);
+  assert(crossfeed_equal(&crossfeed, &k_crossfeed_default));
+  assert(output_processing_equal(&output, &k_output_processing_default));
+  write_legacy_profile(&k_eq_default_config, 3);
+  assert(eq_settings_factory_reset());
+  assert(!eq_settings_load(&loaded, &generation));
+  assert(eq_settings_save_profile(0, &k_eq_default_config, 4));
+  assert(eq_settings_load(&loaded, &generation));
+}
+
 int main(void) {
+  test_factory_reset();
   test_version_four_output_migration();
   test_alternating_profile_banks();
   test_legacy_profile_migration();
