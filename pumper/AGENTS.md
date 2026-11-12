@@ -303,3 +303,8 @@ could not be performed.
 - Assess fixed-point feasibility from `firmware/benchmarks/results/` and the
   accompanying report, including headroom loss, limit cycles and complete-block
   timing. A finite corpus does not establish arbitrary-signal overflow safety.
+- `PUMPER_CMSIS_BENCHMARK` is also benchmark-only; keep its pinned CMSIS-DSP
+  dependency external to the repository and SDK. Modes 4/5 omit hot-loop
+  overflow checks: validate finite vectors with the checked oracle and do not
+  interpret zero hardware overflow counters as a safety proof. Mode 5 must
+  pass its on-device CMSIS equivalence self-test before timing.

@@ -1,0 +1,5 @@
+fixture,rate,headroom,tail_rms_dbfs,tail_peak_dbfs
+current-preset,96000,3,-149.49195,-149.49195
+low20-q20,96000,3,-171.20355,-168.57680
+current-preset,192000,3,-149.49195,-149.49195
+low20-q20,192000,3,-169.10430,-168.57680

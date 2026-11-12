@@ -4,6 +4,10 @@
 
 The working 5.1 image, live/saved controls and the DAC-specific 32-bit/96 kHz PipeWire configuration were restored and verified. Remaining 250 MHz transition repetitions were stopped at the user’s request. No more clock tests were run.
 
+A subsequent optimized CMSIS/assembly experiment is documented separately in
+[CMSIS_REPORT.md](CMSIS_REPORT.md). The results below describe the original
+checked-C experiment.
+
 ## What was tested
 
 - Ten-band EQ only: actual production float, independent double DF1 reference, Q31 DF1 with 32-bit history, and Q31 DF1 with 64-bit history. Fixed coefficients are calculated in double and quantized with per-stage power-of-two scaling. The fixed kernels are original portable C implementations, not the optimized CMSIS library. Integer overflow/clipping checks remain enabled during hardware timing.

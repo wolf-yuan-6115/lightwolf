@@ -1,0 +1,36 @@
+{
+  "firmware_version": "5.1",
+  "production_uf2_sha256": "d4c4430e2caf0ccf2be04320eb8d67adf7283eca2cb73ab0cac46f71eda860d4",
+  "assembly_uf2_sha256": "1e74500142c706f361bbcddaff5d851b3a89ea19c22e5c6231709a00ab8a7516",
+  "assembly_source_commit": "6eaceb513c2edb65d08e6275faa36492d922943b",
+  "cmsis_version": "1.16.2",
+  "cmsis_archive_sha256": "725c006d9120a71c462124c3becdae2600fa318d0a86b07150e236a6fc757fa6",
+  "cmsis_source_sha256": "309c825aba2819c12feb4ad8e35656577aa81ffae5fcb812d5a9040676969323",
+  "numeric_sha256": "a8ec58c2fc00148f7d3e198d35d5f4e4b4f7d6b8edec34411412101fa20e9014",
+  "optimized_numeric_identical": true,
+  "compiler": "arm-none-eabi-gcc (Arch Repository) 16.2.0",
+  "sdk_commit": "079c6f39023649b154152db30f1d781e884879bc",
+  "target": {
+    "board": "pico2",
+    "platform": "rp2350-arm-s",
+    "flash_bytes": 2097152,
+    "max_clock_mhz": 250,
+    "streaming_voltage": 1.15
+  },
+  "assembly_resources": {
+    "binary_bytes": 146428,
+    "accounted_sram_bytes": 381472,
+    "sram_capacity_bytes": 532480,
+    "reserved_flash_bytes": 8192,
+    "stack_high_water_measured": false
+  },
+  "verification": {
+    "portable_production_tests": 10,
+    "optimized_host_tests": 5,
+    "ubsan_host_tests": 5,
+    "default_benchmark_tests": 3,
+    "numerical_vectors_per_kernel": 1008,
+    "production_image_identical": true,
+    "web_android": "Not run; no controller source changes in this task."
+  }
+}

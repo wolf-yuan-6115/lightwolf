@@ -68,3 +68,29 @@ There is no automatic voltage increase. The benchmark watchdog recovers a clock
 stall to the default 150/180 MHz policy.
 
 Results and their limitations are described in [REPORT.md](REPORT.md).
+
+## CMSIS and M33 assembly follow-up
+
+Add `-DPUMPER_CMSIS_BENCHMARK=ON` to both host and device configurations to
+include the optimized candidates. CMake fetches the pinned CMSIS-DSP v1.16.2
+archive; optionally supply `-DPUMPER_CMSIS_DSP_PATH=/path/to/CMSIS-DSP-1.16.2`
+for offline builds. The production build does not fetch this dependency.
+
+```sh
+cmake -S firmware/benchmarks -B /tmp/pumper-cmsis-host \
+  -DCMAKE_BUILD_TYPE=Release -DPUMPER_CMSIS_BENCHMARK=ON
+cmake --build /tmp/pumper-cmsis-host -j
+ctest --test-dir /tmp/pumper-cmsis-host --output-on-failure
+/tmp/pumper-cmsis-host/run_cmsis_numeric > numeric.csv
+/tmp/pumper-cmsis-host/run_cmsis_numeric --optimized > optimized-numeric.csv
+/tmp/pumper-cmsis-host/run_cmsis_tail > tail.csv
+python3 firmware/benchmarks/summarize_cmsis.py
+```
+
+Use the same device runner command with `--cmsis` for upstream CMSIS or
+`--assembly` for the M33-assisted candidate. `--quick` performs one short
+180 MHz check. Without it, each scenario runs for 60 seconds, progressing to
+200 and then 250 MHz only when the previous clock misses the timing gates.
+Production firmware and live settings are restored afterward.
+
+See [CMSIS_REPORT.md](CMSIS_REPORT.md) for precision, performance and limitations.
