@@ -19,6 +19,7 @@ if(NOT CMAKE_SIZE)
 endif()
 
 option(PUMPER_DSP_BENCHMARK "Build the silent, experimental DSP benchmark image" OFF)
+option(PUMPER_CMSIS_BENCHMARK "Add the CMSIS-DSP candidate to the silent benchmark" OFF)
 
 pico_sdk_init()
 
@@ -46,6 +47,12 @@ if(PUMPER_DSP_BENCHMARK)
   target_include_directories(rp2350_usb_dac PRIVATE benchmarks)
   target_compile_definitions(rp2350_usb_dac PRIVATE PUMPER_DSP_BENCHMARK=1)
   set_target_properties(rp2350_usb_dac PROPERTIES OUTPUT_NAME pumper_dsp_benchmark)
+  if(PUMPER_CMSIS_BENCHMARK)
+    include(benchmarks/cmsis_dependency.cmake)
+    target_sources(rp2350_usb_dac PRIVATE benchmarks/cmsis_eq.c)
+    target_link_libraries(rp2350_usb_dac PRIVATE pumper_cmsis_kernel)
+    target_compile_definitions(rp2350_usb_dac PRIVATE PUMPER_CMSIS_BENCHMARK=1)
+  endif()
 endif()
 
 pico_override_flash_size(rp2350_usb_dac ${PICO_FLASH_SIZE_BYTES})
