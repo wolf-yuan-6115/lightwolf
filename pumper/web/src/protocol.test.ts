@@ -203,6 +203,23 @@ describe("Pumper HID protocol", () => {
     expect(() => decodeStatus(payload)).toThrow("Invalid status bit depth");
   });
 
+  it("accepts all firmware 5.0 PCM bit depths without changing the status layout", () => {
+    const payload = new Uint8Array(48);
+    payload[0] = 5;
+    payload[2] = 10;
+    payload[3] = 1;
+    new DataView(payload.buffer).setUint32(4, 96000, true);
+    for (const bitDepth of [16, 24, 32]) {
+      payload[44] = bitDepth;
+      expect(decodeStatus(payload)).toMatchObject({
+        firmwareVersion: "5.0", bandCount: 10, streaming: true,
+        sampleRateHz: 96000, bitDepth,
+      });
+    }
+    payload[44] = 64;
+    expect(() => decodeStatus(payload)).toThrow("Invalid status bit depth");
+  });
+
   it("decodes telemetry and validates its schema, flags, and reserved bytes", () => {
     const payload = new Uint8Array(56);
     const view = new DataView(payload.buffer);

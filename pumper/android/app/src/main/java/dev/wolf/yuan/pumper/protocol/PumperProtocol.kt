@@ -324,7 +324,7 @@ object PumperProtocol {
         }
         val flags = payload.u8(3)
         val bitDepth = if (payload.size >= 48) payload.u8(44) else null
-        if (bitDepth != null && bitDepth != 16 && bitDepth != 24) {
+        if (bitDepth != null && bitDepth != 16 && bitDepth != 24 && bitDepth != 32) {
             throw ProtocolException("Invalid status bit depth")
         }
         return DeviceStatus(

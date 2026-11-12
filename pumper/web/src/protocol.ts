@@ -493,7 +493,7 @@ export function decodeStatus(payload: Uint8Array): DeviceStatus {
   const view = viewFor(payload);
   const flags = payload[3];
   const bitDepth = payload.length >= 48 ? payload[44] : null;
-  if (bitDepth !== null && bitDepth !== 16 && bitDepth !== 24) {
+  if (bitDepth !== null && bitDepth !== 16 && bitDepth !== 24 && bitDepth !== 32) {
     throw new Error("Invalid status bit depth");
   }
   return {
