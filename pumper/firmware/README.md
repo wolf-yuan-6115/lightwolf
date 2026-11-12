@@ -146,3 +146,11 @@ Firmware 4.2 adds **Factory reset** beside Restart and firmware update in the
 controllers. After confirmation, it permanently erases all saved profiles,
 default-profile selection, crossfeed, and output settings, then restarts.
 Unlike live EQ Restore defaults, this clears saved settings.
+
+## Experimental EQ benchmarks
+
+The optional [fixed-point EQ benchmark](benchmarks/README.md) compares numerical
+accuracy and timing without changing the default float playback implementation.
+Its temporary firmware produces silence and is restored to production firmware
+after testing. See the [feasibility results](benchmarks/REPORT.md) before using an
+experimental build.

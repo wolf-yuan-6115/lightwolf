@@ -285,3 +285,21 @@ could not be performed.
   remains float and observes post-limiter samples before I2S output gain.
 - Verify real-time performance on hardware with all bands, crossfeed, ramps,
   meters and spectrum active, including the retained PCM16/192 kHz mode.
+
+### Fixed-point feasibility benchmark
+
+- `PUMPER_DSP_BENCHMARK` is opt-in and must remain off in production builds.
+  Keep version 5.1. The experiment adds CDC diagnostics and a distinct product
+  name; it must not change production HID payloads, flash schema, or formats.
+- The benchmark processes private nonzero fixtures but zeroes every submitted
+  I2S block at the DMA boundary. Do not remove this final silence guard.
+- Settings-changing HID commands are disabled in the benchmark image. The host
+  runner must retain a separate verified production UF2 and restore it and live
+  settings on completion/failure; never write the final 8 KiB settings region.
+- The experimental 200/250 MHz policy applies only to a fixed-point candidate while
+  actively streaming PCM32/96 kHz. Other streams remain 180 MHz and idle 150 MHz.
+  Never exceed 250 MHz. Keep the existing 1.15 V streaming setting; do not
+  increase voltage implicitly.
+- Assess fixed-point feasibility from `firmware/benchmarks/results/` and the
+  accompanying report, including headroom loss, limit cycles and complete-block
+  timing. A finite corpus does not establish arbitrary-signal overflow safety.

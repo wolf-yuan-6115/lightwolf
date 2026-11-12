@@ -1,0 +1,13 @@
+fixture,rate,variant,tail_rms_dbfs,tail_peak_dbfs,overflow,clip
+current-preset,96000,float,-600.00000,-600.00000,0,0
+current-preset,96000,q31-state32,-90.66034,-90.66034,0,0
+current-preset,96000,q31-state64,-600.00000,-600.00000,0,0
+low20-q20,96000,float,-216.92711,-208.89413,0,0
+low20-q20,96000,q31-state32,-77.33811,-77.33811,0,0
+low20-q20,96000,q31-state64,-600.00000,-600.00000,0,0
+current-preset,192000,float,-600.00000,-600.00000,0,0
+current-preset,192000,q31-state32,-78.56480,-78.56480,0,0
+current-preset,192000,q31-state64,-600.00000,-600.00000,0,0
+low20-q20,192000,float,-223.83543,-215.79142,0,0
+low20-q20,192000,q31-state32,-92.23574,-92.23574,0,0
+low20-q20,192000,q31-state64,-600.00000,-600.00000,0,0
