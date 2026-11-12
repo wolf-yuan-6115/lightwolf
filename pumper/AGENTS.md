@@ -50,8 +50,8 @@ changes; do not reset or rewrite user work.
   reduction. It has no lookahead, true-peak oversampling, dither, or user toggle.
 - Keep the advertised format matrix in sync across descriptors, format
   validation, I2S packing, status reporting, and both controllers: 16-bit
-  stereo at 44.1/48/88.2/96/176.4/192 kHz, and packed 24-bit or 32-bit
-  integer stereo at 44.1/48/88.2/96 kHz only.
+  stereo at 44.1/48/88.2/96/176.4/192 kHz, and packed 24-bit stereo at
+  44.1/48/88.2/96 kHz only.
 - The shared USB clock accepts every supported rate while alternate 0 is idle,
   regardless of the cached previous PCM format. Hosts may set the clock before
   selecting the next alternate. Validate the PCM/rate pair at stream start and
@@ -91,9 +91,8 @@ changes; do not reset or rewrite user work.
   and `0x27`). The 8-byte output record contains flags, signed balance basis
   points, width basis points, and zeroed reserved fields. State responses
   contain live config, saved config, and dirty state.
-- Firmware 3.1 status is 48 bytes. Byte 44 reports active PCM bit depth (16,
-  24, or 32 since firmware 5.0); bytes 45–47 are reserved and zeroed. Do not
-  move existing fields.
+- Firmware 3.1 status is 48 bytes. Byte 44 reports active PCM bit depth (16 or
+  24); bytes 45–47 are reserved and zeroed. Do not move existing fields.
 - Firmware 3.4 adds GetTelemetry (`0x09`) with a 56-byte schema-1 payload.
   Telemetry keeps core-0 counters separate from the sequence-checked core-1
   DSP snapshot; it must not lock, allocate, divide, or rescan samples in the
@@ -267,44 +266,3 @@ could not be performed.
 
 - FactoryReset (`0x42`) takes an empty payload and erases/verifies the entire final 8 KiB settings region through the deferred flash-safe path. Success has an empty response before delayed reboot; failure returns storage error without reboot. No replacement bank is written.
 - Both controllers gate the destructive confirmation action at 4.2. Android version is 1.4.2 (code 7). Interrupted erasure is not atomic.
-
-### PCM32 and playback precision (firmware 5.0–5.1)
-
-- Alternates 1/2/3 carry PCM16/packed PCM24/PCM32. PCM32 uses signed little-endian
-  integers, not IEEE float; its 96 kHz endpoint needs at most 776 bytes per packet.
-- Firmware 5.1 uses binary32 `float` playback samples, coefficients, histories,
-  ramps, gain and limiter calculations on the native FPU. Firmware 5.0's full
-  double path missed hardware deadlines. Keep PCM32 transport, but do not imply
-  32-bit DSP precision. Final PCM32 quantization uses binary64 `double` through
-  `pico_dcp` for exact integer safety bounds. Internal full scale remains
-  32768.0; PCM32 scales by 65536 at the PCM boundary.
-- Saturate playback at ±32768.0 and enforce format-specific integer ceilings in
-  the final quantizer. Keep the 0.75 I2S gain and existing channel compensation.
-  Overlapping sample/packed buffers require alias-safe writes after pair reads.
-- EQ configuration representation and flash schema 5 are unchanged. Spectrum
-  remains float and observes post-limiter samples before I2S output gain.
-- Verify real-time performance on hardware with all bands, crossfeed, ramps,
-  meters and spectrum active, including the retained PCM16/192 kHz mode.
-
-### Fixed-point feasibility benchmark
-
-- `PUMPER_DSP_BENCHMARK` is opt-in and must remain off in production builds.
-  Keep version 5.1. The experiment adds CDC diagnostics and a distinct product
-  name; it must not change production HID payloads, flash schema, or formats.
-- The benchmark processes private nonzero fixtures but zeroes every submitted
-  I2S block at the DMA boundary. Do not remove this final silence guard.
-- Settings-changing HID commands are disabled in the benchmark image. The host
-  runner must retain a separate verified production UF2 and restore it and live
-  settings on completion/failure; never write the final 8 KiB settings region.
-- The experimental 200/250 MHz policy applies only to a fixed-point candidate while
-  actively streaming PCM32/96 kHz. Other streams remain 180 MHz and idle 150 MHz.
-  Never exceed 250 MHz. Keep the existing 1.15 V streaming setting; do not
-  increase voltage implicitly.
-- Assess fixed-point feasibility from `firmware/benchmarks/results/` and the
-  accompanying report, including headroom loss, limit cycles and complete-block
-  timing. A finite corpus does not establish arbitrary-signal overflow safety.
-- `PUMPER_CMSIS_BENCHMARK` is also benchmark-only; keep its pinned CMSIS-DSP
-  dependency external to the repository and SDK. Modes 4/5 omit hot-loop
-  overflow checks: validate finite vectors with the checked oracle and do not
-  interpret zero hardware overflow counters as a safety proof. Mode 5 must
-  pass its on-device CMSIS equivalence self-test before timing.

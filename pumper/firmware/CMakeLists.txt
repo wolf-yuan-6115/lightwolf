@@ -18,9 +18,6 @@ if(NOT CMAKE_SIZE)
   find_program(CMAKE_SIZE NAMES arm-none-eabi-size REQUIRED)
 endif()
 
-option(PUMPER_DSP_BENCHMARK "Build the silent, experimental DSP benchmark image" OFF)
-option(PUMPER_CMSIS_BENCHMARK "Add the CMSIS-DSP candidate to the silent benchmark" OFF)
-
 pico_sdk_init()
 
 add_executable(rp2350_usb_dac
@@ -41,25 +38,8 @@ add_executable(rp2350_usb_dac
   src/eq_settings.c
 )
 
-if(PUMPER_DSP_BENCHMARK)
-  target_sources(rp2350_usb_dac PRIVATE benchmarks/reference.c benchmarks/fixtures.c
-    benchmarks/fixed.c benchmarks/device_benchmark.c)
-  target_include_directories(rp2350_usb_dac PRIVATE benchmarks)
-  target_compile_definitions(rp2350_usb_dac PRIVATE PUMPER_DSP_BENCHMARK=1)
-  set_target_properties(rp2350_usb_dac PROPERTIES OUTPUT_NAME pumper_dsp_benchmark)
-  if(PUMPER_CMSIS_BENCHMARK)
-    include(benchmarks/cmsis_dependency.cmake)
-    target_sources(rp2350_usb_dac PRIVATE benchmarks/cmsis_eq.c benchmarks/pcm32_pack.c)
-    target_link_libraries(rp2350_usb_dac PRIVATE pumper_cmsis_kernel)
-    target_compile_definitions(rp2350_usb_dac PRIVATE PUMPER_CMSIS_BENCHMARK=1)
-  endif()
-endif()
-
 pico_override_flash_size(rp2350_usb_dac ${PICO_FLASH_SIZE_BYTES})
 pico_set_binary_type(rp2350_usb_dac copy_to_ram)
-# PCM32 final quantization uses double to enforce exact integer safety bounds.
-# Real-time DSP uses the native single-precision FPU to meet audio deadlines.
-pico_set_double_implementation(rp2350_usb_dac pico_dcp)
 
 pico_generate_pio_header(rp2350_usb_dac ${CMAKE_CURRENT_LIST_DIR}/src/audio_i2s.pio)
 
@@ -101,7 +81,7 @@ pico_add_extra_outputs(rp2350_usb_dac)
 
 add_custom_command(TARGET rp2350_usb_dac POST_BUILD
   COMMAND ${CMAKE_COMMAND}
-    -DFIRMWARE_BIN=${CMAKE_CURRENT_BINARY_DIR}/$<TARGET_FILE_BASE_NAME:rp2350_usb_dac>.bin
+    -DFIRMWARE_BIN=${CMAKE_CURRENT_BINARY_DIR}/rp2350_usb_dac.bin
     -DFLASH_SIZE=${PICO_FLASH_SIZE_BYTES}
     -DRESERVED_SIZE=${PUMPER_PROFILE_RESERVED_BYTES}
     -P ${CMAKE_CURRENT_LIST_DIR}/cmake/check_firmware_size.cmake
@@ -111,7 +91,7 @@ add_custom_command(TARGET rp2350_usb_dac POST_BUILD
 add_custom_command(TARGET rp2350_usb_dac POST_BUILD
   COMMAND ${CMAKE_COMMAND}
     -DFIRMWARE_ELF=$<TARGET_FILE:rp2350_usb_dac>
-    -DFIRMWARE_BIN=${CMAKE_CURRENT_BINARY_DIR}/$<TARGET_FILE_BASE_NAME:rp2350_usb_dac>.bin
+    -DFIRMWARE_BIN=${CMAKE_CURRENT_BINARY_DIR}/rp2350_usb_dac.bin
     -DSIZE_TOOL=${CMAKE_SIZE}
     -DFLASH_SIZE=${PICO_FLASH_SIZE_BYTES}
     -DRESERVED_SIZE=${PUMPER_PROFILE_RESERVED_BYTES}

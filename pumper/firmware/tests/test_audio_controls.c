@@ -141,12 +141,12 @@ static void test_limiter(void) {
   l = 32768.0f;
   r = -16384.0f;
   assert(!audio_controls_process(&l, &r));
-  assert(l == 32768.0f && r == -16384.0f);
+  assert(l == 32767.0f && r == -16384.0f);
 
   l = 65536.0f;
   r = -32768.0f;
   assert(audio_controls_process(&l, &r));
-  assert(l == 32768.0f && r == -16384.0f);
+  assert(l == 32767.0f && r == -16384.0f);
 
   audio_controls_reset(rate);
   l = 20000.0f;
@@ -157,7 +157,7 @@ static void test_limiter(void) {
   l = 60000.0f;
   r = -30000.0f;
   assert(audio_controls_process(&l, &r));
-  assert(fabsf(l) <= 32768.0f && fabsf(r) <= 32768.0f);
+  assert(fabsf(l) < 32768.0f && fabsf(r) < 32768.0f);
   assert(fabsf(l / r + 2.0f) < 0.001f);
 
   float first_gain = fabsf(l / 60000.0f);

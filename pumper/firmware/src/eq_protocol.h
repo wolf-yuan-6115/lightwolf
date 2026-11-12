@@ -19,8 +19,6 @@
 #define EQ_PROTOCOL_OUTPUT_PROCESSING_STATE_PAYLOAD_SIZE 17u
 #define EQ_PROTOCOL_GLOBAL_PAYLOAD_SIZE 8u
 #define EQ_PROTOCOL_BAND_PAYLOAD_SIZE 21u
-// Status byte 44: PCM bit depth (16/24, plus 32 since firmware 5.0).
-// Bytes 45-47 remain reserved and zero; all earlier fields retain their offsets.
 #define EQ_PROTOCOL_STATUS_PAYLOAD_SIZE 48u
 #define EQ_PROTOCOL_TELEMETRY_PAYLOAD_SIZE 56u
 #define EQ_PROTOCOL_METER_CONFIG_PAYLOAD_SIZE 4u

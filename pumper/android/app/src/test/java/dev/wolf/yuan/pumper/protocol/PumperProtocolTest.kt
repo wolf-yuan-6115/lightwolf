@@ -82,25 +82,6 @@ class PumperProtocolTest {
     }
 
     @Test
-    fun `accepts firmware 5 PCM bit depths with the existing status layout`() {
-        val payload = ByteArray(48)
-        payload[0] = 5
-        payload[2] = 10
-        payload[3] = 1
-        ByteBuffer.wrap(payload).order(ByteOrder.LITTLE_ENDIAN).putInt(4, 96000)
-        for (bits in listOf(16, 24, 32)) {
-            payload[44] = bits.toByte()
-            val status = PumperProtocol.decodeStatus(payload)
-            assertEquals("5.0", status.firmwareVersion)
-            assertEquals(96000L, status.sampleRateHz)
-            assertEquals(bits, status.bitDepth)
-            assertTrue(status.streaming)
-        }
-        payload[44] = 64
-        assertThrows(ProtocolException::class.java) { PumperProtocol.decodeStatus(payload) }
-    }
-
-    @Test
     fun `decodes and validates telemetry`() {
         val payload = ByteArray(56)
         payload[0] = 1

@@ -6,19 +6,12 @@ parametric EQ, headphone crossfeed, global output processing, USB host volume
 and mute, persistent profiles, and device diagnostics for the WebHID and
 Android controllers.
 
-Firmware 5.1 supports stereo integer PCM in these formats:
+Firmware 3.4 supports stereo PCM in these formats:
 
 - 16-bit at 44.1, 48, 88.2, 96, 176.4, and 192 kHz.
 - Packed 24-bit at 44.1, 48, 88.2, and 96 kHz.
-- 32-bit at 44.1, 48, 88.2, and 96 kHz.
 
-Playback processing uses the RP2350 single-precision FPU. Firmware 5.1 restores
-real-time DSP performance after double-precision processing in 5.0 exceeded the
-audio deadline. The 32-bit USB format is retained; DSP precision is about 24
-significant binary bits. Final PCM32 quantization uses double precision to
-enforce the integer output bounds.
-
-The 24-bit and 32-bit alternates are not available at 176.4 or 192 kHz. Profile changes and
+The 24-bit alternate is not available at 176.4 or 192 kHz. Profile changes and
 audio-control previews are live; persistent settings are changed only by the
 corresponding save, default, or delete action. Audio is briefly muted while a
 persistent setting is written and verified.
@@ -146,11 +139,3 @@ Firmware 4.2 adds **Factory reset** beside Restart and firmware update in the
 controllers. After confirmation, it permanently erases all saved profiles,
 default-profile selection, crossfeed, and output settings, then restarts.
 Unlike live EQ Restore defaults, this clears saved settings.
-
-## Experimental EQ benchmarks
-
-The optional [fixed-point EQ benchmark](benchmarks/README.md) compares numerical
-accuracy and timing without changing the default float playback implementation.
-Its temporary firmware produces silence and is restored to production firmware
-after testing. See the [feasibility results](benchmarks/REPORT.md) before using an
-experimental build.

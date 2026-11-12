@@ -227,7 +227,7 @@ bool audio_controls_process(float *left, float *right) {
   if (target == 1.0f && limiter_gain > LIMITER_RECOVERY_GAIN) limiter_gain = 1.0f;
   bool limiter_active = limiter_gain < 1.0f;
   float limited_l = ol * limiter_gain, limited_r = or * limiter_gain;
-  *left = isfinite(limited_l) ? fmaxf(-FULL_SCALE, fminf(FULL_SCALE, limited_l)) : 0.0f;
-  *right = isfinite(limited_r) ? fmaxf(-FULL_SCALE, fminf(FULL_SCALE, limited_r)) : 0.0f;
+  *left = isfinite(limited_l) ? fmaxf(-32768.0f, fminf(32767.0f, limited_l)) : 0.0f;
+  *right = isfinite(limited_r) ? fmaxf(-32768.0f, fminf(32767.0f, limited_r)) : 0.0f;
   return limiter_active;
 }

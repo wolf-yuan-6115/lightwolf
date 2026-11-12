@@ -15,10 +15,6 @@
 #include "pico/util/queue.h"
 #include "tusb.h"
 
-#ifdef PUMPER_DSP_BENCHMARK
-#include "device_benchmark.h"
-#endif
-
 #include "audio_feedback.h"
 #include "audio_format.h"
 #include "eq_config.h"
@@ -205,11 +201,7 @@ static void set_performance_clock(bool streaming) {
   if (streaming) {
     vreg_set_voltage(VREG_VOLTAGE_1_15);
     sleep_us(1000u);
-    uint32_t target_khz = STREAM_SYS_CLOCK_KHZ;
-#ifdef PUMPER_DSP_BENCHMARK
-    target_khz = bench_device_clock_khz(s_audio_format, s_sample_rate_hz);
-#endif
-    set_sys_clock_khz(target_khz, true);
+    set_sys_clock_khz(STREAM_SYS_CLOCK_KHZ, true);
   } else {
     set_sys_clock_khz(IDLE_SYS_CLOCK_KHZ, true);
     vreg_set_voltage(VREG_VOLTAGE_1_10);
@@ -396,9 +388,6 @@ static void meter_keepalive(void) {
 }
 
 static void dsp_core_main(void) {
-#ifdef PUMPER_DSP_BENCHMARK
-  bench_device_selftest();
-#endif
   eq_settings_core_init();
   uint32_t local_generation;
   eq_config_t local_config = config_snapshot(&local_generation);
@@ -415,9 +404,6 @@ static void dsp_core_main(void) {
   while (true) {
     audio_block_t *block;
     queue_remove_blocking(&s_pending_audio_blocks, &block);
-#ifdef PUMPER_DSP_BENCHMARK
-    uint32_t bench_block_start = time_us_32();
-#endif
 
     if (local_sample_rate != s_sample_rate_hz) {
       local_sample_rate = s_sample_rate_hz;
@@ -446,11 +432,7 @@ static void dsp_core_main(void) {
       bool const capture = spectrum_capture_begin(local_sample_rate, block->stream_generation);
       eq_set_output_observer(capture ? spectrum_capture_pair : NULL);
       uint32_t started_us = time_us_32();
-#ifdef PUMPER_DSP_BENCHMARK
-      bench_device_process(block->data.samples, block->frames, &metrics, measure_block, capture, local_sample_rate);
-#else
       eq_process_interleaved_stereo(block->data.samples, block->frames, &metrics, measure_block);
-#endif
       uint32_t elapsed_us = time_us_32() - started_us;
       spectrum_capture_end(elapsed_us);
       if (elapsed_us > s_dsp_max_block_us) s_dsp_max_block_us = elapsed_us;
@@ -466,25 +448,9 @@ static void dsp_core_main(void) {
                          metrics.limiter_active_frames != 0u);
       }
 
-#ifdef PUMPER_DSP_BENCHMARK
-      uint32_t pack_start = time_us_32();
-#endif
-#ifdef PUMPER_DSP_BENCHMARK
-      block->word_count = (uint16_t)bench_device_pack(
-          block->data.words, block->data.samples, block->frames, block->format);
-#else
       block->word_count = (uint16_t)audio_format_pack_i2s(
           block->data.words, block->data.samples, block->frames, block->format);
-#endif
-#ifdef PUMPER_DSP_BENCHMARK
-      uint32_t pack_us = time_us_32() - pack_start;
-      uint32_t bench_frames = block->frames;
-      bool submitted = i2s_out_submit(block);
-      bench_device_finish(time_us_32() - bench_block_start - pack_us, pack_us, bench_frames);
-      if (submitted) block = NULL;
-#else
       if (i2s_out_submit(block)) block = NULL;
-#endif
     }
     if (block) queue_add_blocking(&s_free_audio_blocks, &block);
   }
@@ -649,18 +615,18 @@ bool tud_audio_set_itf_close_EP_cb(uint8_t rhport, tusb_control_request_t const 
   return true;
 }
 
-// Alternate 0 is idle; 1/2/3 are 16-bit, packed 24-bit, and 32-bit integer PCM.
+// Alternate 0 is idle, 1 is 16-bit PCM, and 2 is packed 24-bit PCM.
 bool tud_audio_set_itf_cb(uint8_t rhport, tusb_control_request_t const *p_request) {
   (void) rhport;
   uint8_t const itf = tu_u16_low(tu_le16toh(p_request->wIndex));
   uint8_t const alt = tu_u16_low(tu_le16toh(p_request->wValue));
   if (itf == ITF_NUM_AUDIO_STREAMING) {
-    if (alt > 3u) return false;
+    if (alt > 2u) return false;
     if (alt == 0u) {
       set_streaming_state(false);
       return true;
     }
-    audio_sample_format_t format = (audio_sample_format_t)alt;
+    audio_sample_format_t format = alt == 2u ? AUDIO_FORMAT_PCM24 : AUDIO_FORMAT_PCM16;
     if (!audio_format_rate_valid(format, s_sample_rate_hz)) return false;
     if (format != s_audio_format) {
       set_streaming_state(false);
@@ -742,8 +708,8 @@ static void hid_response_status(uint8_t opcode, uint16_t request_id) {
   i2s_out_diagnostics_t i2s = i2s_out_diagnostics();
   hid_response_prepare(opcode, request_id, EQ_STATUS_OK, EQ_PROTOCOL_STATUS_PAYLOAD_SIZE);
   uint8_t *payload = &s_hid_response[EQ_PROTOCOL_HEADER_SIZE];
-  payload[0] = 5u;
-  payload[1] = 1u;
+  payload[0] = 4u;
+  payload[1] = 2u;
   payload[2] = EQ_NUM_FILTERS;
   payload[3] = (s_streaming_active ? 0x01u : 0u) | (config_is_dirty() ? 0x02u : 0u) |
                (config.enabled ? 0x04u : 0u);
@@ -757,7 +723,7 @@ static void hid_response_status(uint8_t opcode, uint16_t request_id) {
   eq_protocol_write_u32(payload + 32u, clock_get_hz(clk_sys));
   eq_protocol_write_u32(payload + 36u, s_dsp_max_block_us);
   eq_protocol_write_u32(payload + 40u, i2s.low_water_frames);
-  payload[44] = audio_format_bit_depth(s_audio_format);
+  payload[44] = s_audio_format == AUDIO_FORMAT_PCM24 ? 24u : 16u;
 }
 
 static void hid_response_telemetry(uint8_t opcode, uint16_t request_id) {
@@ -788,15 +754,6 @@ static void hid_process_command(eq_protocol_packet_t const *packet) {
     return;
   }
 
-#ifdef PUMPER_DSP_BENCHMARK
-  // The experiment may read settings and subscribe to diagnostics, never mutate them.
-  if (!((packet->opcode >= EQ_OPCODE_HELLO && packet->opcode <= EQ_OPCODE_GET_TELEMETRY) ||
-        (packet->opcode >= EQ_OPCODE_METER_START && packet->opcode <= EQ_OPCODE_SPECTRUM_STOP) ||
-        packet->opcode == EQ_OPCODE_RESTART_DEVICE || packet->opcode == EQ_OPCODE_ENTER_BOOTSEL)) {
-    hid_response_prepare(packet->opcode, packet->request_id, EQ_STATUS_INVALID_COMMAND, 0u);
-    return;
-  }
-#endif
   switch (packet->opcode) {
     case EQ_OPCODE_HELLO:
     case EQ_OPCODE_GET_STATUS:
@@ -1463,10 +1420,6 @@ static void audio_block_release(i2s_audio_block_t *block) {
 
 int main(void) {
   board_init();
-#ifdef PUMPER_DSP_BENCHMARK
-  // Recover to the default 150/180 MHz policy if an experimental clock stalls.
-  watchdog_enable(2000u, true);
-#endif
   telemetry_init(time_us_64());
 
   adc_init();
@@ -1526,9 +1479,6 @@ int main(void) {
   memset(s_volume_q8, 0, sizeof(s_volume_q8));
 
   while (true) {
-#ifdef PUMPER_DSP_BENCHMARK
-    watchdog_update();
-#endif
     tud_task();
     device_reset_task();
     hid_control_task();
@@ -1537,9 +1487,5 @@ int main(void) {
     audio_task();
     audio_feedback_task();
     spectrum_stream_task();
-#ifdef PUMPER_DSP_BENCHMARK
-    bench_device_task(s_streaming_active, s_sample_rate_hz, s_audio_format,
-                      i2s_out_diagnostics(), chip_temperature_millicelsius);
-#endif
   }
 }

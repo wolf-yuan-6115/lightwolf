@@ -8,7 +8,7 @@
 // VID 0x2E8A is Raspberry Pi's USB VID.
 #define USB_VID 0x2E8A
 #define USB_PID 0xF10A
-#define USB_BCD 0x0501
+#define USB_BCD 0x0300
 
 enum {
   EPNUM_AUDIO_OUT = 0x01,
@@ -17,17 +17,7 @@ enum {
   EPNUM_HID_IN = 0x82,
 };
 
-#ifdef PUMPER_DSP_BENCHMARK
-#define BENCH_CDC_LENGTH TUD_CDC_DESC_LEN
-#define BENCH_CDC_DESCRIPTOR TUD_CDC_DESCRIPTOR(ITF_NUM_CDC, 0, 0x83, 8, 0x04, 0x84, 64),
-#define PRODUCT_NAME "Pumper DSP benchmark"
-#else
-#define BENCH_CDC_LENGTH 0
-#define BENCH_CDC_DESCRIPTOR
-#define PRODUCT_NAME "Pumper USB DAC"
-#endif
-
-#define CONFIG_TOTAL_LEN (BENCH_CDC_LENGTH + TUD_CONFIG_DESC_LEN + TUD_AUDIO_SPEAKER_STEREO_FB_DESC_LEN + TUD_HID_INOUT_DESC_LEN)
+#define CONFIG_TOTAL_LEN (TUD_CONFIG_DESC_LEN + TUD_AUDIO_SPEAKER_STEREO_FB_DESC_LEN + TUD_HID_INOUT_DESC_LEN)
 
 // One vendor-defined collection with fixed 64-byte input and output reports.
 // Report IDs are intentionally omitted, so WebHID uses report ID 0.
@@ -76,24 +66,20 @@ uint8_t const *tud_descriptor_device_cb(void) {
 static uint8_t const desc_configuration[] = {
     TUD_CONFIG_DESCRIPTOR(1, ITF_NUM_TOTAL, 0, CONFIG_TOTAL_LEN, 0x00, 100),
     TUD_AUDIO_SPEAKER_STEREO_FB_DESCRIPTOR(ITF_NUM_AUDIO_CONTROL, STRID_AUDIO_IF,
-        EPNUM_AUDIO_OUT, CFG_TUD_AUDIO_FUNC_1_EP_OUT_SZ_MAX, 582, 776, EPNUM_AUDIO_FB, 4),
+        EPNUM_AUDIO_OUT, CFG_TUD_AUDIO_FUNC_1_EP_OUT_SZ_MAX, 582, EPNUM_AUDIO_FB, 4),
     TUD_HID_INOUT_DESCRIPTOR(ITF_NUM_HID, STRID_HID_IF, HID_ITF_PROTOCOL_NONE, sizeof(desc_hid_report),
         EPNUM_HID_OUT, EPNUM_HID_IN, CFG_TUD_HID_EP_BUFSIZE, 1),
-    BENCH_CDC_DESCRIPTOR
 };
 
 // macOS uses the standards-compliant three-byte 10.14 feedback packet at full speed.
 static uint8_t const desc_configuration_macos[] = {
     TUD_CONFIG_DESCRIPTOR(1, ITF_NUM_TOTAL, 0, CONFIG_TOTAL_LEN, 0x00, 100),
     TUD_AUDIO_SPEAKER_STEREO_FB_DESCRIPTOR(ITF_NUM_AUDIO_CONTROL, STRID_AUDIO_IF,
-        EPNUM_AUDIO_OUT, CFG_TUD_AUDIO_FUNC_1_EP_OUT_SZ_MAX, 582, 776, EPNUM_AUDIO_FB, 3),
+        EPNUM_AUDIO_OUT, CFG_TUD_AUDIO_FUNC_1_EP_OUT_SZ_MAX, 582, EPNUM_AUDIO_FB, 3),
     TUD_HID_INOUT_DESCRIPTOR(ITF_NUM_HID, STRID_HID_IF, HID_ITF_PROTOCOL_NONE, sizeof(desc_hid_report),
         EPNUM_HID_OUT, EPNUM_HID_IN, CFG_TUD_HID_EP_BUFSIZE, 1),
-    BENCH_CDC_DESCRIPTOR
 };
 
-_Static_assert(CFG_TUD_AUDIO_FUNC_1_DESC_LEN == TUD_AUDIO_SPEAKER_STEREO_FB_DESC_LEN,
-               "TinyUSB audio function length mismatch");
 _Static_assert(sizeof(desc_configuration) == CONFIG_TOTAL_LEN, "USB descriptor length mismatch");
 _Static_assert(sizeof(desc_configuration_macos) == CONFIG_TOTAL_LEN,
                "macOS USB descriptor length mismatch");
@@ -124,7 +110,7 @@ uint8_t const *tud_descriptor_bos_cb(void) {
 static char const *string_desc_arr[] = {
     (const char[]) {0x09, 0x04},  // STRID_LANGID: US English (0x0409)
     "LightWolf",                  // STRID_MANUFACTURER
-    PRODUCT_NAME,                 // STRID_PRODUCT
+    "Pumper USB DAC",             // STRID_PRODUCT
     NULL,                         // STRID_SERIAL (filled in dynamically)
     "LightWolf Pumper DAC",       // STRID_AUDIO_IF
     "Pumper EQ Control",          // STRID_HID_IF

@@ -72,7 +72,7 @@ static void prepare_dma(uint32_t index) {
       underrun_frames += frames;
       critical_section_exit(&lock);
     }
-    words = frames * (active_format == AUDIO_FORMAT_PCM16 ? 1u : 2u);
+    words = frames * (active_format == AUDIO_FORMAT_PCM24 ? 2u : 1u);
     source = silence;
   }
   dma_channel_set_read_addr((uint)dma_chan[index], source, false);
@@ -120,7 +120,7 @@ static void configure_pio(void) {
   uint offset, entry;
   pio_sm_config config;
   uint32_t divider;
-  if (active_format == AUDIO_FORMAT_PCM24 || active_format == AUDIO_FORMAT_PCM32) {
+  if (active_format == AUDIO_FORMAT_PCM24) {
     offset = offset32; entry = audio_i2s_32_offset_entry32;
     config = audio_i2s_32_program_get_default_config(offset);
     divider = (clock_get_hz(clk_sys) * 2u + rate_hz / 2u) / rate_hz;
@@ -155,11 +155,6 @@ void i2s_out_init(uint32_t sample_rate_hz, audio_sample_format_t format,
 }
 
 bool i2s_out_submit(i2s_audio_block_t *block) {
-#ifdef PUMPER_DSP_BENCHMARK
-  // Last boundary before DMA: no experiment can emit a nonzero sample.
-  if (block) memset(block->data.words, 0, sizeof(block->data.words));
-#endif
-
   if (!block) return false;
   critical_section_enter_blocking(&lock);
   bool accepted = block->format == active_format &&
