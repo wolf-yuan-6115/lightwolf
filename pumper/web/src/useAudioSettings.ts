@@ -1,3 +1,4 @@
+import { t } from "./i18n";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { PumperHidTransport } from "./hidTransport";
 import {
@@ -95,7 +96,7 @@ export function useAudioSettings(
           if (isCurrent() && outputReadRevision === outputRevision.current) applyOutputState(nextOutput);
         }
       } catch (reason) {
-        if (isCurrent()) onError(`Audio settings: ${reason instanceof Error ? reason.message : "Unable to read device state"}`);
+        if (isCurrent()) onError(t("Audio settings: {error}", { error: reason instanceof Error ? reason.message : t("Unable to read device state") }));
       }
     }).finally(() => {
       if (session.current === token) refreshing.current = false;
@@ -148,7 +149,7 @@ export function useAudioSettings(
         if (isCurrent() && editRevision === crossfeedRevision.current) applyCrossfeedState(state);
       } catch (reason) {
         if (!isCurrent()) return;
-        onError(`Crossfeed: ${reason instanceof Error ? reason.message : "Unable to update device"}`);
+        onError(t("Crossfeed: {error}", { error: reason instanceof Error ? reason.message : t("Unable to update device") }));
         try {
           const state = decodeCrossfeedState((await transport.request(Opcode.GetCrossfeed)).payload);
           if (isCurrent() && editRevision === crossfeedRevision.current) applyCrossfeedState(state);
@@ -171,7 +172,7 @@ export function useAudioSettings(
         crossfeedTimer.current = setTimeout(() => { void flushCrossfeed().catch(() => undefined); }, previewIntervalMs);
       }
     } catch (reason) {
-      onError(reason instanceof Error ? reason.message : "Invalid crossfeed settings");
+      onError(reason instanceof Error ? reason.message : t("Invalid crossfeed settings"));
     }
   }, [applyCrossfeedState, flushCrossfeed, onError]);
 
@@ -188,11 +189,11 @@ export function useAudioSettings(
         const state = decodeCrossfeedState((await transport.request(Opcode.SaveCrossfeed, new Uint8Array(), 8000)).payload);
         if (!isCurrent()) return;
         applyCrossfeedState(state);
-        onNotice("Crossfeed saved for power-on");
+        onNotice(t("Crossfeed saved for power-on"));
       });
     } catch (reason) {
       if (active.current && session.current === token) {
-        onError(`Save crossfeed: ${reason instanceof Error ? reason.message : "Unable to save device settings"}`);
+        onError(t("Save crossfeed: {error}", { error: reason instanceof Error ? reason.message : t("Unable to save device settings") }));
       }
     } finally {
       if (session.current === token) {
@@ -215,7 +216,7 @@ export function useAudioSettings(
         if (isCurrent() && editRevision === outputRevision.current) applyOutputState(state);
       } catch (reason) {
         if (!isCurrent()) return;
-        onError(`Output processing: ${reason instanceof Error ? reason.message : "Unable to update device"}`);
+        onError(t("Output processing: {error}", { error: reason instanceof Error ? reason.message : t("Unable to update device") }));
         try {
           const state = decodeOutputProcessingState((await transport.request(Opcode.GetOutputProcessing)).payload);
           if (isCurrent() && editRevision === outputRevision.current) applyOutputState(state);
@@ -241,7 +242,7 @@ export function useAudioSettings(
         outputTimer.current = setTimeout(() => { void flushOutput().catch(() => undefined); }, previewIntervalMs);
       }
     } catch (reason) {
-      onError(reason instanceof Error ? reason.message : "Invalid output processing settings");
+      onError(reason instanceof Error ? reason.message : t("Invalid output processing settings"));
     }
   }, [applyOutputState, flushOutput, onError, pinSupported]);
 
@@ -258,11 +259,11 @@ export function useAudioSettings(
         const state = decodeOutputProcessingState((await transport.request(Opcode.SaveOutputProcessing, new Uint8Array(), 8000)).payload);
         if (!isCurrent()) return;
         applyOutputState(state);
-        onNotice("Output processing saved for power-on");
+        onNotice(t("Output processing saved for power-on"));
       });
     } catch (reason) {
       if (outputActive.current && session.current === token) {
-        onError(`Save output processing: ${reason instanceof Error ? reason.message : "Unable to save device settings"}`);
+        onError(t("Save output processing: {error}", { error: reason instanceof Error ? reason.message : t("Unable to save device settings") }));
       }
     } finally {
       if (session.current === token) {

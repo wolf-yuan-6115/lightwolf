@@ -1,3 +1,4 @@
+import { t } from "./i18n";
 import { Info } from "lucide-react";
 import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 
@@ -46,7 +47,7 @@ export function MetricTooltip({ label, help }: { label: string; help: string }) 
         ref={trigger}
         className="inline-flex size-5 shrink-0 cursor-help items-center justify-center rounded-full text-base-content/40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-base-content"
         tabIndex={0}
-        aria-label={`About ${label}: ${help}`}
+        aria-label={t("About {label}: {help}", { label, help })}
         aria-describedby={open ? id : undefined}
         onMouseEnter={() => { hovered.current = true; setOpen(true); }}
         onMouseLeave={() => { hovered.current = false; if (!focused.current) setOpen(false); }}

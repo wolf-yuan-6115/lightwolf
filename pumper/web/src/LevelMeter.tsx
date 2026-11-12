@@ -1,3 +1,4 @@
+import { t } from "./i18n";
 import { MeterLevel, StereoMeterLevel } from "./protocol";
 
 const thresholdsDb = [
@@ -33,7 +34,7 @@ function ChannelMeter({ channel, peak, source, tone }: ChannelMeterProps) {
     : "bg-emerald-500";
 
   return (
-    <div className="grid min-w-0 grid-cols-[18px_minmax(0,1fr)_76px] items-center gap-2.5 max-sm:grid-cols-[14px_minmax(0,1fr)_64px] max-sm:gap-1.5" aria-label={`${channel} ${source} ${displayDb(currentPeakDb)}`}>
+    <div className="grid min-w-0 grid-cols-[18px_minmax(0,1fr)_76px] items-center gap-2.5 max-sm:grid-cols-[14px_minmax(0,1fr)_64px] max-sm:gap-1.5" aria-label={t(source === "input" ? "{channel} input {level}" : "{channel} output {level}", { channel, level: displayDb(currentPeakDb) })}>
       <strong className="text-[11px] text-base-content/70">{channel}</strong>
       {/* Fixed pixel tracks keep compact meter segments from rounding to unequal widths. */}
       <div className="grid h-3.5 w-max grid-cols-[repeat(24,4px)] gap-[2px]" aria-hidden="true">
@@ -78,7 +79,7 @@ function MeterRow({ title, source, tone, level, limiterIndicator }: MeterRowProp
 }
 
 function LimiterIndicator({ active }: { active: boolean }) {
-  const label = active ? "Limiter active" : "Limiter inactive";
+  const label = active ? t("Limiter active") : t("Limiter inactive");
   return (
     <span
       className={`badge badge-sm h-5 gap-1.5 px-2 text-[9px] font-semibold tracking-wider ${active ? "badge-error badge-soft" : "badge-ghost text-base-content/45"}`}
@@ -96,12 +97,12 @@ function LimiterIndicator({ active }: { active: boolean }) {
 
 export function LevelMeter({ level }: { level: MeterLevel | null }) {
   return (
-    <section className="mt-auto min-w-0 border-t border-base-300 bg-base-200/40 text-base-content" aria-label="Realtime input and output levels">
-      <h2 className="sr-only">Signal levels</h2>
+    <section className="mt-auto min-w-0 border-t border-base-300 bg-base-200/40 text-base-content" aria-label={t("Realtime input and output levels")}>
+      <h2 className="sr-only">{t("Signal levels")}</h2>
       <div className="grid min-w-0 divide-y divide-base-200">
-        <MeterRow title="INPUT" source="input" tone="indigo" level={level?.preEq ?? null} />
+        <MeterRow title={t("INPUT")} source="input" tone="indigo" level={level?.preEq ?? null} />
         <MeterRow
-          title="OUTPUT"
+          title={t("OUTPUT")}
           source="output"
           tone="emerald"
           level={level?.postEq ?? null}

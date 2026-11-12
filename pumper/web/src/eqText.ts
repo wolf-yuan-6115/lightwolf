@@ -1,3 +1,4 @@
+import { t } from "./i18n";
 import { defaultConfig, type EqBand, type EqConfig, FilterType, WidthMode } from "./protocol";
 
 const filterCodes: Record<FilterType, string> = {
@@ -59,7 +60,7 @@ export function serializeEqText(config: EqConfig): string {
 function parseNumber(value: string, label: string, minimum: number, maximum: number): number {
   const parsed = Number(value);
   if (!Number.isFinite(parsed) || parsed < minimum || parsed > maximum) {
-    throw new Error(`${label} must be between ${minimum} and ${maximum}.`);
+    throw new Error(t("{label} must be between {min} and {max}{unit}.", { label, min: minimum, max: maximum, unit: "" }));
   }
   return parsed;
 }
@@ -86,37 +87,37 @@ export function parseEqText(text: string, bandCount = 10): EqConfig {
 
     const preamp = line.match(/^Preamp\s*:\s*([+-]?(?:\d+(?:\.\d*)?|\.\d+))\s*dB$/i);
     if (preamp) {
-      config.preampDb = parseNumber(preamp[1], "Preamp", -241, 12);
+      config.preampDb = parseNumber(preamp[1], t("Preamp"), -241, 12);
       recognized++;
       return;
     }
 
     const filter = line.match(/^Filter\s+(\d+)\s*:\s*(ON|OFF)\s+([A-Z]+)\s+Fc\s+([+-]?(?:\d+(?:\.\d*)?|\.\d+))\s*Hz(?:\s+Gain\s+([+-]?(?:\d+(?:\.\d*)?|\.\d+))\s*dB)?\s+(Q|BW)\s+([+-]?(?:\d+(?:\.\d*)?|\.\d+))(?:\s+oct)?$/i);
-    if (!filter) throw new Error(`Line ${lineIndex + 1} is not a supported EQ setting.`);
+    if (!filter) throw new Error(t("Line {line} is not a supported EQ setting.", { line: lineIndex + 1 }));
 
     const bandNumber = Number(filter[1]);
     if (!Number.isInteger(bandNumber) || bandNumber < 1 || bandNumber > bandCount) {
-      throw new Error(`Line ${lineIndex + 1} uses filter ${bandNumber}; Pumper supports filters 1-${bandCount}.`);
+      throw new Error(t("Line {line} uses filter {number}; Pumper supports filters 1-{count}.", { line: lineIndex + 1, number: bandNumber, count: bandCount }));
     }
     const bandIndex = bandNumber - 1;
-    if (seenBands.has(bandIndex)) throw new Error(`Filter ${bandNumber} is listed more than once.`);
+    if (seenBands.has(bandIndex)) throw new Error(t("Filter {number} is listed more than once.", { number: bandNumber }));
     const type = filterTypes[filter[3].toUpperCase()];
-    if (type === undefined) throw new Error(`Line ${lineIndex + 1} uses an unsupported filter type (${filter[3]}).`);
+    if (type === undefined) throw new Error(t("Line {line} uses an unsupported filter type ({type}).", { line: lineIndex + 1, type: filter[3] }));
     const usesGain = type <= FilterType.HighShelf;
-    if (usesGain && filter[5] === undefined) throw new Error(`Filter ${bandNumber} requires a Gain value.`);
+    if (usesGain && filter[5] === undefined) throw new Error(t("Filter {number} requires a Gain value.", { number: bandNumber }));
     const widthMode = filter[6].toUpperCase() === "BW" ? WidthMode.Bandwidth : WidthMode.Q;
     if (type !== FilterType.Peaking && widthMode === WidthMode.Bandwidth) {
-      throw new Error(`Filter ${bandNumber} only supports Q.`);
+      throw new Error(t("Filter {number} only supports Q.", { number: bandNumber }));
     }
 
     const qMaximum = type === FilterType.LowShelf || type === FilterType.HighShelf ? 1 : 20;
-    const width = parseNumber(filter[7], `Filter ${bandNumber} ${widthMode === WidthMode.Q ? "Q" : "bandwidth"}`, 0.1, widthMode === WidthMode.Q ? qMaximum : 4);
+    const width = parseNumber(filter[7], t("Filter {number} {field}", { number: bandNumber, field: widthMode === WidthMode.Q ? "Q" : t("bandwidth") }), 0.1, widthMode === WidthMode.Q ? qMaximum : 4);
     const band: EqBand = {
       ...config.bands[bandIndex],
       enabled: filter[2].toUpperCase() === "ON",
       type,
-      frequencyHz: parseNumber(filter[4], `Filter ${bandNumber} frequency`, 20, 20000),
-      gainDb: filter[5] === undefined ? 0 : parseNumber(filter[5], `Filter ${bandNumber} gain`, -24, 24),
+      frequencyHz: parseNumber(filter[4], t("Filter {number} frequency", { number: bandNumber }), 20, 20000),
+      gainDb: filter[5] === undefined ? 0 : parseNumber(filter[5], t("Filter {number} gain", { number: bandNumber }), -24, 24),
       widthMode,
       q: widthMode === WidthMode.Q ? width : config.bands[bandIndex].q,
       bandwidthOctaves: widthMode === WidthMode.Bandwidth ? width : config.bands[bandIndex].bandwidthOctaves,
@@ -126,6 +127,6 @@ export function parseEqText(text: string, bandCount = 10): EqConfig {
     recognized++;
   });
 
-  if (recognized === 0 || seenBands.size === 0) throw new Error("Paste at least one supported Filter line.");
+  if (recognized === 0 || seenBands.size === 0) throw new Error(t("Paste at least one supported Filter line."));
   return config;
 }

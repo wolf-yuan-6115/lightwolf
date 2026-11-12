@@ -1,3 +1,4 @@
+import { t, locale } from "./i18n";
 export const USB_VENDOR_ID = 0x2e8a;
 export const USB_PRODUCT_ID = 0xf10a;
 export const HID_USAGE_PAGE = 0xff00;
@@ -189,12 +190,12 @@ export function effectiveAudioControl(master: AudioChannelControl, channel: Audi
 }
 
 export function decodeAudioControls(payload: Uint8Array): AudioControls {
-  if (payload.length !== 9) throw new Error("Invalid USB audio control response");
+  if (payload.length !== 9) throw new Error(t("Invalid USB audio control response"));
   const view = viewFor(payload);
   const channels = [0, 1, 2].map((index): AudioChannelControl => {
     const volumeDb = view.getInt16(index * 2, true) / 256;
     if (volumeDb < -50 || volumeDb > 0 || payload[6 + index] > 1) {
-      throw new Error("Invalid USB audio control response");
+      throw new Error(t("Invalid USB audio control response"));
     }
     return { volumeDb, muted: payload[6 + index] === 1 };
   });
@@ -203,15 +204,15 @@ export function decodeAudioControls(payload: Uint8Array): AudioControls {
 
 export function validateCrossfeed(config: CrossfeedConfig): void {
   if (!Number.isInteger(config.mode) || config.mode < CrossfeedMode.Off || config.mode > CrossfeedMode.Custom) {
-    throw new RangeError("Crossfeed mode is not supported.");
+    throw new RangeError(t("Crossfeed mode is not supported."));
   }
   for (const [label, value, minimum, maximum, unit] of [
-    ["Crossfeed strength", config.strengthPercent, 0, 40, "%"],
-    ["Crossfeed cutoff", config.cutoffHz, 300, 2000, "Hz"],
-    ["Crossfeed delay", config.delayMs, 0, 0.6, "ms"],
+    [t("Crossfeed strength"), config.strengthPercent, 0, 40, "%"],
+    [t("Crossfeed cutoff"), config.cutoffHz, 300, 2000, "Hz"],
+    [t("Crossfeed delay"), config.delayMs, 0, 0.6, "ms"],
   ] as const) {
     if (!Number.isFinite(value) || value < minimum || value > maximum) {
-      throw new RangeError(`${label} must be between ${minimum.toLocaleString("en-US")} and ${maximum.toLocaleString("en-US")} ${unit}.`);
+      throw new RangeError(t("{label} must be between {min} and {max}{unit}.", { label, min: minimum.toLocaleString(locale), max: maximum.toLocaleString(locale), unit: ` ${unit}` }));
     }
   }
 }
@@ -228,7 +229,7 @@ export function encodeCrossfeed(config: CrossfeedConfig): Uint8Array {
 }
 
 export function decodeCrossfeed(payload: Uint8Array): CrossfeedConfig {
-  if (payload.length !== 8 || payload[1] !== 0) throw new Error("Invalid crossfeed response");
+  if (payload.length !== 8 || payload[1] !== 0) throw new Error(t("Invalid crossfeed response"));
   const view = viewFor(payload);
   const config = {
     mode: payload[0] as CrossfeedMode,
@@ -241,7 +242,7 @@ export function decodeCrossfeed(payload: Uint8Array): CrossfeedConfig {
 }
 
 export function decodeCrossfeedState(payload: Uint8Array): CrossfeedState {
-  if (payload.length !== 17 || payload[16] > 1) throw new Error("Invalid crossfeed state response");
+  if (payload.length !== 17 || payload[16] > 1) throw new Error(t("Invalid crossfeed state response"));
   return {
     live: decodeCrossfeed(payload.subarray(0, 8)),
     saved: decodeCrossfeed(payload.subarray(8, 16)),
@@ -256,13 +257,13 @@ export function crossfeedConfigsEqual(left: CrossfeedConfig, right: CrossfeedCon
 
 export function validateOutputProcessing(config: OutputProcessingConfig): void {
   if ([config.mono, config.swap, config.invertLeft, config.invertRight].some((value) => typeof value !== "boolean")) {
-    throw new RangeError("Output processing flags are invalid.");
+    throw new RangeError(t("Output processing flags are invalid."));
   }
   if (!Number.isFinite(config.balancePercent) || config.balancePercent < -100 || config.balancePercent > 100) {
-    throw new RangeError("Balance must be between -100 and 100 %.");
+    throw new RangeError(t("Balance must be between -100 and 100 %."));
   }
   if (!Number.isFinite(config.widthPercent) || config.widthPercent < 0 || config.widthPercent > 200) {
-    throw new RangeError("Stereo width must be between 0 and 200 %.");
+    throw new RangeError(t("Stereo width must be between 0 and 200 %."));
   }
 }
 
@@ -283,7 +284,7 @@ export function encodeOutputProcessing(config: OutputProcessingConfig): Uint8Arr
 export function decodeOutputProcessing(payload: Uint8Array): OutputProcessingConfig {
   if (payload.length !== 8 || payload[1] !== 0 || payload[6] !== 0 || payload[7] !== 0 ||
       (payload[0] & ~0x1f) !== 0) {
-    throw new Error("Invalid output processing response");
+    throw new Error(t("Invalid output processing response"));
   }
   const view = viewFor(payload);
   const flags = payload[0];
@@ -301,7 +302,7 @@ export function decodeOutputProcessing(payload: Uint8Array): OutputProcessingCon
 }
 
 export function decodeOutputProcessingState(payload: Uint8Array): OutputProcessingState {
-  if (payload.length !== 17 || payload[16] > 1) throw new Error("Invalid output processing state response");
+  if (payload.length !== 17 || payload[16] > 1) throw new Error(t("Invalid output processing state response"));
   return {
     live: decodeOutputProcessing(payload.subarray(0, 8)),
     saved: decodeOutputProcessing(payload.subarray(8, 16)),
@@ -383,14 +384,14 @@ export interface ProfileState {
 }
 
 const statusLabels: Record<ProtocolStatus, string> = {
-  [ProtocolStatus.Ok]: "OK",
-  [ProtocolStatus.InvalidPacket]: "The device rejected the packet",
-  [ProtocolStatus.InvalidCommand]: "The command is not supported",
-  [ProtocolStatus.InvalidLength]: "The command length is invalid",
-  [ProtocolStatus.InvalidIndex]: "The EQ band index is invalid",
-  [ProtocolStatus.OutOfRange]: "One or more EQ values are out of range",
-  [ProtocolStatus.Busy]: "The device is busy",
-  [ProtocolStatus.StorageError]: "The device could not write its flash storage",
+  [ProtocolStatus.Ok]: t("OK"),
+  [ProtocolStatus.InvalidPacket]: t("The device rejected the packet"),
+  [ProtocolStatus.InvalidCommand]: t("The command is not supported"),
+  [ProtocolStatus.InvalidLength]: t("The command length is invalid"),
+  [ProtocolStatus.InvalidIndex]: t("The EQ band index is invalid"),
+  [ProtocolStatus.OutOfRange]: t("One or more EQ values are out of range"),
+  [ProtocolStatus.Busy]: t("The device is busy"),
+  [ProtocolStatus.StorageError]: t("The device could not write its flash storage"),
 };
 
 function viewFor(data: Uint8Array): DataView {
@@ -406,7 +407,7 @@ export function createRequest(
   requestId: number,
   payload: Uint8Array<ArrayBufferLike> = new Uint8Array(),
 ): Uint8Array {
-  if (payload.length > REPORT_SIZE - HEADER_SIZE) throw new RangeError("Payload is too large");
+  if (payload.length > REPORT_SIZE - HEADER_SIZE) throw new RangeError(t("Payload is too large"));
   const report = new Uint8Array(REPORT_SIZE);
   const view = viewFor(report);
   report[0] = "P".charCodeAt(0);
@@ -427,7 +428,7 @@ export function parseResponse(report: Uint8Array): ResponsePacket {
     report[2] !== PROTOCOL_VERSION ||
     report[6] > REPORT_SIZE - HEADER_SIZE
   ) {
-    throw new Error("Malformed response from Pumper");
+    throw new Error(t("Malformed response from Pumper"));
   }
   const view = viewFor(report);
   return {
@@ -439,8 +440,8 @@ export function parseResponse(report: Uint8Array): ResponsePacket {
 }
 
 export function assertResponse(response: ResponsePacket, opcode: Opcode): void {
-  if (response.opcode !== (opcode | 0x80)) throw new Error("Unexpected response from Pumper");
-  if (response.status !== ProtocolStatus.Ok) throw new Error(statusLabels[response.status] ?? "Device error");
+  if (response.opcode !== (opcode | 0x80)) throw new Error(t("Unexpected response from Pumper"));
+  if (response.status !== ProtocolStatus.Ok) throw new Error(statusLabels[response.status] ?? t("Device error"));
 }
 
 export function encodeGlobal(config: EqConfig): Uint8Array {
@@ -451,7 +452,7 @@ export function encodeGlobal(config: EqConfig): Uint8Array {
 }
 
 export function decodeGlobal(payload: Uint8Array): Pick<EqConfig, "enabled" | "preampDb"> {
-  if (payload.length !== 8) throw new Error("Invalid global EQ response");
+  if (payload.length !== 8) throw new Error(t("Invalid global EQ response"));
   return { enabled: payload[0] !== 0, preampDb: viewFor(payload).getInt32(4, true) / 1000 };
 }
 
@@ -470,7 +471,7 @@ export function encodeBand(index: number, band: EqBand): Uint8Array {
 }
 
 export function decodeBand(payload: Uint8Array): { index: number; band: EqBand } {
-  if (payload.length !== 21) throw new Error("Invalid EQ band response");
+  if (payload.length !== 21) throw new Error(t("Invalid EQ band response"));
   const view = viewFor(payload);
   return {
     index: payload[0],
@@ -488,13 +489,13 @@ export function decodeBand(payload: Uint8Array): { index: number; band: EqBand }
 
 export function decodeStatus(payload: Uint8Array): DeviceStatus {
   if (payload.length !== 28 && payload.length !== 32 && payload.length !== 44 && payload.length !== 48) {
-    throw new Error("Invalid status response");
+    throw new Error(t("Invalid status response"));
   }
   const view = viewFor(payload);
   const flags = payload[3];
   const bitDepth = payload.length >= 48 ? payload[44] : null;
   if (bitDepth !== null && bitDepth !== 16 && bitDepth !== 24) {
-    throw new Error("Invalid status bit depth");
+    throw new Error(t("Invalid status bit depth"));
   }
   return {
     firmwareVersion: `${payload[0]}.${payload[1]}`,
@@ -517,10 +518,10 @@ export function decodeStatus(payload: Uint8Array): DeviceStatus {
 }
 
 export function decodeTelemetry(payload: Uint8Array): DeviceTelemetry {
-  if (payload.length !== 56 || payload[0] !== 1) throw new Error("Invalid telemetry response");
+  if (payload.length !== 56 || payload[0] !== 1) throw new Error(t("Invalid telemetry response"));
   const flags = payload[1];
   if ((flags & ~0x03) !== 0 || payload[2] !== 0 || payload[3] !== 0) {
-    throw new Error("Invalid telemetry response");
+    throw new Error(t("Invalid telemetry response"));
   }
   const view = viewFor(payload);
   return {
@@ -552,9 +553,9 @@ export function encodeMeterConfig(reportIntervalMs: number, timeoutMs: number): 
 }
 
 export function decodeMeterLevel(payload: Uint8Array): MeterLevel {
-  if (payload.length !== 28 && payload.length !== 32) throw new Error("Invalid audio meter report");
+  if (payload.length !== 28 && payload.length !== 32) throw new Error(t("Invalid audio meter report"));
   if (payload.length === 32 && ((payload[28] & 0xfe) !== 0 || payload[29] !== 0 || payload[30] !== 0 || payload[31] !== 0)) {
-    throw new Error("Invalid audio meter flags");
+    throw new Error(t("Invalid audio meter flags"));
   }
   const view = viewFor(payload);
   return {
@@ -576,7 +577,7 @@ export function decodeMeterLevel(payload: Uint8Array): MeterLevel {
 }
 
 export function decodeProfileState(payload: Uint8Array): ProfileState {
-  if (payload.length !== 12) throw new Error("Invalid profile state response");
+  if (payload.length !== 12) throw new Error(t("Invalid profile state response"));
   const view = viewFor(payload);
   return {
     count: payload[0],
@@ -627,11 +628,11 @@ export function decodeSpectrumChunk(payload: Uint8Array): SpectrumChunk {
   const index = payload[1];
   const count = index === 5 ? 36 : 44;
   if (payload.length !== 12 + count || payload[0] !== 1 || index >= 6 ||
-      payload[2] !== 6 || payload[3] !== count) throw new Error("Invalid spectrum report");
+      payload[2] !== 6 || payload[3] !== count) throw new Error(t("Invalid spectrum report"));
   const view = new DataView(payload.buffer, payload.byteOffset, payload.byteLength);
   const rate = view.getUint32(8, true);
   if ((rate !== 44100 && rate !== 48000) || payload.subarray(12).some((level) => level > 192)) {
-    throw new Error("Invalid spectrum report");
+    throw new Error(t("Invalid spectrum report"));
   }
   return { sequence: view.getUint32(4, true), sampleRateHz: rate, index, levels: payload.slice(12) };
 }

@@ -1,3 +1,4 @@
+import { t } from "./i18n";
 import { KeyboardEvent, PointerEvent, useEffect, useId, useMemo, useRef, useState } from "react";
 import { OutputSpectrum } from "./OutputSpectrum";
 import type { PumperHidTransport } from "./hidTransport";
@@ -154,14 +155,14 @@ export function EqGraph({ spectrumTransport = null, spectrumEnabled = false, con
       style={{ aspectRatio: `${viewWidth} / ${height}` }}
       viewBox={`0 0 ${viewWidth} ${height}`}
       role="group"
-      aria-label="Combined equalizer frequency response"
+      aria-label={t("Combined equalizer frequency response")}
       aria-describedby={descriptionId}
       onPointerMove={updateFromPointer}
       onPointerUp={() => setDragging(null)}
       onPointerCancel={() => setDragging(null)}
       onLostPointerCapture={() => setDragging(null)}
     >
-      <desc id={descriptionId}>Solid line: combined EQ with preamp. Dashed line and shading: selected filter alone, without preamp. Select or drag a numbered point. Arrow keys adjust frequency and gain; hold Shift for larger steps.</desc>
+      <desc id={descriptionId}>{t("Solid line: combined EQ with preamp. Dashed line and shading: selected filter alone, without preamp. Select or drag a numbered point. Arrow keys adjust frequency and gain; hold Shift for larger steps.")}</desc>
       <rect className="fill-base-200" x={margin.left} y={margin.top} width={graphWidth} height={graphHeight} rx={3} />
       <text className="fill-base-content/70 text-[11px] font-medium" x={margin.left - 10} y={12} textAnchor="end" aria-hidden="true">dB</text>
       {spectrumEnabled && <text className="fill-base-content/70 text-[11px] font-medium" x={width - margin.right + 8} y={12} aria-hidden="true">dBFS</text>}
@@ -208,7 +209,7 @@ export function EqGraph({ spectrumTransport = null, spectrumEnabled = false, con
               tabIndex={interactive && selectedBand === index ? 0 : -1}
               aria-disabled={!interactive}
               aria-pressed={selectedBand === index}
-              aria-label={`Band ${index + 1} graph handle`}
+              aria-label={t("Band {number} graph handle", { number: index + 1 })}
               aria-describedby={descriptionId}
               onPointerDown={(event) => startDragging(event, index)}
               onClick={() => { if (interactive) onSelectBand(index); }}

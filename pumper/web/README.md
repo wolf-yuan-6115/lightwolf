@@ -9,6 +9,7 @@ It provides:
   input/output level meters updating at 50 Hz, and a firmware 3.3 limiter activity indicator.
 - An always-on live output spectrum behind the EQ curve on firmware 3.5 or newer.
 - Ten device profiles with separate load, save, default, and delete actions.
+- English and Traditional Chinese, selected automatically from browser language preferences.
 - USB sample-rate, bit-depth, stream, volume, and mute status.
 - Headphone crossfeed and, on firmware 3.0 or newer, global output processing.
 - The additional low-pass, high-pass, notch, and constant-peak band-pass EQ
@@ -39,6 +40,16 @@ also supports live output spectrum on firmware 3.5 or newer.
 
 WebHID works from a secure origin and from `http://localhost`; no special
 firmware development-origin flag is required.
+
+## Language
+
+The controller uses the first supported language in your browser preferences,
+with English as the fallback. Traditional Chinese matches `zh-Hant`, Taiwan,
+Hong Kong, and Macau locales, plus generic `zh`. Explicit Simplified Chinese
+locales are skipped. There is no language selector or saved language setting;
+reload the page after changing your browser language preferences.
+
+EQ text import/export keeps the same Equalizer APO-style format in both languages.
 
 ## Development
 

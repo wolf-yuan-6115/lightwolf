@@ -1,3 +1,4 @@
+import { t } from "./i18n";
 import type { PumperHidTransport } from "./hidTransport";
 import { useOutputSpectrum } from "./useOutputSpectrum";
 
@@ -17,7 +18,7 @@ export function OutputSpectrum({ transport, enabled, left, top, width, height }:
     `${i === 0 ? "M" : "L"}${(left + width * i / 255).toFixed(2)},${y(value > 0 ? 10 * Math.log10(value) : -96).toFixed(2)}`,
   ).join(" ") : "";
   return (
-    <g pointerEvents="none" aria-label="Output spectrum in dBFS">
+    <g pointerEvents="none" aria-label={t("Output spectrum in dBFS")}>
       {path && <path d={`${path} L${left + width},${top + height} L${left},${top + height} Z`} className="fill-info/12 stroke-info/35 [stroke-width:1]" />}
       {enabled && <>
         {[0, -24, -48, -72, -96].map((db) => <text key={db} x={left + width + 8} y={y(db) + (db === 0 ? 12 : db === -96 ? -4 : 3)} textAnchor="start" className="fill-base-content/70 text-[11px]">{db}</text>)}

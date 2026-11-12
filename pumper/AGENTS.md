@@ -191,6 +191,22 @@ Do not vendor or commit the patched SDK into Pumper.
 - Do not add or run Playwright unless explicitly requested. Use Vitest, the
   production build, and manual browser verification.
 
+### Web localization
+
+- UI messages use the typed `t()` catalog in `web/src/i18n.ts` and
+  `web/src/locales/zh-TW.json`. English source messages are the keys and fallback.
+- Resolve browser language preferences once per page load. Do not add a language
+  selector, URL override, or persisted app-language preference.
+- Use natural Taiwan wording (for example 位準, 等化器, 取樣率), consistent
+  Chinese/English spacing, and full-sentence rewrites when terminology changes.
+  Do not mechanically substitute terms inside sentences without rereading them.
+- Keep familiar English filter names in Traditional Chinese and explain their
+  audible effect in plain Chinese. Explain Q, BW, shelf steepness, and other
+  audio controls instead of relying on literal technical translations.
+- Translate complete messages with named placeholders, including accessible
+  labels, validation errors, and diagnostics. Preserve EQ exchange-format
+  keywords, numeric serialization, HID payloads, and internal state tokens.
+
 ## Android controller rules
 
 - The Android app targets `minSdk 34` and uses JDK 17, Gradle, Kotlin, and

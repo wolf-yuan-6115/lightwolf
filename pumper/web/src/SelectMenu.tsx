@@ -4,6 +4,7 @@ import { useId, useRef, useState, type CSSProperties, type KeyboardEvent, type S
 export interface SelectMenuOption<T extends string | number> {
   value: T;
   label: string;
+  description?: string;
 }
 
 interface SelectMenuProps<T extends string | number> {
@@ -121,7 +122,7 @@ export function SelectMenu<T extends string | number>({ value, options, onChange
       </button>
       <ul
         ref={popoverRef}
-        className="dropdown dropdown-start menu menu-sm max-h-72 flex-nowrap gap-0 overflow-x-hidden overflow-y-auto rounded-xl border-0 bg-base-100 p-1 shadow-lg"
+        className={`dropdown dropdown-start menu menu-sm max-h-96 flex-nowrap gap-0 overflow-x-hidden overflow-y-auto rounded-xl border-0 bg-base-100 p-1 shadow-lg ${options.some((option) => option.description) ? "min-w-72 max-w-[calc(100vw-2rem)]" : ""}`}
         id={popoverId}
         popover="auto"
         role="listbox"
@@ -135,17 +136,22 @@ export function SelectMenu<T extends string | number>({ value, options, onChange
             <li className="p-0" role="none" key={String(option.value)}>
               <button
                 ref={(element) => { optionRefs.current[index] = element; }}
-                className={`flex h-8 w-full items-center justify-between gap-2 px-2 py-0 ${selected ? "menu-active" : ""}`}
+                className={`flex w-full items-center justify-between gap-2 px-2 ${option.description ? "min-h-8 py-2" : "h-8 py-0"} ${selected ? "menu-active" : ""}`}
                 type="button"
                 role="option"
                 aria-selected={selected}
+                aria-label={option.label}
+                aria-describedby={option.description ? `${popoverId}-description-${index}` : undefined}
                 onClick={() => {
                   if (!selected) onChange(option.value);
                   hideMenu();
                 }}
                 onKeyDown={(event) => handleOptionKeyDown(event, index)}
               >
-                <span className="min-w-0 flex-1 truncate text-left">{option.label}</span>
+                <span className="min-w-0 flex-1 text-left">
+                  <span className="block truncate">{option.label}</span>
+                  {option.description && <span id={`${popoverId}-description-${index}`} className="mt-0.5 block whitespace-normal text-xs font-normal leading-relaxed opacity-80">{option.description}</span>}
+                </span>
                 {selected && <Check className="shrink-0" size={15} aria-hidden="true" />}
               </button>
             </li>
