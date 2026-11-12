@@ -14,9 +14,9 @@ static void test_default_config(void) {
   eq_config_set_defaults(&config);
   assert(eq_config_validate(&config));
   assert(eq_config_equal(&config, &k_eq_default_config));
-  assert(config.preamp_db == 0.0f);
-  for (uint32_t i = 0; i < EQ_NUM_FILTERS; i++) assert(config.filters[i].gain_db == 0.0f);
-  config.filters[0].frequency_hz = 5.0f;
+  assert(config.preamp_db == 0.0);
+  for (uint32_t i = 0; i < EQ_NUM_FILTERS; i++) assert(config.filters[i].gain_db == 0.0);
+  config.filters[0].frequency_hz = 5.0;
   assert(!eq_config_validate(&config));
 }
 
@@ -78,7 +78,7 @@ static void test_protocol_config_round_trip(void) {
 
   for (uint8_t type = EQ_FILTER_LOW_PASS; type <= EQ_FILTER_BAND_PASS; ++type) {
     eq_filter_config_t filter = {true, (eq_filter_type_t)type, EQ_WIDTH_Q,
-                                 1234.0f, 2.5f, 1.0f, 0.0f};
+                                 1234.0, 2.5, 1.0, 0.0};
     eq_protocol_encode_band(band, 0u, &filter);
     assert(eq_protocol_decode_band(band, sizeof(band), &index, &decoded_band));
     assert(decoded_band.type == type && decoded_band.width_mode == EQ_WIDTH_Q);
@@ -90,8 +90,8 @@ static void test_dsp_bypass_and_processing(void) {
   bypass.enabled = false;
   output_processing_config_t output = k_output_processing_default;
   audio_controls_init(48000u, &k_crossfeed_default, &output);
-  float bypass_samples[] = {10000, -10000, 2000, -2000};
-  float original[4];
+  double bypass_samples[] = {10000, -10000, 2000, -2000};
+  double original[4];
   memcpy(original, bypass_samples, sizeof(original));
   eq_init(48000u, &bypass);
   eq_process_interleaved_stereo(bypass_samples, 2u, NULL, false);
@@ -99,34 +99,34 @@ static void test_dsp_bypass_and_processing(void) {
 
   eq_config_t preamp = bypass;
   preamp.enabled = true;
-  preamp.preamp_db = -6.0206f;
+  preamp.preamp_db = -6.0206;
   for (uint32_t i = 0; i < EQ_NUM_FILTERS; i++) preamp.filters[i].enabled = false;
-  float samples[] = {10000, -10000};
+  double samples[] = {10000, -10000};
   eq_init(48000u, &preamp);
   eq_block_metrics_t metrics;
   eq_process_interleaved_stereo(samples, 1u, &metrics, true);
-  assert(fabsf(samples[0] - 5000) <= 1);
-  assert(fabsf(samples[1] + 5000) <= 1);
+  assert(fabs(samples[0] - 5000) <= 1);
+  assert(fabs(samples[1] + 5000) <= 1);
   assert(metrics.pre_eq.left_peak == 10000u);
   assert(metrics.pre_eq.left_square_sum == 100000000u);
   assert(metrics.post_eq.left_peak >= 4999u && metrics.post_eq.left_peak <= 5001u);
 }
 
-static eq_config_t single_peaking_filter(float frequency_hz) {
+static eq_config_t single_peaking_filter(double frequency_hz) {
   eq_config_t config = k_eq_default_config;
-  config.preamp_db = 0.0f;
+  config.preamp_db = 0.0;
   for (uint32_t i = 0u; i < EQ_NUM_FILTERS; i++) config.filters[i].enabled = false;
   config.filters[0].enabled = true;
   config.filters[0].type = EQ_FILTER_PEAKING;
   config.filters[0].width_mode = EQ_WIDTH_Q;
   config.filters[0].frequency_hz = frequency_hz;
-  config.filters[0].gain_db = 12.0f;
-  config.filters[0].q = 10.0f;
+  config.filters[0].gain_db = 12.0;
+  config.filters[0].q = 10.0;
   return config;
 }
 
-static float process_constant_sample(void) {
-  float samples[2] = {10000, 10000};
+static double process_constant_sample(void) {
+  double samples[2] = {10000, 10000};
   eq_process_interleaved_stereo(samples, 1u, NULL, false);
   return samples[0];
 }
@@ -139,83 +139,83 @@ static void test_dsp_transition_smoothing(void) {
   uint32_t const sample_rate_hz = 192000u;
   uint32_t const transition_frames = sample_rate_hz / 100u;
 
-  eq_config_t config = single_peaking_filter(1000.0f);
+  eq_config_t config = single_peaking_filter(1000.0);
   eq_init(sample_rate_hz, &config);
   settle_filter(sample_rate_hz / 2u);
-  config.filters[0].frequency_hz = 1050.0f;
+  config.filters[0].frequency_hz = 1050.0;
   assert(eq_set_config(&config));
   for (uint32_t i = 0u; i < transition_frames * 2u; i++) {
-    assert(fabsf(process_constant_sample() - 10000) <= 32);
+    assert(fabs(process_constant_sample() - 10000) <= 32);
   }
 
-  config = single_peaking_filter(100.0f);
+  config = single_peaking_filter(100.0);
   eq_init(sample_rate_hz, &config);
   settle_filter(sample_rate_hz / 2u);
-  float previous = process_constant_sample();
-  config.filters[0].frequency_hz = 1000.0f;
+  double previous = process_constant_sample();
+  config.filters[0].frequency_hz = 1000.0;
   assert(eq_set_config(&config));
   for (uint32_t i = 0u; i < transition_frames * 2u; i++) {
-    float output = process_constant_sample();
-    assert(fabsf(output - previous) <= 16);
+    double output = process_constant_sample();
+    assert(fabs(output - previous) <= 16);
     previous = output;
   }
 
-  config = single_peaking_filter(1000.0f);
+  config = single_peaking_filter(1000.0);
   eq_init(sample_rate_hz, &config);
   settle_filter(sample_rate_hz / 2u);
   previous = process_constant_sample();
-  config.filters[0].frequency_hz = 1050.0f;
+  config.filters[0].frequency_hz = 1050.0;
   assert(eq_set_config(&config));
   for (uint32_t i = 0u; i < transition_frames / 2u; i++) {
-    float output = process_constant_sample();
-    assert(fabsf(output - previous) <= 16);
+    double output = process_constant_sample();
+    assert(fabs(output - previous) <= 16);
     previous = output;
   }
-  config.filters[0].frequency_hz = 1100.0f;
+  config.filters[0].frequency_hz = 1100.0;
   assert(eq_set_config(&config));
   for (uint32_t i = 0u; i < transition_frames * 2u; i++) {
-    float output = process_constant_sample();
-    assert(fabsf(output - previous) <= 16);
+    double output = process_constant_sample();
+    assert(fabs(output - previous) <= 16);
     previous = output;
   }
 }
 
-static float response_rms(eq_filter_type_t type, uint32_t rate, float filter_hz, float tone_hz) {
+static double response_rms(eq_filter_type_t type, uint32_t rate, double filter_hz, double tone_hz) {
   eq_config_t config = k_eq_default_config;
   for (uint32_t i = 0; i < EQ_NUM_FILTERS; ++i) config.filters[i].enabled = false;
-  config.filters[0] = (eq_filter_config_t){true, type, EQ_WIDTH_Q, filter_hz, 0.707f, 1.0f, 0.0f};
+  config.filters[0] = (eq_filter_config_t){true, type, EQ_WIDTH_Q, filter_hz, 0.707, 1.0, 0.0};
   assert(eq_config_validate(&config));
   eq_init(rate, &config);
   audio_controls_init(rate, &k_crossfeed_default, &k_output_processing_default);
   double sum = 0.0;
   uint32_t measured = rate / 10u;
   for (uint32_t n = 0; n < rate / 5u; ++n) {
-    float value = 1000.0f * sinf(2.0f * 3.14159265358979323846f * tone_hz * (float)n /
-                                 (float)rate);
-    float pair[2] = {value, value};
+    double value = 1000.0 * sin(2.0 * 3.14159265358979323846 * tone_hz * (double)n /
+                                 (double)rate);
+    double pair[2] = {value, value};
     eq_process_interleaved_stereo(pair, 1u, NULL, false);
     assert(isfinite(pair[0]) && isfinite(pair[1]));
     if (n >= rate / 10u) sum += (double)pair[0] * pair[0];
   }
-  return sqrtf((float)(sum / measured));
+  return sqrt((double)(sum / measured));
 }
 
 static void test_new_filter_responses(void) {
   uint32_t rates[] = {44100u, 48000u, 88200u, 96000u, 176400u, 192000u};
   for (size_t i = 0; i < sizeof(rates) / sizeof(rates[0]); ++i) {
     uint32_t rate = rates[i];
-    assert(response_rms(EQ_FILTER_LOW_PASS, rate, 1000.0f, 100.0f) > 600.0f);
-    assert(response_rms(EQ_FILTER_LOW_PASS, rate, 1000.0f, 10000.0f) < 30.0f);
-    assert(response_rms(EQ_FILTER_HIGH_PASS, rate, 1000.0f, 100.0f) < 30.0f);
-    assert(response_rms(EQ_FILTER_HIGH_PASS, rate, 1000.0f, 10000.0f) > 600.0f);
-    assert(response_rms(EQ_FILTER_NOTCH, rate, 1000.0f, 1000.0f) < 10.0f);
-    assert(response_rms(EQ_FILTER_BAND_PASS, rate, 1000.0f, 1000.0f) > 650.0f);
+    assert(response_rms(EQ_FILTER_LOW_PASS, rate, 1000.0, 100.0) > 600.0);
+    assert(response_rms(EQ_FILTER_LOW_PASS, rate, 1000.0, 10000.0) < 30.0);
+    assert(response_rms(EQ_FILTER_HIGH_PASS, rate, 1000.0, 100.0) < 30.0);
+    assert(response_rms(EQ_FILTER_HIGH_PASS, rate, 1000.0, 10000.0) > 600.0);
+    assert(response_rms(EQ_FILTER_NOTCH, rate, 1000.0, 1000.0) < 10.0);
+    assert(response_rms(EQ_FILTER_BAND_PASS, rate, 1000.0, 1000.0) > 650.0);
   }
 }
 
-static float s_observed[1024];
+static double s_observed[1024];
 static unsigned s_observed_count;
-static void observe_output(float left, float right) {
+static void observe_output(double left, double right) {
   assert(s_observed_count + 2u <= 1024u);
   s_observed[s_observed_count++] = left;
   s_observed[s_observed_count++] = right;
@@ -225,18 +225,64 @@ static void test_output_observer(void) {
   for (unsigned i = 0; i < EQ_NUM_FILTERS; ++i) config.filters[i].enabled = false;
   eq_init(48000u, &config);
   audio_controls_init(48000u, &k_crossfeed_default, &k_output_processing_default);
-  config.preamp_db = -6.0206f;
+  config.preamp_db = -6.0206;
   assert(eq_set_config(&config)); // Exercise both ramp and steady-state loops.
-  float samples[1024];
-  for (unsigned i = 0; i < 1024u; ++i) samples[i] = i & 1u ? -40000.0f : 40000.0f;
+  double samples[1024];
+  for (unsigned i = 0; i < 1024u; ++i) samples[i] = i & 1u ? -40000.0 : 40000.0;
   s_observed_count = 0u;
   eq_set_output_observer(observe_output);
   eq_process_interleaved_stereo(samples, 512u, NULL, false);
   eq_set_output_observer(NULL);
   assert(s_observed_count == 1024u);
   assert(memcmp(samples, s_observed, sizeof(samples)) == 0);
-  for (unsigned i = 0; i < 1024u; ++i) assert(fabsf(s_observed[i]) <= 32768.0f);
-  assert(fabsf(s_observed[0]) > 24576.0f); // Observer excludes the 0.75 I2S gain.
+  for (unsigned i = 0; i < 1024u; ++i) assert(fabs(s_observed[i]) <= 32768.0);
+  assert(fabs(s_observed[0]) > 24576.0); // Observer excludes the 0.75 I2S gain.
+}
+
+static void test_playback_precision(void) {
+  eq_config_t config = k_eq_default_config;
+  config.enabled = false;
+  double const input[] = {32768.0 - 1.0 / 65536.0, -32768.0,
+                          16384.0 + 1.0 / 65536.0, -16384.0 - 1.0 / 65536.0};
+  double samples[4];
+  memcpy(samples, input, sizeof(samples));
+  eq_init(96000u, &config);
+  audio_controls_init(96000u, &k_crossfeed_default, &k_output_processing_default);
+  eq_block_metrics_t metrics;
+  eq_process_interleaved_stereo(samples, 2u, &metrics, true);
+  assert(memcmp(samples, input, sizeof(samples)) == 0);
+  assert(metrics.limiter_active_frames == 0u);
+  assert(metrics.post_eq.left_peak == 32768u && metrics.post_eq.right_peak == 32768u);
+
+  config.enabled = true;
+  config.preamp_db = -3.0f;
+  eq_init(96000u, &config);
+  memcpy(samples, input, sizeof(samples));
+  eq_process_interleaved_stereo(samples, 2u, NULL, false);
+  for (unsigned i = 0; i < 4u; ++i)
+    assert(fabs(samples[i] - input[i] * pow(10.0, -3.0 / 20.0)) < 1e-10);
+}
+
+static void test_low_frequency_high_q_precision(void) {
+  uint32_t const rates[] = {96000u, 192000u};
+  for (unsigned r = 0; r < 2u; ++r) {
+    uint32_t rate = rates[r];
+    eq_config_t config = single_peaking_filter(20.0);
+    config.filters[0].q = 20.0f;
+    eq_init(rate, &config);
+    audio_controls_init(rate, &k_crossfeed_default, &k_output_processing_default);
+    // Allow the high-Q transient to decay, then measure exactly 20 cycles.
+    double sum = 0.0;
+    for (uint32_t n = 0; n < rate * 12u; ++n) {
+      double input = 1000.0 * sin(2.0 * 3.14159265358979323846 * 20.0 * n / rate);
+      double pair[] = {input, -input};
+      eq_process_interleaved_stereo(pair, 1u, NULL, false);
+      assert(isfinite(pair[0]) && pair[0] == -pair[1]);
+      if (n >= rate * 11u) sum += pair[0] * pair[0];
+    }
+    double expected = 1000.0 * pow(10.0, 12.0 / 20.0) / sqrt(2.0);
+    assert(fabs(sqrt(sum / rate) / expected - 1.0) < 1e-7);
+  }
 }
 
 int main(void) {
@@ -247,5 +293,7 @@ int main(void) {
   test_dsp_transition_smoothing();
   test_new_filter_responses();
   test_output_observer();
+  test_playback_precision();
+  test_low_frequency_high_q_precision();
   return 0;
 }
