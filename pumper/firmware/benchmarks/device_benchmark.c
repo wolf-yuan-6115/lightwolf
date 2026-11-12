@@ -5,7 +5,7 @@
 #include "cmsis_eq.h"
 #include "pcm32_pack.h"
 static bench_cmsis_t cmsis;
-#define BENCH_MODE_MAX 4
+#define BENCH_MODE_MAX 5
 #else
 #define BENCH_MODE_MAX 3
 #endif
@@ -17,6 +17,14 @@ static bench_cmsis_t cmsis;
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+static bool selftest_passed;
+void bench_device_selftest(void) {
+#ifdef PUMPER_CMSIS_BENCHMARK
+  selftest_passed = bench_cmsis_selftest();
+#else
+  selftest_passed = true;
+#endif
+}
 static uint32_t request, applied = UINT32_MAX, local_rate;
 static bench_fixed_t fixed;
 static bench_ref_stage_t ref[10];
@@ -43,11 +51,12 @@ static void update_coefficients(bool transition) {
   for (unsigned i = 0; i < 10; ++i)
     bench_coefficients(&coefficients[i], &config.filters[i], local_rate);
 #ifdef PUMPER_CMSIS_BENCHMARK
-  if (mode == 4) {
+  if (mode >= 4) {
     if (transition)
       bench_cmsis_ramp(&cmsis, coefficients, local_rate / 100);
     else
       bench_cmsis_init(&cmsis, coefficients);
+    cmsis.optimized = mode == 5;
     return;
   }
 #endif
@@ -145,7 +154,7 @@ void bench_device_process(float *samples, size_t frames, eq_block_metrics_t *met
     rest_us = convert_us = 0;
   } else {
 #ifdef PUMPER_CMSIS_BENCHMARK
-    if (mode == 4) {
+    if (mode >= 4) {
       if (!bench_cmsis_process(&cmsis, in, out, frames))
         memset(out, 0, sizeof(out));
     } else
@@ -188,7 +197,7 @@ void bench_device_process(float *samples, size_t frames, eq_block_metrics_t *met
 size_t bench_device_pack(uint32_t *out, float const *in, size_t frames,
                          audio_sample_format_t format) {
 #ifdef PUMPER_CMSIS_BENCHMARK
-  if (mode == 4 && format == AUDIO_FORMAT_PCM32)
+  if (mode >= 4 && format == AUDIO_FORMAT_PCM32)
     return bench_pcm32_pack(out, in, frames);
 #endif
   return audio_format_pack_i2s(out, in, frames, format);
@@ -214,7 +223,7 @@ void bench_device_finish(uint32_t process, uint32_t pack, size_t frames) {
   result.clip = fixed.clips;
   result.unstable = fixed.unstable;
 #ifdef PUMPER_CMSIS_BENCHMARK
-  if (mode == 4) {
+  if (mode >= 4) {
     result.overflow = result.clip = 0;
     result.unstable = cmsis.valid ? 0 : 1;
   }
@@ -260,23 +269,24 @@ void bench_device_task(bool streaming, uint32_t rate, audio_sample_format_t form
       char outbuf[768];
       snprintf(
           outbuf, sizeof(outbuf),
-          "{\"arithmetic_checks\":%s,\"mode\":%u,\"scenario\":%u,\"rate\":%u,\"bits\":%u,\"clock\":"
+          "{\"selftest\":%s,\"arithmetic_checks\":%s,\"mode\":%u,\"scenario\":%u,\"rate\":%u,"
+          "\"bits\":%u,\"clock\":"
           "%lu,\"frames\":%u,"
           "\"blocks\":%u,\"total_us\":%llu,\"peak_us\":%u,\"peak_frames\":%u,\"max_us\":%u,\"prep_"
           "us\":%u,\"eq_us\":%u,\"rest_us\":%u,\"convert_us\":%u,\"generator_us\":%u,\"pack_us\":%"
           "u,\"overflows\":%u,\"clips\":%u,\"unstable\":%u,\"underruns\":%u,\"low_water\":%u,"
           "\"spectrum_slice_us\":%u,\"spectrum_drops\":%u,\"temperature_mc\":%ld}\n",
-          mode == 4 ? "false" : "true", mode, scenario, rate, audio_format_bit_depth(format),
-          (unsigned long)clock_get_hz(clk_sys), s.frames, s.blocks, (unsigned long long)s.total_us,
-          s.peak_us, s.peak_frames, s.max_us, s.prep_max, s.eq_max, s.rest_max, s.convert_max,
-          s.generator_max, s.pack_max, s.overflow, s.clip, s.unstable, diag.underrun_frames,
-          diag.low_water_frames, spec.max_slice_us, spec.capture_dropped_frames,
-          (long)temperature());
+          selftest_passed ? "true" : "false", mode >= 4 ? "false" : "true", mode, scenario, rate,
+          audio_format_bit_depth(format), (unsigned long)clock_get_hz(clk_sys), s.frames, s.blocks,
+          (unsigned long long)s.total_us, s.peak_us, s.peak_frames, s.max_us, s.prep_max, s.eq_max,
+          s.rest_max, s.convert_max, s.generator_max, s.pack_max, s.overflow, s.clip, s.unstable,
+          diag.underrun_frames, diag.low_water_frames, spec.max_slice_us,
+          spec.capture_dropped_frames, (long)temperature());
       reply(outbuf);
     } else {
       unsigned m, sc, h, b;
       if (sscanf(line, "run %u %u %u %u", &m, &sc, &h, &b) != 4 || m > BENCH_MODE_MAX || sc > 2 ||
-          h > 30 || b > 2 || streaming) {
+          h > 30 || b > 2 || streaming || (m == 5 && !selftest_passed)) {
         reply("{\"error\":\"run requires idle and valid mode/scenario/headroom/boost\"}\n");
         continue;
       }

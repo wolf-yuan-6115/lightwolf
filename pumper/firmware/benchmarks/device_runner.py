@@ -253,9 +253,12 @@ def main():
     p.add_argument('--output', required=True, type=Path)
     p.add_argument('--quick', action='store_true')
     p.add_argument('--cmsis', action='store_true', help='Test only the optimized CMSIS candidate, raising clocks only if needed')
+    p.add_argument('--assembly', action='store_true', help='Test the M33 assembly-assisted CMSIS-equivalent candidate')
     p.add_argument('--resume', action='store_true', help='Retain completed cases in the output file')
     p.add_argument('--ceiling-only', action='store_true', help='Run the 250 MHz extension after a failed 200 MHz matrix')
     a = p.parse_args()
+    candidate = 5 if a.assembly else 4
+    a.cmsis = a.cmsis or a.assembly
     validate_image(a.benchmark)
     validate_image(a.production)
     require(a.benchmark.resolve() != a.production.resolve() and a.benchmark.read_bytes() != a.production.read_bytes(), 'Benchmark and production backup must be different images')
@@ -285,12 +288,12 @@ def main():
             cases = [(3, sc, 96000, 32, 2, 60) for sc in [0, 1, 2]]
             cases += [(3, 0, rate, bits, 2, 8) for rate, bits in [(88200,32),(96000,24),(192000,16)]]
         if a.cmsis:
-            cases = [(4, sc, 96000, 32, 0, 8 if a.quick else 60) for sc in ([0] if a.quick else [0,1,2])]
+            cases = [(candidate, sc, 96000, 32, 0, 8 if a.quick else 60) for sc in ([0] if a.quick else [0,1,2])]
         for case in cases:
             execute(case)
         if a.cmsis and not a.quick:
             for boost in [1, 2]:
-                previous = [r for r in records if r['mode'] == 4 and r['boost'] == boost-1]
+                previous = [r for r in records if r['mode'] == candidate and r['boost'] == boost-1]
                 passed = len(previous) >= 3 and all(
                     not r.get('error') and r['samples'] and
                     r['samples'][-1]['total_us']*96000/r['samples'][-1]['frames']/10000 <= 70 and
@@ -299,7 +302,7 @@ def main():
                 if passed:
                     break
                 for sc in [0,1,2]:
-                    execute((4,sc,96000,32,boost,60))
+                    execute((candidate,sc,96000,32,boost,60))
         if not a.quick and not a.ceiling_only and not a.cmsis:
             # Only state64 passes the current-preset numerical impulse-tail gate.
             # Try boost only if its 180 MHz timing misses the 70/85% targets.

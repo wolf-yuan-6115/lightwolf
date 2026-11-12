@@ -21,7 +21,9 @@ static double response(bench_coeff_t c, double w) {
   double dr = 1 + c.a1 * cos(w) + c.a2 * cos(2 * w), di = -c.a1 * sin(w) - c.a2 * sin(2 * w);
   return sqrt((nr * nr + ni * ni) / (dr * dr + di * di));
 }
-int main(void) {
+int main(int argc, char **argv) {
+  bool optimized = argc == 2 && strcmp(argv[1], "--optimized") == 0;
+  assert(argc == 1 || optimized);
   unsigned rates[] = {44100, 48000, 88200, 96000, 176400, 192000};
   double levels[] = {-6, -60, -120};
   puts("fixture,rate,signal,dbfs,headroom,range_failure,response_error_db,rms_error_dbfs,"
@@ -75,6 +77,7 @@ int main(void) {
           double rms = 0, arith = 0, resp = 0;
           if (valid) {
             assert(bench_cmsis_init(&fast, c));
+            fast.optimized = optimized;
             oracle = fast;
             for (unsigned i = 0; i < 10; ++i) {
               double scale = ldexp(1, (int)fast.shift[i] - 31);

@@ -396,6 +396,9 @@ static void meter_keepalive(void) {
 }
 
 static void dsp_core_main(void) {
+#ifdef PUMPER_DSP_BENCHMARK
+  bench_device_selftest();
+#endif
   eq_settings_core_init();
   uint32_t local_generation;
   eq_config_t local_config = config_snapshot(&local_generation);

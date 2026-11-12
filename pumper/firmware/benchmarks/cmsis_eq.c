@@ -1,4 +1,5 @@
 #include "cmsis_eq.h"
+#include "m33_mac.h"
 #include <limits.h>
 #include <math.h>
 #include <string.h>
@@ -91,6 +92,53 @@ static inline int32_t transition_sample(bench_cmsis_t *s, unsigned ch, int32_t x
   }
   return x;
 }
+static inline int32_t optimized_sample(int32_t x, int32_t const *c, int64_t *h, unsigned shift) {
+  int64_t acc = (int64_t)c[0] * x + (int64_t)c[1] * (int32_t)h[0] + (int64_t)c[2] * (int32_t)h[1];
+  acc = bench_m33_mac(acc, h[2], c[3]);
+  acc = bench_m33_mac(acc, h[3], c[4]);
+  uint64_t bits = (uint64_t)acc << (shift + 1);
+  h[1] = h[0];
+  h[0] = x;
+  h[3] = h[2];
+  memcpy(&h[2], &bits, sizeof(bits));
+  return (int32_t)(h[2] >> 32);
+}
+static void optimized_stage(int32_t *samples, size_t frames, int32_t const *c, int64_t *h,
+                            unsigned shift) {
+  int32_t x1 = (int32_t)h[0], x2 = (int32_t)h[1];
+  int64_t y1 = h[2], y2 = h[3];
+  int32_t b0 = c[0], b1 = c[1], b2 = c[2], a1 = c[3], a2 = c[4];
+  for (size_t n = 0; n < frames; ++n) {
+    int32_t x = samples[n];
+    int64_t acc = (int64_t)b0 * x + (int64_t)b1 * x1 + (int64_t)b2 * x2;
+    acc = bench_m33_mac(acc, y1, a1);
+    acc = bench_m33_mac(acc, y2, a2);
+    uint64_t bits = (uint64_t)acc << (shift + 1);
+    x2 = x1;
+    x1 = x;
+    y2 = y1;
+    memcpy(&y1, &bits, sizeof(bits));
+    samples[n] = (int32_t)(y1 >> 32);
+  }
+  h[0] = x1;
+  h[1] = x2;
+  h[2] = y1;
+  h[3] = y2;
+}
+static void advance_stage(bench_cmsis_t *s, unsigned i) {
+  for (unsigned k = 0; k < 5; ++k) {
+    s->coeff[i][k] += s->step[i][k];
+    s->error[i][k] += s->remainder[i][k];
+    if (s->error[i][k] >= (int32_t)s->duration) {
+      ++s->coeff[i][k];
+      s->error[i][k] -= (int32_t)s->duration;
+    }
+    if (s->error[i][k] <= -(int32_t)s->duration) {
+      --s->coeff[i][k];
+      s->error[i][k] += (int32_t)s->duration;
+    }
+  }
+}
 bool bench_cmsis_process(bench_cmsis_t *s, int32_t const *in, int32_t *out, size_t frames) {
   if (!s->valid || frames > BENCH_CMSIS_MAX_FRAMES)
     return false;
@@ -98,28 +146,83 @@ bool bench_cmsis_process(bench_cmsis_t *s, int32_t const *in, int32_t *out, size
     for (size_t n = 0; n < frames; ++n)
       s->work[ch][n] = in[n * 2 + ch];
   size_t ramp = s->remaining < frames ? s->remaining : frames;
-  for (size_t n = 0; n < ramp; ++n) {
-    advance(s);
-    for (unsigned ch = 0; ch < 2; ++ch)
-      s->work[ch][n] = transition_sample(s, ch, s->work[ch][n]);
-  }
+  if (s->optimized) {
+    // Process one stage's coefficient trajectory across a block. This is
+    // causally identical to sample-major processing but reuses stage state.
+    for (unsigned i = 0; i < 10; ++i)
+      for (size_t n = 0; n < ramp; ++n) {
+        advance_stage(s, i);
+        for (unsigned ch = 0; ch < 2; ++ch)
+          s->work[ch][n] =
+              optimized_sample(s->work[ch][n], s->coeff[i], s->state[ch][i], s->shift[i]);
+      }
+    s->remaining -= (uint32_t)ramp;
+    if (!s->remaining)
+      memcpy(s->coeff, s->target, sizeof(s->coeff));
+  } else
+    for (size_t n = 0; n < ramp; ++n) {
+      advance(s);
+      for (unsigned ch = 0; ch < 2; ++ch)
+        s->work[ch][n] = transition_sample(s, ch, s->work[ch][n]);
+    }
   if (frames > ramp)
     for (unsigned ch = 0; ch < 2; ++ch) {
-      // Keep order; combine only consecutive stages with the same postShift.
-      for (unsigned first = 0; first < 10;) {
-        unsigned end = first + 1;
-        while (end < 10 && s->shift[end] == s->shift[first])
-          ++end;
-        arm_biquad_cas_df1_32x64_ins_q31 instance = {
-            (uint8_t)(end - first), &s->state[ch][first][0], &s->coeff[first][0], s->shift[first]};
-        arm_biquad_cas_df1_32x64_q31(&instance, s->work[ch] + ramp, s->work[ch] + ramp,
-                                     (uint32_t)(frames - ramp));
-        first = end;
-      }
+      if (s->optimized) {
+        for (unsigned i = 0; i < 10; ++i)
+          optimized_stage(s->work[ch] + ramp, frames - ramp, s->coeff[i], s->state[ch][i],
+                          s->shift[i]);
+      } else
+        for (unsigned first = 0; first < 10;) {
+          unsigned end = first + 1;
+          while (end < 10 && s->shift[end] == s->shift[first])
+            ++end;
+          arm_biquad_cas_df1_32x64_ins_q31 instance = {(uint8_t)(end - first),
+                                                       &s->state[ch][first][0], &s->coeff[first][0],
+                                                       s->shift[first]};
+          arm_biquad_cas_df1_32x64_q31(&instance, s->work[ch] + ramp, s->work[ch] + ramp,
+                                       (uint32_t)(frames - ramp));
+          first = end;
+        }
     }
   for (size_t n = 0; n < frames; ++n)
     for (unsigned ch = 0; ch < 2; ++ch)
       out[n * 2 + ch] = s->work[ch][n];
+  return true;
+}
+bool bench_cmsis_selftest(void) {
+  // Static buffers avoid consuming either core's 2 KiB stack. Called before USB
+  // enumeration so validation cannot delay an active audio stream.
+  static bench_cmsis_t a, b;
+  static int32_t in[388], x[388], y[388];
+  static bench_coeff_t c[10];
+  eq_config_t cfg;
+  bench_fixture(&cfg, 0);
+  for (unsigned i = 0; i < 10; ++i)
+    bench_coefficients(&c[i], &cfg.filters[i], 96000);
+  if (!bench_cmsis_init(&a, c) || !bench_cmsis_init(&b, c))
+    return false;
+  b.optimized = true;
+  uint32_t seed = 0x93a46f21;
+  unsigned sizes[] = {1, 3, 4, 7, 96, 97, 194};
+  for (unsigned n = 0; n < 80; ++n) {
+    unsigned count = sizes[n % 7];
+    for (unsigned i = 0; i < count * 2; ++i) {
+      seed = seed * 1664525 + 1013904223;
+      in[i] = ((int32_t)(seed & INT32_MAX) - 1073741824) / 8;
+    }
+    if (n == 5 || n == 8) {
+      for (unsigned i = 0; i < 10; ++i) {
+        cfg.filters[i].frequency_hz *= 1.01f;
+        bench_coefficients(&c[i], &cfg.filters[i], 96000);
+      }
+      if (!bench_cmsis_ramp(&a, c, 960) || !bench_cmsis_ramp(&b, c, 960))
+        return false;
+    }
+    if (!bench_cmsis_process(&a, in, x, count) || !bench_cmsis_process(&b, in, y, count))
+      return false;
+    if (memcmp(x, y, count * 2 * sizeof(int32_t)) || memcmp(a.state, b.state, sizeof(a.state)))
+      return false;
+  }
   return true;
 }
 #ifdef BENCH_CMSIS_ORACLE
