@@ -620,18 +620,18 @@ bool tud_audio_set_itf_close_EP_cb(uint8_t rhport, tusb_control_request_t const 
   return true;
 }
 
-// Alternate 0 is idle, 1 is 16-bit PCM, and 2 is packed 24-bit PCM.
+// Alternate 0 is idle; 1/2/3 are 16-bit, packed 24-bit, and 32-bit integer PCM.
 bool tud_audio_set_itf_cb(uint8_t rhport, tusb_control_request_t const *p_request) {
   (void) rhport;
   uint8_t const itf = tu_u16_low(tu_le16toh(p_request->wIndex));
   uint8_t const alt = tu_u16_low(tu_le16toh(p_request->wValue));
   if (itf == ITF_NUM_AUDIO_STREAMING) {
-    if (alt > 2u) return false;
+    if (alt > 3u) return false;
     if (alt == 0u) {
       set_streaming_state(false);
       return true;
     }
-    audio_sample_format_t format = alt == 2u ? AUDIO_FORMAT_PCM24 : AUDIO_FORMAT_PCM16;
+    audio_sample_format_t format = (audio_sample_format_t)alt;
     if (!audio_format_rate_valid(format, s_sample_rate_hz)) return false;
     if (format != s_audio_format) {
       set_streaming_state(false);
@@ -713,8 +713,8 @@ static void hid_response_status(uint8_t opcode, uint16_t request_id) {
   i2s_out_diagnostics_t i2s = i2s_out_diagnostics();
   hid_response_prepare(opcode, request_id, EQ_STATUS_OK, EQ_PROTOCOL_STATUS_PAYLOAD_SIZE);
   uint8_t *payload = &s_hid_response[EQ_PROTOCOL_HEADER_SIZE];
-  payload[0] = 4u;
-  payload[1] = 2u;
+  payload[0] = 5u;
+  payload[1] = 0u;
   payload[2] = EQ_NUM_FILTERS;
   payload[3] = (s_streaming_active ? 0x01u : 0u) | (config_is_dirty() ? 0x02u : 0u) |
                (config.enabled ? 0x04u : 0u);
@@ -728,7 +728,7 @@ static void hid_response_status(uint8_t opcode, uint16_t request_id) {
   eq_protocol_write_u32(payload + 32u, clock_get_hz(clk_sys));
   eq_protocol_write_u32(payload + 36u, s_dsp_max_block_us);
   eq_protocol_write_u32(payload + 40u, i2s.low_water_frames);
-  payload[44] = s_audio_format == AUDIO_FORMAT_PCM24 ? 24u : 16u;
+  payload[44] = audio_format_bit_depth(s_audio_format);
 }
 
 static void hid_response_telemetry(uint8_t opcode, uint16_t request_id) {

@@ -1,5 +1,5 @@
 ; I2S, MSB first. The 16-bit program consumes one packed stereo word per frame;
-; the 32-bit program consumes right then left words with 24 valid MSBs.
+; the 32-bit program consumes right then left words with 24 or 32 valid MSBs.
 
 .program audio_i2s_16
 .side_set 2

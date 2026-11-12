@@ -10,12 +10,23 @@ static void test_rate_matrix(void) {
   for (size_t i = 0; i < sizeof(common) / sizeof(common[0]); ++i) {
     assert(audio_format_rate_valid(AUDIO_FORMAT_PCM16, common[i]));
     assert(audio_format_rate_valid(AUDIO_FORMAT_PCM24, common[i]));
+    assert(audio_format_rate_valid(AUDIO_FORMAT_PCM32, common[i]));
+    assert(!audio_format_rate_valid((audio_sample_format_t)0, common[i]));
   }
   assert(audio_format_rate_valid(AUDIO_FORMAT_PCM16, 176400u));
   assert(audio_format_rate_valid(AUDIO_FORMAT_PCM16, 192000u));
   assert(!audio_format_rate_valid(AUDIO_FORMAT_PCM24, 176400u));
   assert(!audio_format_rate_valid(AUDIO_FORMAT_PCM24, 192000u));
+  assert(!audio_format_rate_valid(AUDIO_FORMAT_PCM32, 176400u));
+  assert(!audio_format_rate_valid(AUDIO_FORMAT_PCM32, 192000u));
+  assert(!audio_format_rate_valid(AUDIO_FORMAT_PCM32, 48001u));
   assert(!audio_format_rate_valid(AUDIO_FORMAT_PCM16, 48001u));
+  assert(audio_format_frame_bytes(AUDIO_FORMAT_PCM32) == 8u);
+  assert(audio_format_bit_depth(AUDIO_FORMAT_PCM16) == 16u);
+  assert(audio_format_bit_depth(AUDIO_FORMAT_PCM24) == 24u);
+  assert(audio_format_bit_depth(AUDIO_FORMAT_PCM32) == 32u);
+  assert(audio_format_frame_bytes((audio_sample_format_t)0) == 0u);
+  assert(audio_format_bit_depth((audio_sample_format_t)4) == 0u);
 }
 
 static void test_idle_clock_negotiation(void) {
@@ -31,6 +42,13 @@ static void test_idle_clock_negotiation(void) {
   assert(audio_format_rate_change_valid(AUDIO_FORMAT_PCM24, 96000u, true));
   assert(!audio_format_rate_change_valid(AUDIO_FORMAT_PCM16, 48001u, false));
   assert(!audio_format_rate_change_valid(AUDIO_FORMAT_PCM24, 384000u, false));
+  assert(audio_format_rate_change_valid(AUDIO_FORMAT_PCM32, 192000u, false));
+  assert(audio_format_rate_change_valid(AUDIO_FORMAT_PCM32, 176400u, false));
+  assert(!audio_format_rate_change_valid(AUDIO_FORMAT_PCM32, 192000u, true));
+  assert(!audio_format_rate_change_valid(AUDIO_FORMAT_PCM32, 176400u, true));
+  assert(audio_format_rate_change_valid(AUDIO_FORMAT_PCM16, 96000u, false));
+  assert(audio_format_rate_change_valid(AUDIO_FORMAT_PCM32, 96000u, true));
+  assert(!audio_format_rate_change_valid(AUDIO_FORMAT_PCM32, 384000u, false));
 }
 
 static void test_decode(void) {
@@ -70,8 +88,8 @@ static void test_pack(void) {
 
 static void test_in_place_packing(void) {
   double const samples[] = {-32768.0, 32767.0, 12345.123, -23456.456, 1.5, -1.5};
-  audio_sample_format_t formats[] = {AUDIO_FORMAT_PCM16, AUDIO_FORMAT_PCM24};
-  for (unsigned f = 0; f < 2u; ++f) {
+  audio_sample_format_t formats[] = {AUDIO_FORMAT_PCM16, AUDIO_FORMAT_PCM24, AUDIO_FORMAT_PCM32};
+  for (unsigned f = 0; f < 3u; ++f) {
     union { double samples[6]; uint32_t words[6]; } block;
     uint32_t expected[6];
     memcpy(block.samples, samples, sizeof(samples));
@@ -81,11 +99,54 @@ static void test_in_place_packing(void) {
   }
 }
 
+static void test_pcm32_decode_and_pack(void) {
+  int32_t const values[] = {INT32_MIN, INT32_MAX, 16777217, -16777217,
+                            1, -1, 2, -2, 0x12345678, -0x12345678};
+  uint8_t bytes[sizeof(values)];
+  for (size_t i = 0; i < sizeof(values) / sizeof(values[0]); ++i) {
+    uint32_t v = (uint32_t)values[i];
+    for (unsigned b = 0; b < 4u; ++b) bytes[i * 4u + b] = (uint8_t)(v >> (b * 8u));
+  }
+  double samples[10];
+  assert(audio_format_decode(samples, 5u, bytes, sizeof(bytes), AUDIO_FORMAT_PCM32) == 5u);
+  for (unsigned i = 0; i < 10u; ++i) assert(samples[i] * 65536.0 == values[i]);
+  assert(samples[1] < 32768.0);
+  assert(samples[2] != 256.0); // A float decoder loses this low bit.
+
+  uint32_t words[10];
+  assert(audio_format_pack_i2s(words, samples, 5u, AUDIO_FORMAT_PCM32) == 10u);
+  uint32_t const expected[] = {0xa0000000u, 0x5fffffffu, 12582913u, (uint32_t)-12582913,
+                               1u, UINT32_MAX, 2u, (uint32_t)-2,
+                               0x0da740dau, (uint32_t)-0x0da740da};
+  assert(memcmp(words, expected, sizeof(expected)) == 0);
+  // Invalid packets must be rejected without partially replacing samples.
+  double saved[10];
+  memcpy(saved, samples, sizeof(saved));
+  assert(audio_format_decode(samples, 5u, bytes, sizeof(bytes) - 1u, AUDIO_FORMAT_PCM32) == 0u);
+  assert(audio_format_decode(samples, 4u, bytes, sizeof(bytes), AUDIO_FORMAT_PCM32) == 0u);
+  assert(memcmp(saved, samples, sizeof(saved)) == 0);
+}
+
+static void test_pcm32_quantization(void) {
+  double const samples[] = {-40000.0, 40000.0, -32768.0, 32768.0,
+                             1.5 / 49152.0, -1.5 / 49152.0,
+                             0.49 / 49152.0, -0.49 / 49152.0,
+                             INFINITY, -INFINITY, NAN, 0.0};
+  uint32_t words[12];
+  assert(audio_format_pack_i2s(words, samples, 6u, AUDIO_FORMAT_PCM32) == 12u);
+  uint32_t const expected[] = {0xa0000000u, 0x5fffffffu, 0xa0000000u, 0x5fffffffu,
+                               2u, (uint32_t)-2, 0u, 0u,
+                               0x5fffffffu, 0xa0000000u, 0u, 0u};
+  assert(memcmp(words, expected, sizeof(expected)) == 0);
+}
+
 int main(void) {
   test_rate_matrix();
   test_idle_clock_negotiation();
   test_decode();
   test_pack();
   test_in_place_packing();
+  test_pcm32_decode_and_pack();
+  test_pcm32_quantization();
   return 0;
 }

@@ -10,11 +10,14 @@ _Static_assert(sizeof(double) == 8 && DBL_MANT_DIG == 53 && FLT_RADIX == 2,
                "Playback requires binary64 double precision");
 
 typedef enum {
+  // Values match the USB AudioStreaming alternate settings.
   AUDIO_FORMAT_PCM16 = 1,
   AUDIO_FORMAT_PCM24 = 2,
+  AUDIO_FORMAT_PCM32 = 3,
 } audio_sample_format_t;
 
 size_t audio_format_frame_bytes(audio_sample_format_t format);
+uint8_t audio_format_bit_depth(audio_sample_format_t format);
 bool audio_format_rate_valid(audio_sample_format_t format, uint32_t rate_hz);
 // With alternate 0 selected, the shared clock may be set before a new PCM
 // alternate. Only an active stream constrains the clock to its current format.

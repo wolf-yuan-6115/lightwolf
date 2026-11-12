@@ -53,17 +53,18 @@ extern "C" {
 #define CFG_TUD_HID_EP_BUFSIZE 64
 
 #define CFG_TUD_AUDIO_FUNC_1_N_CHANNELS_RX       2       // Stereo (left + right)
-// TinyUSB needs one compile-time default; alternate 2 is described and decoded separately.
+// TinyUSB needs one compile-time default; alternates 2/3 are described and decoded separately.
 #define CFG_TUD_AUDIO_FUNC_1_N_BYTES_PER_SAMPLE_RX 2
 #define CFG_TUD_AUDIO_FUNC_1_RESOLUTION_RX       16      // 16 bits used per sample
 #define CFG_TUD_AUDIO_FUNC_1_MAX_SAMPLE_RATE     192000  // Highest advertised sample rate (Hz)
-#define CFG_TUD_AUDIO_FUNC_1_DESC_LEN            196
+#define CFG_TUD_AUDIO_FUNC_1_DESC_LEN            249
 #define CFG_TUD_AUDIO_FUNC_1_N_AS_INT            1       // Number of Audio Streaming interfaces
 #define CFG_TUD_AUDIO_FUNC_1_CTRL_BUF_SZ        74      // Buffer for audio control requests (bytes)
 
 // Maximum OUT endpoint packet size for 192 kHz / 16-bit stereo:
 //   ceil(192000 / 1000) + 1 extra packet = 193 frames × 2 ch × 2 bytes = 772 bytes.
 //   Rounded up to 776 for alignment.
+// 96 kHz / 32-bit stereo also needs 97 frames x 2 ch x 4 bytes = 776 bytes.
 #define CFG_TUD_AUDIO_FUNC_1_EP_OUT_SZ_MAX      776
 
 #define CFG_TUD_AUDIO_FUNC_1_EP_OUT_SW_BUF_SZ   4096
