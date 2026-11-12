@@ -15,6 +15,10 @@
 #include "pico/util/queue.h"
 #include "tusb.h"
 
+#ifdef PUMPER_DSP_BENCHMARK
+#include "device_benchmark.h"
+#endif
+
 #include "audio_feedback.h"
 #include "audio_format.h"
 #include "eq_config.h"
@@ -201,7 +205,12 @@ static void set_performance_clock(bool streaming) {
   if (streaming) {
     vreg_set_voltage(VREG_VOLTAGE_1_15);
     sleep_us(1000u);
-    set_sys_clock_khz(STREAM_SYS_CLOCK_KHZ, true);
+    uint32_t target_khz = STREAM_SYS_CLOCK_KHZ;
+#ifdef PUMPER_DSP_BENCHMARK
+    if (bench_device_boost() && s_audio_format == AUDIO_FORMAT_PCM32 && s_sample_rate_hz == 96000u)
+      target_khz = 200000u;
+#endif
+    set_sys_clock_khz(target_khz, true);
   } else {
     set_sys_clock_khz(IDLE_SYS_CLOCK_KHZ, true);
     vreg_set_voltage(VREG_VOLTAGE_1_10);
@@ -404,6 +413,9 @@ static void dsp_core_main(void) {
   while (true) {
     audio_block_t *block;
     queue_remove_blocking(&s_pending_audio_blocks, &block);
+#ifdef PUMPER_DSP_BENCHMARK
+    uint32_t bench_block_start = time_us_32();
+#endif
 
     if (local_sample_rate != s_sample_rate_hz) {
       local_sample_rate = s_sample_rate_hz;
@@ -432,7 +444,11 @@ static void dsp_core_main(void) {
       bool const capture = spectrum_capture_begin(local_sample_rate, block->stream_generation);
       eq_set_output_observer(capture ? spectrum_capture_pair : NULL);
       uint32_t started_us = time_us_32();
+#ifdef PUMPER_DSP_BENCHMARK
+      bench_device_process(block->data.samples, block->frames, &metrics, measure_block, capture, local_sample_rate);
+#else
       eq_process_interleaved_stereo(block->data.samples, block->frames, &metrics, measure_block);
+#endif
       uint32_t elapsed_us = time_us_32() - started_us;
       spectrum_capture_end(elapsed_us);
       if (elapsed_us > s_dsp_max_block_us) s_dsp_max_block_us = elapsed_us;
@@ -448,9 +464,20 @@ static void dsp_core_main(void) {
                          metrics.limiter_active_frames != 0u);
       }
 
+#ifdef PUMPER_DSP_BENCHMARK
+      uint32_t pack_start = time_us_32();
+#endif
       block->word_count = (uint16_t)audio_format_pack_i2s(
           block->data.words, block->data.samples, block->frames, block->format);
+#ifdef PUMPER_DSP_BENCHMARK
+      uint32_t pack_us = time_us_32() - pack_start;
+      uint32_t bench_frames = block->frames;
+      bool submitted = i2s_out_submit(block);
+      bench_device_finish(time_us_32() - bench_block_start - pack_us, pack_us, bench_frames);
+      if (submitted) block = NULL;
+#else
       if (i2s_out_submit(block)) block = NULL;
+#endif
     }
     if (block) queue_add_blocking(&s_free_audio_blocks, &block);
   }
@@ -754,6 +781,15 @@ static void hid_process_command(eq_protocol_packet_t const *packet) {
     return;
   }
 
+#ifdef PUMPER_DSP_BENCHMARK
+  // The experiment may read settings and subscribe to diagnostics, never mutate them.
+  if (!((packet->opcode >= EQ_OPCODE_HELLO && packet->opcode <= EQ_OPCODE_GET_TELEMETRY) ||
+        (packet->opcode >= EQ_OPCODE_METER_START && packet->opcode <= EQ_OPCODE_SPECTRUM_STOP) ||
+        packet->opcode == EQ_OPCODE_RESTART_DEVICE || packet->opcode == EQ_OPCODE_ENTER_BOOTSEL)) {
+    hid_response_prepare(packet->opcode, packet->request_id, EQ_STATUS_INVALID_COMMAND, 0u);
+    return;
+  }
+#endif
   switch (packet->opcode) {
     case EQ_OPCODE_HELLO:
     case EQ_OPCODE_GET_STATUS:
@@ -1487,5 +1523,9 @@ int main(void) {
     audio_task();
     audio_feedback_task();
     spectrum_stream_task();
+#ifdef PUMPER_DSP_BENCHMARK
+    bench_device_task(s_streaming_active, s_sample_rate_hz, s_audio_format,
+                      i2s_out_diagnostics(), chip_temperature_millicelsius);
+#endif
   }
 }

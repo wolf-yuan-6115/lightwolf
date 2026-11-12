@@ -155,6 +155,11 @@ void i2s_out_init(uint32_t sample_rate_hz, audio_sample_format_t format,
 }
 
 bool i2s_out_submit(i2s_audio_block_t *block) {
+#ifdef PUMPER_DSP_BENCHMARK
+  // Last boundary before DMA: no experiment can emit a nonzero sample.
+  if (block) memset(block->data.words, 0, sizeof(block->data.words));
+#endif
+
   if (!block) return false;
   critical_section_enter_blocking(&lock);
   bool accepted = block->format == active_format &&
