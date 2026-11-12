@@ -3,6 +3,7 @@
 #include "fixed.h"
 #ifdef PUMPER_CMSIS_BENCHMARK
 #include "cmsis_eq.h"
+#include "pcm32_pack.h"
 static bench_cmsis_t cmsis;
 #define BENCH_MODE_MAX 4
 #else
@@ -184,6 +185,14 @@ void bench_device_process(float *samples, size_t frames, eq_block_metrics_t *met
     if ((value) > result.field)                                                                    \
       result.field = (value);                                                                      \
   } while (0)
+size_t bench_device_pack(uint32_t *out, float const *in, size_t frames,
+                         audio_sample_format_t format) {
+#ifdef PUMPER_CMSIS_BENCHMARK
+  if (mode == 4 && format == AUDIO_FORMAT_PCM32)
+    return bench_pcm32_pack(out, in, frames);
+#endif
+  return audio_format_pack_i2s(out, in, frames, format);
+}
 void bench_device_finish(uint32_t process, uint32_t pack, size_t frames) {
   __atomic_add_fetch(&result.seq, 1, __ATOMIC_ACQ_REL);
   ++result.blocks;

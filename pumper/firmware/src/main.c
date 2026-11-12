@@ -466,8 +466,13 @@ static void dsp_core_main(void) {
 #ifdef PUMPER_DSP_BENCHMARK
       uint32_t pack_start = time_us_32();
 #endif
+#ifdef PUMPER_DSP_BENCHMARK
+      block->word_count = (uint16_t)bench_device_pack(
+          block->data.words, block->data.samples, block->frames, block->format);
+#else
       block->word_count = (uint16_t)audio_format_pack_i2s(
           block->data.words, block->data.samples, block->frames, block->format);
+#endif
 #ifdef PUMPER_DSP_BENCHMARK
       uint32_t pack_us = time_us_32() - pack_start;
       uint32_t bench_frames = block->frames;
