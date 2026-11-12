@@ -204,9 +204,9 @@ def run_case(serial, cdc, mode, scenario, rate, bits, boost, seconds):
                     load = s['total_us'] * rate / max(s['frames'], 1) / 10000
                     print(f"mode={mode} scenario={scenario} {bits}/{rate} boost={boost} {second+1}s load={load:.1f}% max={s['max_us']}us underruns={s['underruns']-before}", flush=True)
             assert samples and samples[-1]['rate'] == rate and samples[-1]['bits'] == bits
-            expected = 200000000 if boost and mode >= 2 and bits == 32 and rate == 96000 else 180000000
+            expected = [180000000, 200000000, 250000000][boost] if mode >= 2 and bits == 32 and rate == 96000 else 180000000
             assert samples[-1]['clock'] == expected, samples[-1]
-        except (TimeoutError, RuntimeError, AssertionError) as exc:
+        except (TimeoutError, RuntimeError, AssertionError, OSError) as exc:
             error = str(exc)
             print('CASE FAILED:', error, flush=True)
         finally:
@@ -253,6 +253,7 @@ def main():
     p.add_argument('--output', required=True, type=Path)
     p.add_argument('--quick', action='store_true')
     p.add_argument('--resume', action='store_true', help='Retain completed cases in the output file')
+    p.add_argument('--ceiling-only', action='store_true', help='Run the 250 MHz extension after a failed 200 MHz matrix')
     a = p.parse_args()
     validate_image(a.benchmark)
     validate_image(a.production)
@@ -279,9 +280,12 @@ def main():
         cases = [(m, sc, 96000, 32, 0, 8 if a.quick else 60) for m in [0, 2, 3] for sc in ([0] if a.quick else [0, 1, 2])]
         if not a.quick:
             cases.append((1, 0, 96000, 32, 0, 60))
+        if a.ceiling_only:
+            cases = [(3, sc, 96000, 32, 2, 60) for sc in [0, 1, 2]]
+            cases += [(3, 0, rate, bits, 2, 8) for rate, bits in [(88200,32),(96000,24),(192000,16)]]
         for case in cases:
             execute(case)
-        if not a.quick:
+        if not a.quick and not a.ceiling_only:
             # Only state64 passes the current-preset numerical impulse-tail gate.
             # Try boost only if its 180 MHz timing misses the 70/85% targets.
             wide = [r for r in records if r['mode'] == 3 and r['samples']]

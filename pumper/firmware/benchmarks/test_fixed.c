@@ -74,5 +74,12 @@ int main(void) {
     assert(bench_fixed_init(&s, c, wide));
     bench_fixed_sample(&s, 0, INT32_MAX);
     assert(s.clips);
+    // Even when filter output clips, a later sum must detect accumulator
+    // overflow rather than invoke signed-overflow UB or silently wrap.
+    c[0] = (bench_coeff_t){1.8, 1.8, 1.8, -1.9, 0.95};
+    assert(bench_fixed_init(&s, c, wide));
+    for (unsigned n = 0; n < 8; ++n)
+      bench_fixed_sample(&s, 0, INT32_MAX);
+    assert(s.overflows && s.clips);
   }
 }

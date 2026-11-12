@@ -207,8 +207,7 @@ static void set_performance_clock(bool streaming) {
     sleep_us(1000u);
     uint32_t target_khz = STREAM_SYS_CLOCK_KHZ;
 #ifdef PUMPER_DSP_BENCHMARK
-    if (bench_device_boost() && s_audio_format == AUDIO_FORMAT_PCM32 && s_sample_rate_hz == 96000u)
-      target_khz = 200000u;
+    target_khz = bench_device_clock_khz(s_audio_format, s_sample_rate_hz);
 #endif
     set_sys_clock_khz(target_khz, true);
   } else {
@@ -1456,6 +1455,10 @@ static void audio_block_release(i2s_audio_block_t *block) {
 
 int main(void) {
   board_init();
+#ifdef PUMPER_DSP_BENCHMARK
+  // Recover to the default 150/180 MHz policy if an experimental clock stalls.
+  watchdog_enable(2000u, true);
+#endif
   telemetry_init(time_us_64());
 
   adc_init();
@@ -1515,6 +1518,9 @@ int main(void) {
   memset(s_volume_q8, 0, sizeof(s_volume_q8));
 
   while (true) {
+#ifdef PUMPER_DSP_BENCHMARK
+    watchdog_update();
+#endif
     tud_task();
     device_reset_task();
     hid_control_task();

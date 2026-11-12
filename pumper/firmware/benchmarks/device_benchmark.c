@@ -41,9 +41,14 @@ static void update_coefficients(bool transition) {
   else
     bench_fixed_init(&fixed, coefficients, mode == 3);
 }
-bool bench_device_boost(void) {
+uint32_t bench_device_clock_khz(audio_sample_format_t format, uint32_t rate) {
   uint32_t r = __atomic_load_n(&request, __ATOMIC_ACQUIRE);
-  return (r & 0x10000u) && (r & 3u) >= 2;
+  if ((r & 3u) < 2 || format != AUDIO_FORMAT_PCM32 || rate != 96000u)
+    return 180000u;
+  unsigned boost = (r >> 16) & 3u;
+  if (boost == 2)
+    return 250000u; // Absolute user-authorized ceiling.
+  return boost == 1 ? 200000u : 180000u;
 }
 static void measure(eq_level_metrics_t *m, float l, float r, bool rms) {
   float v[2] = {l, r};
@@ -232,7 +237,7 @@ void bench_device_task(bool streaming, uint32_t rate, audio_sample_format_t form
     } else {
       unsigned m, sc, h, b;
       if (sscanf(line, "run %u %u %u %u", &m, &sc, &h, &b) != 4 || m > 3 || sc > 2 || h > 30 ||
-          b > 1 || streaming) {
+          b > 2 || streaming) {
         reply("{\"error\":\"run requires idle and valid mode/scenario/headroom/boost\"}\n");
         continue;
       }
