@@ -268,17 +268,20 @@ could not be performed.
 - FactoryReset (`0x42`) takes an empty payload and erases/verifies the entire final 8 KiB settings region through the deferred flash-safe path. Success has an empty response before delayed reboot; failure returns storage error without reboot. No replacement bank is written.
 - Both controllers gate the destructive confirmation action at 4.2. Android version is 1.4.2 (code 7). Interrupted erasure is not atomic.
 
-### Double-precision playback and PCM32 (firmware 5.0)
+### PCM32 and playback precision (firmware 5.0–5.1)
 
 - Alternates 1/2/3 carry PCM16/packed PCM24/PCM32. PCM32 uses signed little-endian
   integers, not IEEE float; its 96 kHz endpoint needs at most 776 bytes per packet.
-- Playback samples, coefficients, histories, ramps, gain and limiter calculations
-  use binary64 `double` through the Arm Pico SDK `pico_dcp` implementation.
-  Internal full scale remains 32768.0; PCM32 scales by 65536 at the PCM boundary.
+- Firmware 5.1 uses binary32 `float` playback samples, coefficients, histories,
+  ramps, gain and limiter calculations on the native FPU. Firmware 5.0's full
+  double path missed hardware deadlines. Keep PCM32 transport, but do not imply
+  32-bit DSP precision. Final PCM32 quantization uses binary64 `double` through
+  `pico_dcp` for exact integer safety bounds. Internal full scale remains
+  32768.0; PCM32 scales by 65536 at the PCM boundary.
 - Saturate playback at ±32768.0 and enforce format-specific integer ceilings in
   the final quantizer. Keep the 0.75 I2S gain and existing channel compensation.
   Overlapping sample/packed buffers require alias-safe writes after pair reads.
 - EQ configuration representation and flash schema 5 are unchanged. Spectrum
-  remains float, with conversion confined to the output observer boundary.
+  remains float and observes post-limiter samples before I2S output gain.
 - Verify real-time performance on hardware with all bands, crossfeed, ramps,
   meters and spectrum active, including the retained PCM16/192 kHz mode.

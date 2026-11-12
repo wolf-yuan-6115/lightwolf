@@ -40,7 +40,8 @@ add_executable(rp2350_usb_dac
 
 pico_override_flash_size(rp2350_usb_dac ${PICO_FLASH_SIZE_BYTES})
 pico_set_binary_type(rp2350_usb_dac copy_to_ram)
-# Use the RP2350 Arm double coprocessor for the complete playback DSP path.
+# PCM32 final quantization uses double to enforce exact integer safety bounds.
+# Real-time DSP uses the native single-precision FPU to meet audio deadlines.
 pico_set_double_implementation(rp2350_usb_dac pico_dcp)
 
 pico_generate_pio_header(rp2350_usb_dac ${CMAKE_CURRENT_LIST_DIR}/src/audio_i2s.pio)

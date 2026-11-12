@@ -55,7 +55,7 @@ static int32_t read_s32(uint8_t const *p) {
   return value <= INT32_MAX ? (int32_t)value : -1 - (int32_t)(UINT32_MAX - value);
 }
 
-size_t audio_format_decode(double *restrict output, size_t output_frames,
+size_t audio_format_decode(float *restrict output, size_t output_frames,
                            uint8_t const *restrict input, size_t input_bytes,
                            audio_sample_format_t format) {
   size_t frame_bytes = audio_format_frame_bytes(format);
@@ -65,18 +65,18 @@ size_t audio_format_decode(double *restrict output, size_t output_frames,
   for (size_t frame = 0; frame < frames; frame++) {
     if (format == AUDIO_FORMAT_PCM16) {
       size_t offset = frame * 4u;
-      output[frame * 2u] = (double)(int16_t)((uint16_t)input[offset] |
+      output[frame * 2u] = (float)(int16_t)((uint16_t)input[offset] |
                                            (uint16_t)input[offset + 1u] << 8u);
-      output[frame * 2u + 1u] = (double)(int16_t)((uint16_t)input[offset + 2u] |
+      output[frame * 2u + 1u] = (float)(int16_t)((uint16_t)input[offset + 2u] |
                                                 (uint16_t)input[offset + 3u] << 8u);
     } else if (format == AUDIO_FORMAT_PCM24) {
       size_t offset = frame * 6u;
-      output[frame * 2u] = (double)read_s24(input + offset) / 256.0;
-      output[frame * 2u + 1u] = (double)read_s24(input + offset + 3u) / 256.0;
+      output[frame * 2u] = (float)read_s24(input + offset) / 256.0f;
+      output[frame * 2u + 1u] = (float)read_s24(input + offset + 3u) / 256.0f;
     } else {
       size_t offset = frame * 8u;
-      output[frame * 2u] = (double)read_s32(input + offset) / 65536.0;
-      output[frame * 2u + 1u] = (double)read_s32(input + offset + 4u) / 65536.0;
+      output[frame * 2u] = (float)read_s32(input + offset) / 65536.0f;
+      output[frame * 2u + 1u] = (float)read_s32(input + offset + 4u) / 65536.0f;
     }
   }
   return frames;
@@ -94,11 +94,11 @@ static void write_word(unsigned char *output, size_t index, uint32_t word) {
   memcpy(output + index * sizeof(word), &word, sizeof(word));
 }
 
-size_t audio_format_pack_i2s(uint32_t *output, double const *input,
+size_t audio_format_pack_i2s(uint32_t *output, float const *input,
                              size_t frames, audio_sample_format_t format) {
   if (!output || !input) return 0u;
   unsigned char *packed = (unsigned char *)output;
-  // Byte writes keep overlapping double input and packed output alias-safe.
+  // Byte writes keep overlapping float input and packed output alias-safe.
   // The board routes the DAC's analog channels crossed, so compensate only at the I2S boundary.
   if (format == AUDIO_FORMAT_PCM16) {
     for (size_t frame = 0; frame < frames; frame++) {

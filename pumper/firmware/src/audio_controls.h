@@ -49,12 +49,12 @@ bool output_processing_decode(uint8_t const *payload, size_t length,
                               output_processing_config_t *config);
 void output_processing_state_encode(uint8_t *payload, output_processing_config_t const *live,
                                     output_processing_config_t const *saved);
-void audio_effective_gains(int16_t const volume[3], int8_t const mute[3], bool pinned, double gains[2]);
+void audio_effective_gains(int16_t const volume[3], int8_t const mute[3], bool pinned, float gains[2]);
 void audio_controls_init(uint32_t rate, crossfeed_config_t const *crossfeed,
                          output_processing_config_t const *output);
 void audio_controls_reset(uint32_t rate);
 void audio_controls_set_crossfeed(crossfeed_config_t const *config);
 void audio_controls_set_output_processing(output_processing_config_t const *config);
-void audio_controls_set_gains(double const gains[2]);
-bool audio_controls_process(double *left, double *right);
+void audio_controls_set_gains(float const gains[2]);
+bool audio_controls_process(float *left, float *right);
 #endif

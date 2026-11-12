@@ -16,7 +16,7 @@ typedef struct __attribute__((aligned(16))) {
   uint32_t stream_generation;
   audio_sample_format_t format;
   union {
-    double samples[I2S_AUDIO_BLOCK_MAX_FRAMES * 2u];
+    float samples[I2S_AUDIO_BLOCK_MAX_FRAMES * 2u];
     uint32_t words[I2S_AUDIO_BLOCK_MAX_FRAMES * 2u];
   } data;
 } i2s_audio_block_t;

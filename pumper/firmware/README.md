@@ -6,14 +6,17 @@ parametric EQ, headphone crossfeed, global output processing, USB host volume
 and mute, persistent profiles, and device diagnostics for the WebHID and
 Android controllers.
 
-Firmware 5.0 supports stereo integer PCM in these formats:
+Firmware 5.1 supports stereo integer PCM in these formats:
 
 - 16-bit at 44.1, 48, 88.2, 96, 176.4, and 192 kHz.
 - Packed 24-bit at 44.1, 48, 88.2, and 96 kHz.
 - 32-bit at 44.1, 48, 88.2, and 96 kHz.
 
-Playback processing uses 64-bit double precision accelerated by the RP2350
-double coprocessor.
+Playback processing uses the RP2350 single-precision FPU. Firmware 5.1 restores
+real-time DSP performance after double-precision processing in 5.0 exceeded the
+audio deadline. The 32-bit USB format is retained; DSP precision is about 24
+significant binary bits. Final PCM32 quantization uses double precision to
+enforce the integer output bounds.
 
 The 24-bit and 32-bit alternates are not available at 176.4 or 192 kHz. Profile changes and
 audio-control previews are live; persistent settings are changed only by the

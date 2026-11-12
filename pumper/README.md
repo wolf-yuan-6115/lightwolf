@@ -23,7 +23,8 @@ Pumper accepts stereo PCM over USB Audio Class 2 in the following formats:
 | 176.4 kHz   | Yes           | No                   | No            |
 | 192 kHz     | Yes           | No                   | No            |
 
-Firmware 5.0 adds 32-bit integer PCM and double-precision playback processing.
+Firmware 5.1 supports 32-bit integer PCM with single-precision playback DSP
+to meet real-time deadlines. The USB format does not imply 32-bit DSP precision.
 
 ## Audio processing and hardware path
 

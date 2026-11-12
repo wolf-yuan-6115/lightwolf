@@ -7,7 +7,7 @@
 #include <stdint.h>
 
 _Static_assert(sizeof(double) == 8 && DBL_MANT_DIG == 53 && FLT_RADIX == 2,
-               "Playback requires binary64 double precision");
+               "PCM32 quantization requires binary64 double precision");
 
 typedef enum {
   // Values match the USB AudioStreaming alternate settings.
@@ -23,12 +23,12 @@ bool audio_format_rate_valid(audio_sample_format_t format, uint32_t rate_hz);
 // alternate. Only an active stream constrains the clock to its current format.
 bool audio_format_rate_change_valid(audio_sample_format_t format, uint32_t rate_hz,
                                     bool streaming);
-size_t audio_format_decode(double *restrict output, size_t output_frames,
+size_t audio_format_decode(float *restrict output, size_t output_frames,
                            uint8_t const *restrict input, size_t input_bytes,
                            audio_sample_format_t format);
 // Output may start at the same address as input; packing consumes each pair
 // before overwriting its bytes. Other partial overlaps are not supported.
-size_t audio_format_pack_i2s(uint32_t *output, double const *input,
+size_t audio_format_pack_i2s(uint32_t *output, float const *input,
                              size_t frames, audio_sample_format_t format);
 
 #endif

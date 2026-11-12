@@ -53,7 +53,7 @@ static void test_idle_clock_negotiation(void) {
 
 static void test_decode(void) {
   uint8_t pcm16[] = {0x00, 0x80, 0xff, 0x7f, 0x34, 0x12, 0xcc, 0xed};
-  double samples[4];
+  float samples[4];
   assert(audio_format_decode(samples, 2u, pcm16, sizeof(pcm16), AUDIO_FORMAT_PCM16) == 2u);
   assert(samples[0] == -32768.0 && samples[1] == 32767.0);
   assert(samples[2] == 4660.0 && samples[3] == -4660.0);
@@ -69,14 +69,14 @@ static void test_decode(void) {
 }
 
 static void test_pack(void) {
-  double samples[] = {-32768.0, 32767.0, -40000.0, 40000.0, 1.4, -1.6};
+  float samples[] = {-32768.0, 32767.0, -40000.0, 40000.0, 1.4, -1.6};
   uint32_t words[6] = {0};
   assert(audio_format_pack_i2s(words, samples, 3u, AUDIO_FORMAT_PCM16) == 3u);
   assert(words[0] == 0xa0005fffu);
   assert(words[1] == 0xa0005fffu);
   assert(words[2] == 0x0001ffffu);
 
-  double pcm24[] = {-32768.0, 32768.0, -40000.0, 40000.0, 1.0, -1.0};
+  float pcm24[] = {-32768.0, 32768.0, -40000.0, 40000.0, 1.0, -1.0};
   assert(audio_format_pack_i2s(words, pcm24, 3u, AUDIO_FORMAT_PCM24) == 6u);
   assert(words[0] == 0xa0000000u);
   assert(words[1] == 0x5fffff00u);
@@ -87,10 +87,10 @@ static void test_pack(void) {
 }
 
 static void test_in_place_packing(void) {
-  double const samples[] = {-32768.0, 32767.0, 12345.123, -23456.456, 1.5, -1.5};
+  float const samples[] = {-32768.0, 32767.0, 12345.123, -23456.456, 1.5, -1.5};
   audio_sample_format_t formats[] = {AUDIO_FORMAT_PCM16, AUDIO_FORMAT_PCM24, AUDIO_FORMAT_PCM32};
   for (unsigned f = 0; f < 3u; ++f) {
-    union { double samples[6]; uint32_t words[6]; } block;
+    union { float samples[6]; uint32_t words[6]; } block;
     uint32_t expected[6];
     memcpy(block.samples, samples, sizeof(samples));
     size_t count = audio_format_pack_i2s(expected, samples, 3u, formats[f]);
@@ -107,20 +107,21 @@ static void test_pcm32_decode_and_pack(void) {
     uint32_t v = (uint32_t)values[i];
     for (unsigned b = 0; b < 4u; ++b) bytes[i * 4u + b] = (uint8_t)(v >> (b * 8u));
   }
-  double samples[10];
+  float samples[10];
   assert(audio_format_decode(samples, 5u, bytes, sizeof(bytes), AUDIO_FORMAT_PCM32) == 5u);
-  for (unsigned i = 0; i < 10u; ++i) assert(samples[i] * 65536.0 == values[i]);
-  assert(samples[1] < 32768.0);
-  assert(samples[2] != 256.0); // A float decoder loses this low bit.
+  for (unsigned i = 0; i < 10u; ++i) assert(samples[i] == (float)values[i] / 65536.0f);
+  // PCM32 transport is retained, but DSP precision is deliberately binary32.
+  assert(samples[1] == 32768.0f);
+  assert(samples[2] == 256.0f);
 
   uint32_t words[10];
   assert(audio_format_pack_i2s(words, samples, 5u, AUDIO_FORMAT_PCM32) == 10u);
-  uint32_t const expected[] = {0xa0000000u, 0x5fffffffu, 12582913u, (uint32_t)-12582913,
+  uint32_t const expected[] = {0xa0000000u, 0x5fffffffu, 12582912u, (uint32_t)-12582912,
                                1u, UINT32_MAX, 2u, (uint32_t)-2,
-                               0x0da740dau, (uint32_t)-0x0da740da};
+                               0x0da740e0u, (uint32_t)-0x0da740e0};
   assert(memcmp(words, expected, sizeof(expected)) == 0);
   // Invalid packets must be rejected without partially replacing samples.
-  double saved[10];
+  float saved[10];
   memcpy(saved, samples, sizeof(saved));
   assert(audio_format_decode(samples, 5u, bytes, sizeof(bytes) - 1u, AUDIO_FORMAT_PCM32) == 0u);
   assert(audio_format_decode(samples, 4u, bytes, sizeof(bytes), AUDIO_FORMAT_PCM32) == 0u);
@@ -128,7 +129,7 @@ static void test_pcm32_decode_and_pack(void) {
 }
 
 static void test_pcm32_quantization(void) {
-  double const samples[] = {-40000.0, 40000.0, -32768.0, 32768.0,
+  float const samples[] = {-40000.0, 40000.0, -32768.0, 32768.0,
                              1.5 / 49152.0, -1.5 / 49152.0,
                              0.49 / 49152.0, -0.49 / 49152.0,
                              INFINITY, -INFINITY, NAN, 0.0};

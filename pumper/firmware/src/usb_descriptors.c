@@ -8,7 +8,7 @@
 // VID 0x2E8A is Raspberry Pi's USB VID.
 #define USB_VID 0x2E8A
 #define USB_PID 0xF10A
-#define USB_BCD 0x0500
+#define USB_BCD 0x0501
 
 enum {
   EPNUM_AUDIO_OUT = 0x01,

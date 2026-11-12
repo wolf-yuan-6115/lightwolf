@@ -109,7 +109,7 @@ typedef struct {
   volatile uint32_t sequence;
   crossfeed_config_t crossfeed;
   output_processing_config_t output;
-  double gains[2];
+  float gains[2];
   uint32_t generation;
 } controls_snapshot_t;
 
@@ -387,11 +387,6 @@ static void meter_keepalive(void) {
   if (s_meter_next_report_us == 0u) s_meter_next_report_us = now;
 }
 
-// Spectrum is a display-only branch; playback retains double precision.
-static void capture_spectrum_output(double left, double right) {
-  spectrum_capture_pair((float)left, (float)right);
-}
-
 static void dsp_core_main(void) {
   eq_settings_core_init();
   uint32_t local_generation;
@@ -435,7 +430,7 @@ static void dsp_core_main(void) {
       bool const measure_block = s_meter_active;
       eq_block_metrics_t metrics;
       bool const capture = spectrum_capture_begin(local_sample_rate, block->stream_generation);
-      eq_set_output_observer(capture ? capture_spectrum_output : NULL);
+      eq_set_output_observer(capture ? spectrum_capture_pair : NULL);
       uint32_t started_us = time_us_32();
       eq_process_interleaved_stereo(block->data.samples, block->frames, &metrics, measure_block);
       uint32_t elapsed_us = time_us_32() - started_us;
@@ -714,7 +709,7 @@ static void hid_response_status(uint8_t opcode, uint16_t request_id) {
   hid_response_prepare(opcode, request_id, EQ_STATUS_OK, EQ_PROTOCOL_STATUS_PAYLOAD_SIZE);
   uint8_t *payload = &s_hid_response[EQ_PROTOCOL_HEADER_SIZE];
   payload[0] = 5u;
-  payload[1] = 0u;
+  payload[1] = 1u;
   payload[2] = EQ_NUM_FILTERS;
   payload[3] = (s_streaming_active ? 0x01u : 0u) | (config_is_dirty() ? 0x02u : 0u) |
                (config.enabled ? 0x04u : 0u);
