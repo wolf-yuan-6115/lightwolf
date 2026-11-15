@@ -4,7 +4,7 @@ Pumper is an experimental RP2354-based USB Audio Class 2 DAC. The board uses a
 PCM5102A DAC with OPA1652 and OPA1622 analog stages in a compact design intended
 for learning about USB audio and DAC hardware.
 
-The firmware provides a ten-band parametric EQ, headphone crossfeed, output
+The Rust firmware provides a ten-band parametric EQ, headphone crossfeed, output
 processing, USB host volume and mute, and persistent EQ profiles. Settings can
 be controlled from either the React WebHID controller or the native Android
 controller. Both controllers preview edits live and save persistent settings
@@ -36,7 +36,7 @@ flowchart TB
 
     subgraph DIGITAL[Digital audio path]
         direction LR
-        USB[TinyUSB on RP2354 core 0<br/>receive and decode USB packets]
+        USB[Embassy USB on RP2354 core 0<br/>receive and decode USB packets]
         QUEUE[Fixed audio-block queue<br/>core 0 to core 1]
         EQ[Preamp and<br/>10-band parametric EQ]
         XF[Headphone crossfeed]
@@ -78,21 +78,16 @@ flowchart TB
 
 ### Firmware
 
-The firmware requires the Pico SDK, CMake, Ninja, a native C compiler, and the
-Arm GNU embedded toolchain. See [`firmware/README.md`](firmware/README.md) for
-SDK setup, supported audio formats, flashing, and troubleshooting.
+The firmware uses a pinned Rust toolchain, Embassy, and Python 3. See
+[`firmware/README.md`](firmware/README.md) for prerequisites, tests, flashing,
+and recovery instructions. Platform and long-duration hardware validation
+remain incomplete.
 
 ```sh
-export PICO_SDK_PATH="${HOME}/Projects/pico-sdk"
-cmake -S firmware -B firmware/build -G Ninja \
-  -DCMAKE_BUILD_TYPE=Release \
-  -DPICO_BOARD=pico2 \
-  -DPICO_PLATFORM=rp2350-arm-s \
-  -DPICO_FLASH_SIZE_BYTES=2097152
-cmake --build firmware/build --target rp2350_usb_dac -j
+python3 firmware/build.py
 ```
 
-Flash `firmware/build/rp2350_usb_dac.uf2` using the RP2354 BOOTSEL drive.
+Flash `firmware/artifacts/pumper-rust-5.0.3.uf2` using the RP2354 BOOTSEL drive.
 
 ### Web controller
 
@@ -123,13 +118,15 @@ device requirements.
 
 ### Firmware host tests
 
-These tests do not require the Pico SDK:
-
 ```sh
-cmake -S firmware/tests -B /tmp/pumper-firmware-tests
-cmake --build /tmp/pumper-firmware-tests
-ctest --test-dir /tmp/pumper-firmware-tests --output-on-failure
+cd firmware
+cargo test --locked
+cargo test --locked -p embassy-usb --lib
+python3 -m unittest discover -s tools -p 'test_*.py'
 ```
+
+Compatibility tests use frozen fixtures from the previous firmware; they compile
+no C source and require no Pico SDK.
 
 ## Hardware
 

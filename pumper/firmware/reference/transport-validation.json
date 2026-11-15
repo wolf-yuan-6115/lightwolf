@@ -1,0 +1,118 @@
+{
+  "date": "2026-11-12",
+  "phase": "USB/I2S transport prototype; migration not complete",
+  "device_firmware": "0.0 (intentional prototype version; not a 4.2 replacement)",
+  "installed_artifact": "pumper-rust-prototype-diagnostics.uf2",
+  "installed_uf2_sha256": "5a5e5738ad08880297f5062368345b94c376c999088a11663b76bba6a0419cd8",
+  "installed_bin_sha256": "81c3de20b597b7c14ae96312ae1eee8ca057c0d8f20f506aab41b6d8dec2ae30",
+  "host_checks": {
+    "portable_c_suites": 10,
+    "rust_core_integration_tests": 6,
+    "packaging_tests": 2,
+    "usb_stack_regression_tests": 1,
+    "python_probe_tests": 3,
+    "default_and_diagnostics_cross_builds": "passed",
+    "diagnostic_descriptor_absent_from_default_image": true,
+    "clippy_host_and_diagnostic_target": "passed"
+  },
+  "linux": {
+    "signal": "digital silence; audible/electrical output not verified",
+    "matrix": [
+      {
+        "rate": 44100,
+        "bits": 16,
+        "seconds": 5,
+        "steady_state_underrun_delta": 0,
+        "max_flat_block_us": 27
+      },
+      {
+        "rate": 48000,
+        "bits": 16,
+        "seconds": 5,
+        "steady_state_underrun_delta": 0,
+        "max_flat_block_us": 28
+      },
+      {
+        "rate": 88200,
+        "bits": 16,
+        "seconds": 5,
+        "steady_state_underrun_delta": 0,
+        "max_flat_block_us": 52
+      },
+      {
+        "rate": 96000,
+        "bits": 16,
+        "seconds": 5,
+        "steady_state_underrun_delta": 0,
+        "max_flat_block_us": 56
+      },
+      {
+        "rate": 176400,
+        "bits": 16,
+        "seconds": 5,
+        "steady_state_underrun_delta": 0,
+        "max_flat_block_us": 102
+      },
+      {
+        "rate": 192000,
+        "bits": 16,
+        "seconds": 5,
+        "steady_state_underrun_delta": 0,
+        "max_flat_block_us": 111
+      },
+      {
+        "rate": 44100,
+        "bits": 24,
+        "seconds": 5,
+        "steady_state_underrun_delta": 0,
+        "max_flat_block_us": 28
+      },
+      {
+        "rate": 48000,
+        "bits": 24,
+        "seconds": 5,
+        "steady_state_underrun_delta": 0,
+        "max_flat_block_us": 30
+      },
+      {
+        "rate": 88200,
+        "bits": 24,
+        "seconds": 5,
+        "steady_state_underrun_delta": 0,
+        "max_flat_block_us": 54
+      },
+      {
+        "rate": 96000,
+        "bits": 24,
+        "seconds": 5,
+        "steady_state_underrun_delta": 0,
+        "max_flat_block_us": 59
+      }
+    ],
+    "underrun_scope": "Compared between the first and last in-stream snapshots; startup/stop transitions are not included. Total counter was 240 after tests and PipeWire activity, so this is not a zero-total-underrun claim.",
+    "normal_watchdog_restart_repeated": 3,
+    "software_bootsel_and_return_without_flash_write": "passed",
+    "settings_byte_identical_to_pre_migration_backup": true
+  },
+  "resolved_failure": {
+    "operation": "RestartDevice with ARM SCB::sys_reset",
+    "symptom": "HID protocol error; required physical BOOTSEL",
+    "resolution": "Use RP2354 ROM watchdog reboot with normal boot and no-return flag; verified repeated restarts"
+  },
+  "pending": [
+    "Five-minute format matrix on each host",
+    "Audible channel/output checks and host volume/mute acceptance",
+    "One-hour stress with the full DSP pipeline",
+    "DSP, crossfeed, output processing, meter, spectrum and profile/storage Rust implementations",
+    "Full schema/command compatibility and controller integration",
+    "Stack-watermark and spectrum timing diagnostics",
+    "Production cutover; C remains the default",
+    "Windows/macOS untested; development gate waived by user"
+  ],
+  "cross_platform_development_gate": {
+    "status": "waived by user",
+    "date": "2026-11-12",
+    "windows": "untested",
+    "macos": "untested"
+  }
+}

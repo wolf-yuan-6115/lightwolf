@@ -13,10 +13,13 @@ native Android controllers.
 
 Repository layout:
 
-- `firmware/src/`: RP2354 firmware, USB descriptors, DSP, I2S, HID protocol,
-  audio controls, and profile storage.
-- `firmware/tests/`: portable host tests for audio formats, DSP, protocol,
-  activity, queues, and simulated flash storage.
+- `firmware/core/`: platform-independent configuration, DSP, protocol,
+  spectrum and storage policy, with Rust integration tests.
+- `firmware/Cargo.toml` and `firmware/src/`: root embedded Rust crate/workspace,
+  RP2354 hardware, Embassy USB, PIO/DMA and flash.
+- `firmware/tools/`: packaging and host diagnostics.
+- `firmware/reference/`: frozen compatibility fixtures and validation records.
+- `firmware/build.py`: default production Rust build entry point.
 - `web/src/`: React/TypeScript WebHID controller.
 - `android/app/src/`: Android USB-host controller.
 - `external/`: third-party KiCad symbols, footprints, and models.
@@ -27,9 +30,9 @@ changes; do not reset or rewrite user work.
 
 ## Firmware invariants
 
-- Target `PICO_BOARD=pico2`, `PICO_PLATFORM=rp2350-arm-s`, and 2 MiB flash for
-  the RP2354.
-- Core 0 services TinyUSB and vendor HID. Core 1 performs the EQ/audio-control
+- Target secure Cortex-M33 (`thumbv8m.main-none-eabihf`) and 2 MiB flash for
+  the RP2354, with the pinned Rust 2024 workspace/toolchain.
+- Core 0 services Embassy USB and vendor HID. Core 1 performs the EQ/audio-control
   chain and submits audio to I2S. Never block the USB task or allocate in the
   audio path.
 - Audio moves through a fixed pool of aligned blocks from USB decoding on core
@@ -82,7 +85,7 @@ changes; do not reset or rewrite user work.
 ### Firmware protocol and status
 
 - HID reports are fixed at 64 bytes and use protocol version 1. Protocol
-  changes must be made on both sides: `firmware/src/eq_protocol.h`, firmware
+  changes must be made on both sides: `firmware/core/src/protocol.rs`, firmware
   command handling, `web/src/protocol.ts`, and the Android protocol codec.
 - Bump the firmware minor version when adding commands or changing payload
   semantics. Preserve backward-compatible decoding where the controllers
@@ -143,16 +146,16 @@ changes; do not reset or rewrite user work.
   the blue audio meter. Preserve active-low PWM behavior and the brightness
   cap.
 - The non-blocking core-0 LED task must tolerate timer wraparound and must not
-  interfere with TinyUSB servicing.
+  interfere with USB servicing.
 - Preserve device diagnostics for sample rate, bit depth, stream state,
   approximate temperature, clock, worst DSP block time, underruns, and I2S
   low-water mark.
 
-### SDK dependency boundary
+### Dependency boundary
 
-Keep Pico SDK/TinyUSB fixes outside this repository. The currently verified
-TinyUSB fixes are commits `86c28b76f` and `1ec93757f` in the SDK submodule.
-Do not vendor or commit the patched SDK into Pumper.
+The firmware uses the pinned Rust dependencies and narrowly documented Embassy
+patches. Do not add Pico SDK, TinyUSB or C application dependencies. Leave any
+external Pico SDK checkout untouched; it is not part of the active codebase.
 
 ## Web controller rules
 
@@ -232,25 +235,30 @@ Do not vendor or commit the patched SDK into Pumper.
 
 ## Build and verify
 
-Run firmware commands from the repository root:
+Run the default production firmware build from the repository root:
 
 ```sh
-export PICO_SDK_PATH="Path to Pico SDK"
-cmake -S firmware -B firmware/build -G Ninja \
-  -DCMAKE_BUILD_TYPE=Release \
-  -DPICO_BOARD=pico2 \
-  -DPICO_PLATFORM=rp2350-arm-s \
-  -DPICO_FLASH_SIZE_BYTES=2097152
-cmake --build firmware/build --target rp2350_usb_dac -j
+python3 firmware/build.py
 ```
 
-Run portable firmware tests after DSP, protocol, format, or storage changes:
+Run Rust verification after firmware changes:
 
 ```sh
-cmake -S firmware/tests -B /tmp/pumper-firmware-tests
-cmake --build /tmp/pumper-firmware-tests -j
-ctest --test-dir /tmp/pumper-firmware-tests --output-on-failure
+cd firmware
+cargo test --locked
+cargo test --locked -p embassy-usb --lib
+cargo fmt --all -- --check
+cargo clippy --locked --all-targets -- -D warnings
+cargo clippy --locked -p pumper-device --release \
+  --target thumbv8m.main-none-eabihf --features diagnostics -- -D warnings
+python3 -m unittest discover -s tools -p 'test_*.py'
 ```
+
+Compatibility tests use frozen outputs in `reference/golden/`. Do not regenerate
+expected values from the Rust implementation being tested. Preserve the captured
+source/fixture hashes, corpus coverage, and original audio tolerances. Do not
+restore C sources, build files or compiler-driven oracle adapters as runtime or
+test dependencies.
 
 Run frontend verification from `web/`:
 
@@ -282,3 +290,121 @@ could not be performed.
 
 - FactoryReset (`0x42`) takes an empty payload and erases/verifies the entire final 8 KiB settings region through the deferred flash-safe path. Success has an empty response before delayed reboot; failure returns storage error without reboot. No replacement bank is written.
 - Both controllers gate the destructive confirmation action at 4.2. Android version is 1.4.2 (code 7). Interrupted erasure is not atomic.
+
+### Rust firmware ownership and validation
+
+- Rust is the default and sole firmware implementation. Frozen reference outputs
+  preserve compatibility coverage; previously exported C UF2s are rollback artifacts.
+- Platform tests remain skipped/untested. Default selection
+  does not convert any missing hardware check into a pass; preserve those gaps
+  and historical build identities in the validation record.
+- The transport prototype reported 0.0; the complete command/DSP implementation
+  reports 5.0. Artifact names and diagnostic build identity distinguish the Rust
+  candidate. Do not add prototype handling to the existing controllers.
+- The 80% processing-load limit is waived. Retain historical load, underrun and
+  spectrum timing measurements; a waived load limit is not evidence of zero
+  underruns or cross-host acceptance. Do not expand optimization work beyond
+  the requested scope.
+- Cortex-M33 secure target, 2 MiB flash, final 8 KiB reserved for settings. Program
+  images must exclude that reservation. The flash bootstrap
+  must relocate runtime code, constants, and vectors before calling Rust Reset.
+  Run the ELF/UF2 checks, not just the linker, before hardware tests.
+- Six audio buffers move by unique mutable-reference tokens through SPSC queues.
+  Core 0 produces ready blocks; core 1 returns completed/aborted blocks. Never
+  return or mutate a buffer while DMA still owns it. Core 1 alone owns PIO0,
+  GPIO19–21, and DMA0/1; its current transport loop polls chained DMA completion.
+- Stream configuration and telemetry payloads use atomic sequence-checked fields.
+  Full DSP configurations move as owned values through a fixed SPSC channel;
+  queue slots cannot be reused until the reader releases them. Never substitute
+  racing non-atomic snapshot copies, even with sequence retries.
+- Core 0 reserves 128 KiB of stack; core 1 owns a separate 32 KiB stack. Check
+  both ELF bounds and diagnostic watermarks after increasing processing state.
+- Flash jobs transfer an aligned image token to core 1. Quiesce DSP and play
+  RAM-backed DMA silence while core 0 serves USB from RAM. Flush XIP cache after
+  ROM writes before verifying data pages; commit the header only after all data
+  pages verify. Only the completion token allows core 0 to read flash again.
+- Rust dependency patches are limited to the vendored Embassy files documented
+  in `firmware/vendor/PATCHES.md`; keep upstream licenses and versions.
+- Neither firmware nor host compatibility tests compile C. The embedded image
+  must not link Pico SDK, TinyUSB or C application code. Keep public build/recovery
+  instructions in the README and incomplete hardware acceptance explicit.
+- Diagnostics are compile-time opt-in, read-only HID Feature reports. Production
+  descriptors/handlers must not expose them. Do not reuse production telemetry
+  reserved fields for diagnostics.
+- If device testing leaves Pumper inaccessible and requires physical BOOTSEL,
+  stop device testing until physical access is available. Do not attempt blind
+  recovery resets or continue flashing.
+- Restart through the RP2354 ROM watchdog reboot API, after the HID transfer
+  completes and the acknowledgement delay elapses. Do not use ARM SYSRESETREQ:
+  the prototype's hardware restart test left USB unresponsive with that path.
+
+- USB suspend pauses the selected alternate without discarding it. Resume restores
+  it; bus reset or unconfigure cancels that restoration. Preserve HID subscription
+  lease handling independently from a temporary suspend.
+- Hardware checks that claim audio interfaces must not run concurrently with
+  playback/format tests or firmware deployment. The basic HID diagnostics utility
+  uses the operating system's HID driver without detaching audio drivers.
+
+- Use `firmware/tools/build_firmware.py` for reproducible firmware artifacts;
+  it remaps workspace, Cargo-cache and target paths. Direct development builds
+  can contain machine-specific panic source paths. Keep build identity inputs
+  and artifact hashes distinct from hardware acceptance evidence.
+- Match C HID admission: count/drop busy reports before parsing; malformed
+  envelopes are counted/dropped without a response. Valid envelopes with invalid
+  commands or payloads receive protocol errors. Reject new work while a flash
+  operation or acknowledged reset is pending, and discard queued work on reset.
+
+- While USB is active, never switch SYS through the 12 MHz reference (RP2350-E12).
+  Keep PLL_SYS at 220 MHz and change only the 16.16 SYS divider: 65536 for
+  active PCM16/192 kHz, 80100 for other streaming (179,999,001 Hz), and 96119
+  idle (150,000,728 Hz). Keep 1.2 V for fractional-divider fast cycles;
+  USB/ADC/timer clocks remain independent. Update cached SYS/PERI, not PLL_SYS.
+- Serialize hardware tests and preserve failure evidence. A USB timeout is a
+  failure, never a substitute for a requested STALL. Keep only build/packaging,
+  coefficient generation and basic HID utilities in the shipped tools directory;
+  use temporary scripts for one-off investigations.
+
+- Loaded DSP/spectrum stress must use nonzero PCM and an unmuted host path;
+  silence skips spectrum logarithms and is only a transport workload. Preserve
+  the actual run duration and failures. An early stop is not a completed hour.
+
+- Keep prior clock-policy measurements as historical evidence. Spectrum work
+  should preserve the 2048-point FFT, 44.1/48 kHz analysis rates and numeric
+  tolerances unless a change is explicitly justified. Listening feedback does
+  not establish instrumented electrical I2S timing.
+
+- Spectrum must keep making bounded progress while HID IN completion is pending.
+  Keep the same transfer future alive, prioritize its completion, and yield to
+  USB/audio between analysis slices. Never modify an in-flight report or select
+  another report until it completes; preserve response > meter > spectrum.
+- FFT batches may not cross analysis-stage boundaries. In particular, entering
+  level mapping from a power-bin batch must not execute multiple mapped points
+  before checking time. Keep the original cadence threshold and numeric oracle.
+
+- Firmware is a Cargo workspace rooted at `firmware/`; the embedded package is
+  the workspace root (`src/`, `build.rs`, linker scripts), with `core/` and
+  `tools/` members. Do not recreate a nested `firmware/rust/` migration tree.
+  Existing C build caches were preserved under ignored `pumper-backups/`.
+
+- Firmware release 5.0 identifies the Rust implementation. Keep the HID wire
+  protocol at version 1, existing command/status layouts and flash schema 5.
+  Workspace package version and the reported firmware major/minor must agree.
+
+- Limiter release must converge to exact unity at every supported sample rate,
+  including after silence following clipping. Float rounding can stall release
+  below the unity threshold at high rates; detect stalled recovery only when
+  the instantaneous target is unity. Never clear limiting on a steady overload.
+- Patch releases use Cargo's patch component; the existing two-byte HID firmware
+  version reports major/minor only. Do not change the wire layout to add a patch.
+
+- Refresh LEDs on an independent 1 ms timer, never inside the HID transmit loop.
+  Closing a host HID handle can leave IN pending indefinitely while USB audio
+  continues. Preserve the in-flight transfer and turn both LEDs off when idle.
+
+- HID IN backpressure must not stall host-control publication, subscription
+  expiry, meter draining or stream housekeeping. Poll the same transfer until
+  completion and run bounded background work with a timer even when spectrum
+  is inactive. Keep command dispatch and report selection serialized.
+- Route UAC entity controls only for interface recipients addressing
+  AudioControl interface 0 and master channel 0. Reject other addresses before
+  reading or changing clock, volume or mute state.

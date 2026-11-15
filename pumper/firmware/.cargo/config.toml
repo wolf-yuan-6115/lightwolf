@@ -1,0 +1,6 @@
+[target.thumbv8m.main-none-eabihf]
+rustflags = ["-C", "target-cpu=cortex-m33"]
+
+[alias]
+firmware = "build -p pumper-device --release --target thumbv8m.main-none-eabihf"
+xtask = "run -p pumper-tools --"

@@ -1,0 +1,59 @@
+[workspace]
+resolver = "3"
+members = [".", "core", "tools"]
+default-members = ["core", "tools"]
+exclude = ["vendor/embassy-rp", "vendor/embassy-usb"]
+
+[workspace.package]
+edition = "2024"
+rust-version = "1.94"
+version = "5.0.3"
+license = "MIT"
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+panic = "abort"
+debug = 2
+
+[patch.crates-io]
+embassy-rp = { path = "vendor/embassy-rp" }
+embassy-usb = { path = "vendor/embassy-usb" }
+
+[package]
+name = "pumper-device"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+build = "build.rs"
+
+[features]
+default = []
+diagnostics = []
+
+[dependencies]
+pumper-core = { path = "core" }
+embassy-rp = { version = "=0.10.0", features = ["rp235xa", "critical-section-impl", "time-driver", "run-from-ram", "unstable-pac"] }
+embassy-usb = "=0.6.0"
+embassy-futures = "=0.1.2"
+embassy-time = "=0.5.1"
+embassy-sync = "=0.8.0"
+cortex-m = "=0.7.7"
+cortex-m-rt = "=0.7.5"
+static_cell = "=2.1.1"
+critical-section = "=1.2.0"
+pio = "=0.3.0"
+heapless = "=0.9.3"
+libm = "=0.2.16"
+
+[[bin]]
+name = "pumper-firmware"
+path = "src/main.rs"
+test = false
+bench = false
+
+[dependencies.embassy-time-queue-utils]
+version = "=0.3.2"
+features = ["generic-queue-8"]

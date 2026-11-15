@@ -1,6 +1,6 @@
 # Pumper WebHID controller
 
-The web controller is a static React application for the LightWolf Pumper USB
+The web controller is a static React application for the Pumper USB
 DAC. It uses TypeScript, Vite, Tailwind CSS 4, daisyUI, and Lucide icons.
 
 It provides:
@@ -93,8 +93,8 @@ The project is configured for Cloudflare Workers Static Assets:
 pnpm deploy
 ```
 
-Configure the Worker's custom domain separately in Cloudflare if deploying to
-`pumper.wolf-yuan.dev`.
+Configure the Worker's custom domain separately in Cloudflare, for example
+`pumper.example.com`.
 
 Firmware 4.1 supports **Follow USB volume** in output settings. Turn it off to
 pin the USB-volume stage to 100%; Master volume displays **Pinned**. USB mute

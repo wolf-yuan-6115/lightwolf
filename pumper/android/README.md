@@ -1,6 +1,6 @@
 # Pumper Controller for Android
 
-The Android app is an experimental native controller for the LightWolf Pumper
+The Android app is an experimental native controller for the Pumper
 USB DAC. It uses Android USB host APIs and the same HID control protocol as the
 WebHID controller in [`../web/`](../web/).
 

@@ -1,0 +1,1117 @@
+{
+  "date": "2026-11-13",
+  "phase": "Rust is the default and sole firmware implementation by user request on 2026-11-14. C source/build system removed; frozen compatibility fixtures retained. Hardware acceptance gaps remain recorded.",
+  "installed_artifact": "pumper-rust-5.0.3.uf2",
+  "installed_build_id": null,
+  "artifact_sha256": {
+    "pumper-rust-4.2-candidate.uf2": "329c726e5aec580ad9fccf68802fa0d52fa98147d8544cf309b7de86d72ddaef",
+    "pumper-rust-4.2-candidate.bin": "8dc940e095fc1a5bfcb435026e55bc7e137089ba29a0375ae497526c3bf50f03",
+    "pumper-rust-4.2-candidate-diagnostics.uf2": "e38cfd481ffabfce9fa0791222509836e4acee823234f7358d16ce48c3a9d94e",
+    "pumper-rust-4.2-candidate-diagnostics.bin": "ceff0be11f6594ca49315b32bd1f4a7af6f454ba5c3ba0fdcae93ffcf7e2b23a",
+    "rollback/pumper-original-c-program.uf2": "3682b84a1cef5004d0be2ac613f17755cf3a66a564c20ad8cbec880b1de15134",
+    "pumper-rust-4.2-transport-fixes-diagnostics.uf2": "050a6a0257537ba6b8a9d311bbe2a416bdae8f495088d15ecb8c4280bb99953c",
+    "pumper-rust-ep0-cancellation-diagnostics.uf2": "889169f874f6f870c22dddaad46dce950c6b815b797978b7ad715c98d8fe7012",
+    "pumper-rust-usb-clock-diagnostics.uf2": "108b3eb289a7c89a24500a5b21e96390f7642f7fb60359e076c7bf6699083504",
+    "pumper-rust-usb-clock.uf2": "f9b51ae6eb778ed328ff51b37bf8d10f15bf6c009bbde46bfd0ac00358554d5f",
+    "pumper-rust-192k-220mhz-diagnostics.uf2": "8ea21eba4f99ffdedeb514343da633dc5d10dde4741c04469bdb4355bddb1f13",
+    "pumper-rust-192k-220mhz.uf2": "e194c4a948830d64627611d984c26dba30f9c2e56ad20d82e60309ff96df30a0",
+    "pumper-rust-spectrum-bounded-diagnostics.uf2": "c5670800c1a53ffb14911b21bbab04090b45b4af90d52e9fa5c68e9c59d9ffc9",
+    "pumper-rust-spectrum-bounded.uf2": "1d33d38fbf5cac1adf12f379bd673c1c02eed56f5a887c5f96c1c4a808d0a478",
+    "pumper-rust-5.0.uf2": "62285c8165adb0d843f5626252b7ffb92d5143b8efff3b88243d10afdc7b70ef",
+    "pumper-rust-5.0.1.uf2": "da6abca7e3efdd5464d497af64a5fedc12119b109e5b305529f52f0fec171ba7",
+    "pumper-rust-5.0.1.bin": "2cef26502525bb63985c5bd4705c9121e737cac746bf448b446918d5d4fa3cc3",
+    "pumper-rust-5.0.2.uf2": "9938a466ba505c2d3c04e7963dd747f7c660799605a8a113d1c599b1d934d0bf",
+    "pumper-rust-5.0.2.bin": "d0ce465dfcd9cff1a8a75d96a0dcf417b4c68ed434ec261160adb716b1f33290",
+    "pumper-rust-5.0.3.uf2": "65c591f42606b449cc8c25563eb4b287f9d2dcc6803bbba74308c5d556e5ac74",
+    "pumper-rust-5.0.3.bin": "60e9f2f8c13678787ee098c7797ae5a8744ebf0257ff2f21f7db6669d6e179e4"
+  },
+  "decisions": {
+    "windows_macos_development_gate": "waived by user; both remain untested",
+    "dsp_80_percent_limit": "waived by user on 2026-11-13: Just leave it at 98%",
+    "further_performance_optimization": "stopped at user request",
+    "zero_underrun_acceptance": "not demonstrated under loaded PCM16/192 kHz; observed failures retained",
+    "pcm16_192k_clock": "User requested 220 MHz on 2026-11-13, superseding the old 180 MHz policy for this mode; other DSP optimization remains out of scope.",
+    "platform_testing": "User explicitly keeps platform tests skipped on 2026-11-13; no cross-host pass claimed.",
+    "electrical_audio_feedback": "User reports electrical/audio behavior seems good and audio is as intended; record as listening/functional feedback, not instrumented electrical I2S timing.",
+    "rust_cutover": "Explicitly requested by user on 2026-11-14, followed by explicit removal of C from the codebase. This is not a claim that unperformed tests passed."
+  },
+  "host_checks": {
+    "portable_c_suites_passed": 10,
+    "rust_core_integration_tests_passed": 38,
+    "packaging_tests_passed": 2,
+    "usb_stack_regression_tests_passed": 1,
+    "python_probe_tests_passed": 5,
+    "web_tests_passed": 136,
+    "web_production_build": "passed",
+    "android_unit_tests_lint_debug_build": "passed (Gradle cache reused; not a physical-device test)",
+    "cross_builds": "production and diagnostics passed",
+    "format_clippy": "passed",
+    "dsp_normalized_rms_error": 5.128366629812686e-09,
+    "dsp_normalized_peak_error": 7.748603820800781e-07,
+    "spectrum_reference": "all six sample rates within one half-dB code",
+    "pcm_protocol_descriptors_schema5": "byte-exact reference comparisons passed",
+    "flash_faults": "host erase/program/readback failure injection; legacy migration, corruption, generation wrap and interrupted reset tests",
+    "queue_ownership_model": "200,000 transitions plus full-queue/reset/abort-ack cases; abstract policy model, not DMA peripheral simulation",
+    "shared_publication": "100,000 concurrent publications through the actual device stream and 64-bit telemetry snapshot implementations",
+    "usb_suspend_resume": "selected alternate restored on resume; reset/unconfigure cancels restoration (host regression)",
+    "dsp_reference_corpus": "216 configuration/rate cases plus six limiter attack/release, mute-ramp, stream-reset and rate-change cases",
+    "factory_reset_failure_model": "partial erase at page and sector boundaries, every verification read failure, no replacement bank, failure never schedules reboot",
+    "reproducible_builds": {
+      "different_workspace_cache_target_paths": "identical UF2 bytes for latest clock fix",
+      "diagnostics_sha256": "108b3eb289a7c89a24500a5b21e96390f7642f7fb60359e076c7bf6699083504",
+      "production_sha256": "f9b51ae6eb778ed328ff51b37bf8d10f15bf6c009bbde46bfd0ac00358554d5f",
+      "canonical_build_script": "tools/build_firmware.py",
+      "hardware_note": "Historical clock-fix artifacts were flashed and checked; their exact hashes remain above. Latest installed spectrum candidate and its validation are recorded separately."
+    },
+    "rust_core_integration_tests_failed": 0,
+    "spectrum_accuracy": "C accuracy thresholds passed for silence, full/half scale, stereo phase, frequency mapping, high-frequency passband and alias rejection; complete-window latency <=60 ms in the host model",
+    "spectrum_synthetic_cadence": {
+      "status": "passed, original >=7 assertion and eight slices per 128 input frames unchanged",
+      "sample_rates": [
+        44100,
+        48000,
+        88200,
+        96000,
+        176400,
+        192000
+      ],
+      "frames_in_half_second": [
+        9,
+        9,
+        9,
+        9,
+        9,
+        9
+      ],
+      "required_minimum_frames": 7,
+      "note": "Restored C-sized batches (8 FFT butterflies, 4 snapshot/power operations), with extra post-decimator clock checks retained. Batches stop at stage boundaries, so level mapping remains one point per timer check. Synthetic ticks are not board microseconds."
+    },
+    "clock_transition": "Fixed 180 MHz PLL; exact streaming rate, idle within 3 ppm, even longest fractional-divider cycle exceeds RP2350-E12 minimum (host arithmetic regression)",
+    "hardware_test_lock": "Historical check passed before the advanced probes and advisory-lock helper were removed during tooling cleanup.",
+    "production_diagnostics_exclusion": "Latest production BIN omits the diagnostic HID Feature descriptor; production ELF has no diagnostics symbols; exact production artifact now flashed and Feature GET rejected with HID status still responsive.",
+    "git_diff_check": "passed after final records and tool updates",
+    "rust_core_unit_tests_passed": 1,
+    "hid_background_progress": "Actual firmware helper tested: one bounded step per poll while transfer pending, completion has priority, disabled transfer returns immediately.",
+    "spectrum_fix_reproducible_builds": {
+      "different_workspace_cache_target_paths": "byte-identical diagnostic and production UF2s",
+      "diagnostics_sha256": "c5670800c1a53ffb14911b21bbab04090b45b4af90d52e9fa5c68e9c59d9ffc9",
+      "production_sha256": "1d33d38fbf5cac1adf12f379bd673c1c02eed56f5a887c5f96c1c4a808d0a478"
+    },
+    "c_reference_status": "Prior 10-suite C result is historical. C source, tests, build system and oracle adapters were removed after golden outputs were captured and Rust tests passed against them.",
+    "historical_python_probe_tests_before_cleanup": 11
+  },
+  "linux": {
+    "signal": "digital silence; no audible or electrical output measurement",
+    "production_format_smoke": [
+      {
+        "bits": 16,
+        "rate": 44100,
+        "seconds": 5,
+        "steady_underrun_delta": 0
+      },
+      {
+        "bits": 16,
+        "rate": 48000,
+        "seconds": 5,
+        "steady_underrun_delta": 0
+      },
+      {
+        "bits": 16,
+        "rate": 88200,
+        "seconds": 5,
+        "steady_underrun_delta": 0
+      },
+      {
+        "bits": 16,
+        "rate": 96000,
+        "seconds": 5,
+        "steady_underrun_delta": 0
+      },
+      {
+        "bits": 16,
+        "rate": 176400,
+        "seconds": 5,
+        "steady_underrun_delta": 0
+      },
+      {
+        "bits": 16,
+        "rate": 192000,
+        "seconds": 5,
+        "steady_underrun_delta": 0
+      },
+      {
+        "bits": 24,
+        "rate": 44100,
+        "seconds": 5,
+        "steady_underrun_delta": 0
+      },
+      {
+        "bits": 24,
+        "rate": 48000,
+        "seconds": 5,
+        "steady_underrun_delta": 0
+      },
+      {
+        "bits": 24,
+        "rate": 88200,
+        "seconds": 5,
+        "steady_underrun_delta": 0
+      },
+      {
+        "bits": 24,
+        "rate": 96000,
+        "seconds": 5,
+        "steady_underrun_delta": 0
+      }
+    ],
+    "loaded_pcm16_192k": {
+      "seconds": 15,
+      "rust_average_dsp_load_percent": 98.27,
+      "c_average_dsp_load_percent": 97.16,
+      "rust_underrun_frame_delta": 155136,
+      "c_underrun_frame_delta": 84864,
+      "worst_spectrum_slice_us": 63,
+      "raw_result": "artifacts/full-dsp-192k-selective-ramp.json",
+      "note": "Measured before final diagnostic schema/counter changes; DSP algorithm retained"
+    },
+    "loaded_pcm24_96k": {
+      "seconds": 30,
+      "ten_active_bands": true,
+      "crossfeed_output_meters_spectrum": true,
+      "live_edits": 291,
+      "underrun_frame_delta": 0,
+      "ownership_faults": 0,
+      "completed_frames": 599,
+      "diagnostics": {
+        "spectrum_capture_drops": 0,
+        "spectrum_analysis_drops": 0,
+        "core0_stack_free": 36176,
+        "core1_stack_free": 23232,
+        "ownership_faults": 0,
+        "usb_resets": 2,
+        "underrun_frames": 0,
+        "clock_hz": 180000000,
+        "last_flash_result": 0,
+        "spectrum_frames": 599,
+        "max_block_us": 865,
+        "max_spectrum_slice_us": 46,
+        "spectrum_fifo_high_water": 873,
+        "build_id": "e139fb557891d906"
+      }
+    },
+    "production_feature_report": "descriptor absent from BIN; Feature GET rejected on hardware",
+    "persistence": "unchanged-value global save, reboot, and C reading Rust bank passed; save/load/default/delete of temporary profile passed during PCM24/96 kHz; original profile set/default/settings restored",
+    "preview_flash_integrity": "byte-identical settings before first explicit save",
+    "restart_bootsel": "acknowledged restart after Rust save, repeated software BOOTSEL and return passed",
+    "physical_bootsel_needed_this_phase": false,
+    "webhid": "Existing localhost Chrome controller connected, read saved Profile 2, acknowledged preamp 0 -> -1 -> 0 with Saved -> Unsaved -> Saved. Lower-control input and screenshot requests timed out in browser tooling; full UI playback check remains pending.",
+    "raw_usb_edge_probe": "Root USB bus access unavailable remotely; no permission changes made. Raw control and forced-suspend cases remain pending; use existing HID and ALSA access for other tests.",
+    "hid_edge_checks": {
+      "bad_envelopes_dropped": 5,
+      "malformed_counter_delta": 5,
+      "invalid_commands_rejected": 8,
+      "subscription_lifecycle": "passed",
+      "settings_unchanged": true,
+      "diagnostics": {
+        "spectrum_capture_drops": 0,
+        "spectrum_analysis_drops": 0,
+        "core0_stack_free": 36456,
+        "core1_stack_free": 32768,
+        "ownership_faults": 0,
+        "usb_resets": 2,
+        "underrun_frames": 0,
+        "clock_hz": 150000000,
+        "last_flash_result": 0,
+        "spectrum_frames": 0,
+        "max_block_us": 0,
+        "max_spectrum_slice_us": 0,
+        "spectrum_fifo_high_water": 0,
+        "build_id": "a179957be7c61ccc"
+      }
+    },
+    "five_minute_matrix_status": "Ten formats now have completed five-minute Linux runs across two diagnostic images: first eight on preceding transport image, final PCM24 88.2/96 kHz on clock fix. Latest clock image also passed all ten five-second smoke runs. This is not a full five-minute matrix on a single final release image.",
+    "usb_control_edge_cases": {
+      "build_id": "d0ab5bbc3dec9d08",
+      "completed_runs": 12,
+      "formats_per_run": 10,
+      "rapid_reconfiguration_cycles_per_run": 20,
+      "outcome": "passed without settling delays: invalid alternates/rates STALL and preserve state, idle clock before alternate, packed PCM24/192k rejection, malformed requests, volume/mute readback",
+      "artifacts": [
+        "linux-usb-clock-edge.json",
+        "linux-usb-clock-edge-1.json through linux-usb-clock-edge-10.json",
+        "linux-usb-clock-edge-trace.json"
+      ],
+      "prior_failure": "EP0 cancellation patch alone still timed out. Clock transitions through 12 MHz violated RP2350-E12; replaced with live SYS divider changes."
+    },
+    "clock_fix_format_smoke": {
+      "artifact": "linux-clock-smoke.json",
+      "build_id": "d0ab5bbc3dec9d08",
+      "formats": 10,
+      "seconds_each": 5,
+      "steady_underruns": 0,
+      "ownership_faults": 0
+    },
+    "host_volume_signal": {
+      "build_id": "d0ab5bbc3dec9d08",
+      "tone_peak_dbfs": -60.206,
+      "baseline": {
+        "reports": 26,
+        "mean_square_left": 513.9615384615385,
+        "input_peak_left": 32,
+        "output_peak_left": 32
+      },
+      "follow_minus_6db": {
+        "reports": 26,
+        "mean_square_left": 132.0,
+        "input_peak_left": 32,
+        "output_peak_left": 16
+      },
+      "pinned": {
+        "reports": 26,
+        "mean_square_left": 514.0,
+        "input_peak_left": 32,
+        "output_peak_left": 32
+      },
+      "muted_while_pinned": {
+        "reports": 25,
+        "mean_square_left": 0.0,
+        "input_peak_left": 32,
+        "output_peak_left": 0
+      },
+      "preview_and_host_controls_restored": true,
+      "evidence": "HID digital meters; not electrical I2S or audible validation"
+    },
+    "suspend_probe": {
+      "passed": true,
+      "artifact": "linux-clock-suspend.json",
+      "build_id": "d0ab5bbc3dec9d08",
+      "formats": [
+        "PCM16/48000",
+        "PCM24/48000"
+      ],
+      "physical_runtime_suspend_observed": true,
+      "resumed_streaming": true,
+      "reset_counter_unchanged": true,
+      "ownership_faults": 0,
+      "power_policy_and_drivers_restored": true,
+      "scope": "selected alternates without audio packets; not suspend during queued nonzero playback"
+    },
+    "clock_fix_five_minute": {
+      "88200": {
+        "bits": 24,
+        "elapsed_seconds": 300.023,
+        "steady_underrun_delta": 0,
+        "ownership_faults": 0,
+        "artifact": "linux-clock-five-minute-24-88200.json",
+        "build_id": "d0ab5bbc3dec9d08"
+      },
+      "96000": {
+        "bits": 24,
+        "elapsed_seconds": 299.996,
+        "steady_underrun_delta": 0,
+        "ownership_faults": 0,
+        "artifact": "linux-clock-five-minute-24-96000.json",
+        "build_id": "d0ab5bbc3dec9d08"
+      }
+    },
+    "hid_edges_clock_fix": {
+      "artifact": "linux-clock-hid-edge.json",
+      "build_id": "d0ab5bbc3dec9d08",
+      "status": "passed"
+    },
+    "loaded_clock_fix": {
+      "format": "PCM24/96000",
+      "artifact": "linux-clock-loaded-noise-24-96000.json",
+      "build_id": "d0ab5bbc3dec9d08",
+      "requested_seconds": 3600,
+      "elapsed_seconds": 3600.005,
+      "stimulus": "deterministic stereo noise",
+      "peak_dbfs": -60,
+      "host_mute": false,
+      "usb_packet_delta": 3603153,
+      "stream_start_delta": 0,
+      "steady_underrun_delta": 0,
+      "ownership_faults": 0,
+      "spectrum_capture_drops": 0,
+      "spectrum_analysis_drops": 0,
+      "max_spectrum_slice_us": 47,
+      "max_total_block_us": 863,
+      "dsp_average_percent": 49.0,
+      "dsp_peak_percent": 82.4,
+      "completed_spectrum_frames": 72059,
+      "live_edits": 34783,
+      "preview_restored": true,
+      "alsa_errors": "",
+      "status": "passed checked underrun/ownership/spectrum gates for the full hour; 80% processing-budget limit remains waived"
+    },
+    "loaded_clock_fix_silence": {
+      "status": "intentionally interrupted after at least 480 seconds; not an acceptance pass",
+      "steady_underruns_at_last_checkpoint": 0,
+      "ownership_faults": 0,
+      "reason": "silence skips nonzero-power spectrum logarithms; replace with deterministic quiet noise for full workload",
+      "cleanup": "preview finally blocks completed and ALSA exited without error; DAC sink resumed"
+    },
+    "loaded_clock_fix_192k": {
+      "format": "PCM16/192000",
+      "artifact": "linux-clock-loaded-noise-16-192000.json",
+      "build_id": "d0ab5bbc3dec9d08",
+      "requested_seconds": 3600,
+      "elapsed_seconds": 30.025,
+      "stimulus": "deterministic stereo noise",
+      "peak_dbfs": -60,
+      "steady_underrun_delta": 330240,
+      "before": {
+        "spectrum_capture_drops": 285,
+        "spectrum_analysis_drops": 0,
+        "core0_stack_free": 36176,
+        "core1_stack_free": 23232,
+        "ownership_faults": 0,
+        "usb_resets": 2,
+        "underrun_frames": 33160,
+        "clock_hz": 180000000,
+        "last_flash_result": 0,
+        "spectrum_frames": 81955,
+        "max_block_us": 1727,
+        "max_spectrum_slice_us": 61,
+        "spectrum_fifo_high_water": 16384,
+        "build_id": "d0ab5bbc3dec9d08"
+      },
+      "after": {
+        "spectrum_capture_drops": 2108,
+        "spectrum_analysis_drops": 0,
+        "core0_stack_free": 36176,
+        "core1_stack_free": 23232,
+        "ownership_faults": 0,
+        "usb_resets": 2,
+        "underrun_frames": 363400,
+        "clock_hz": 180000000,
+        "last_flash_result": 0,
+        "spectrum_frames": 82301,
+        "max_block_us": 1727,
+        "max_spectrum_slice_us": 61,
+        "spectrum_fifo_high_water": 16384,
+        "build_id": "d0ab5bbc3dec9d08"
+      },
+      "dsp_average_percent": 98.18,
+      "dsp_peak_percent": 165.6,
+      "preview_restored": true,
+      "status": "failed early on steady-state underruns; not a completed hour; no optimization performed under user instruction"
+    },
+    "production_feature_exclusion": {
+      "artifact": "linux-clock-production-feature.json",
+      "firmware_artifact": "pumper-rust-usb-clock.uf2",
+      "passed": true
+    },
+    "production_clock_fix_smoke": {
+      "firmware_artifact": "pumper-rust-usb-clock.uf2",
+      "artifact": "linux-clock-production-smoke.json",
+      "formats": 10,
+      "seconds_per_format": 5,
+      "steady_underrun_delta": 0,
+      "diagnostics": false,
+      "scope": "digital-silence transport smoke; not the loaded hour or a five-minute run on this exact production image"
+    },
+    "restored_candidate": {
+      "settings_match_before_testing": true,
+      "status": {
+        "firmware": "4.2",
+        "streaming": false,
+        "rate": 48000,
+        "bits": 24,
+        "underruns": 0,
+        "clock_hz": 150000381,
+        "max_dsp_us": 0
+      },
+      "diagnostics": {
+        "spectrum_capture_drops": 0,
+        "spectrum_analysis_drops": 0,
+        "core0_stack_free": 36456,
+        "core1_stack_free": 32768,
+        "ownership_faults": 0,
+        "usb_resets": 2,
+        "underrun_frames": 0,
+        "clock_hz": 150000381,
+        "last_flash_result": 0,
+        "spectrum_frames": 0,
+        "max_block_us": 0,
+        "max_spectrum_slice_us": 0,
+        "spectrum_fifo_high_water": 0,
+        "build_id": "d0ab5bbc3dec9d08"
+      }
+    },
+    "clock_220mhz": {
+      "build_id": "831d357b23e46d0c",
+      "pll_hz": 220000000,
+      "voltage": 1.2,
+      "active_pcm16_192k_hz": 220000000,
+      "other_streaming_hz": 179999001,
+      "idle_hz": 150000728,
+      "all_format_smoke": "10/10, five seconds each, zero steady underruns; artifacts/linux-220mhz-format-smoke.json",
+      "loaded_test": {
+        "requested_seconds": 300,
+        "elapsed_seconds": 30.023,
+        "user_instruction": "Skip five-minute automated run; owner will listen for five minutes.",
+        "outcome": "Already stopped at the first 30-second checkpoint on spectrum timing before cancellation reached it. Not a five-minute pass.",
+        "artifact": "linux-220mhz-loaded-noise-16-192000.json",
+        "preview_restored": true,
+        "before": {
+          "spectrum_capture_drops": 1316,
+          "spectrum_analysis_drops": 0,
+          "core0_stack_free": 36176,
+          "core1_stack_free": 23232,
+          "ownership_faults": 0,
+          "usb_resets": 2,
+          "underrun_frames": 1048,
+          "clock_hz": 220000000,
+          "last_flash_result": 0,
+          "spectrum_frames": 578,
+          "max_block_us": 1434,
+          "max_spectrum_slice_us": 63,
+          "spectrum_fifo_high_water": 16384,
+          "build_id": "831d357b23e46d0c"
+        },
+        "after": {
+          "spectrum_capture_drops": 6394,
+          "spectrum_analysis_drops": 0,
+          "core0_stack_free": 36176,
+          "core1_stack_free": 23232,
+          "ownership_faults": 0,
+          "usb_resets": 2,
+          "underrun_frames": 1048,
+          "clock_hz": 220000000,
+          "last_flash_result": 0,
+          "spectrum_frames": 1041,
+          "max_block_us": 1434,
+          "max_spectrum_slice_us": 63,
+          "spectrum_fifo_high_water": 16384,
+          "build_id": "831d357b23e46d0c"
+        }
+      },
+      "manual_listening": {
+        "date": "2026-11-13",
+        "format": "PCM16/192000",
+        "clock_hz": 220000000,
+        "duration_minutes": 5,
+        "result": "User reports it sounds fine after five minutes.",
+        "scope": "Subjective listening pass; processing workload and internal counters were not captured during this listening session."
+      }
+    },
+    "live_spectrum_48k": {
+      "build_id": "831d357b23e46d0c",
+      "artifact": "linux-220mhz-live-spectrum-48k.json",
+      "input": "existing user music via PipeWire, PCM16/48 kHz; no audio control changes",
+      "summary": {
+        "measured_seconds": 30.009983155992813,
+        "completed_frames": 600,
+        "frames_per_second": 19.993346776677,
+        "interval_median_ms": 50.000811999780126,
+        "interval_max_ms": 53.38888999540359,
+        "sequence_gap_count": 0,
+        "first_completed_frame_ms": 69.01976899825968,
+        "frames_with_nonzero_levels": 600,
+        "analysis_rates": [
+          48000
+        ],
+        "controls_unchanged": true
+      },
+      "before": {
+        "spectrum_capture_drops": 31249,
+        "spectrum_analysis_drops": 0,
+        "core0_stack_free": 36168,
+        "core1_stack_free": 23232,
+        "ownership_faults": 0,
+        "usb_resets": 2,
+        "underrun_frames": 192,
+        "clock_hz": 179999001,
+        "last_flash_result": 0,
+        "spectrum_frames": 5651,
+        "max_block_us": 272,
+        "max_spectrum_slice_us": 59,
+        "spectrum_fifo_high_water": 16384,
+        "build_id": "831d357b23e46d0c"
+      },
+      "after": {
+        "spectrum_capture_drops": 31249,
+        "spectrum_analysis_drops": 0,
+        "core0_stack_free": 36168,
+        "core1_stack_free": 23232,
+        "ownership_faults": 0,
+        "usb_resets": 2,
+        "underrun_frames": 192,
+        "clock_hz": 179999001,
+        "last_flash_result": 0,
+        "spectrum_frames": 6290,
+        "max_block_us": 272,
+        "max_spectrum_slice_us": 59,
+        "spectrum_fifo_high_water": 16384,
+        "build_id": "831d357b23e46d0c"
+      },
+      "conclusion": "Synthetic low-rate cadence shortfall did not reproduce in this real-device 48 kHz observation: 600 complete nonzero frames in 30 seconds with no sequence gaps. Separate 44.1 kHz observation also completed; these observations do not validate all workloads. Worst-slice diagnostic is a boot-lifetime maximum."
+    },
+    "live_spectrum_44100": {
+      "build_id": "831d357b23e46d0c",
+      "artifact": "linux-220mhz-live-spectrum-44100.json",
+      "input": "existing user music via PipeWire, PCM16/44.1 kHz; no audio control changes",
+      "summary": {
+        "measured_seconds": 30.012945496011525,
+        "completed_frames": 600,
+        "frames_per_second": 19.991373391849695,
+        "interval_median_ms": 49.998305999906734,
+        "interval_max_ms": 51.14350099756848,
+        "sequence_gap_count": 0,
+        "first_completed_frame_ms": 72.07168600871228,
+        "frames_with_nonzero_levels": 600,
+        "analysis_rates": [
+          44100
+        ],
+        "controls_unchanged": true
+      },
+      "before": {
+        "spectrum_capture_drops": 31249,
+        "spectrum_analysis_drops": 0,
+        "core0_stack_free": 36168,
+        "core1_stack_free": 23232,
+        "ownership_faults": 0,
+        "usb_resets": 2,
+        "underrun_frames": 192,
+        "clock_hz": 179999001,
+        "last_flash_result": 0,
+        "spectrum_frames": 6291,
+        "max_block_us": 231,
+        "max_spectrum_slice_us": 59,
+        "spectrum_fifo_high_water": 16384,
+        "build_id": "831d357b23e46d0c"
+      },
+      "after": {
+        "spectrum_capture_drops": 31249,
+        "spectrum_analysis_drops": 0,
+        "core0_stack_free": 36168,
+        "core1_stack_free": 23232,
+        "ownership_faults": 0,
+        "usb_resets": 2,
+        "underrun_frames": 192,
+        "clock_hz": 179999001,
+        "last_flash_result": 0,
+        "spectrum_frames": 6930,
+        "max_block_us": 244,
+        "max_spectrum_slice_us": 59,
+        "spectrum_fifo_high_water": 16384,
+        "build_id": "831d357b23e46d0c"
+      },
+      "conclusion": "Synthetic low-rate cadence shortfall did not reproduce: 600 complete nonzero frames in 30 seconds with no sequence gaps. Boot-lifetime worst-slice counter does not isolate timing for this observation."
+    },
+    "spectrum_scheduling_fix": {
+      "artifact": "linux-spectrum-bounded-192k.json",
+      "build_id": "e3f28c178b7524fa",
+      "format": "PCM16/192000 at 220 MHz",
+      "input": "deterministic stereo noise at -60 dBFS peak through PipeWire, PCM16/192 kHz",
+      "elapsed_seconds": 60.001,
+      "steady_underrun_delta": 0,
+      "ownership_faults": 0,
+      "spectrum_capture_drops": 0,
+      "spectrum_analysis_drops": 0,
+      "max_spectrum_slice_us": 48,
+      "fifo_high_water": 1369,
+      "completed_frames_in_window": 1201,
+      "nonzero_transmitted_frames_including_warmup": 1259,
+      "live_edits": 582,
+      "dsp_average_percent": 81.18,
+      "before": {
+        "spectrum_capture_drops": 0,
+        "spectrum_analysis_drops": 0,
+        "core0_stack_free": 46464,
+        "core1_stack_free": 23232,
+        "ownership_faults": 0,
+        "usb_resets": 2,
+        "underrun_frames": 989,
+        "clock_hz": 220000000,
+        "last_flash_result": 0,
+        "spectrum_frames": 59,
+        "max_block_us": 1426,
+        "max_spectrum_slice_us": 48,
+        "spectrum_fifo_high_water": 1339,
+        "build_id": "e3f28c178b7524fa"
+      },
+      "after": {
+        "spectrum_capture_drops": 0,
+        "spectrum_analysis_drops": 0,
+        "core0_stack_free": 46464,
+        "core1_stack_free": 23232,
+        "ownership_faults": 0,
+        "usb_resets": 2,
+        "underrun_frames": 989,
+        "clock_hz": 220000000,
+        "last_flash_result": 0,
+        "spectrum_frames": 1260,
+        "max_block_us": 1426,
+        "max_spectrum_slice_us": 48,
+        "spectrum_fifo_high_water": 1369,
+        "build_id": "e3f28c178b7524fa"
+      },
+      "settings_restored": true,
+      "scope": "60-second check, not a complete hour. FFT size, coefficients, 44.1/48 kHz analysis rates and reference tolerances unchanged."
+    },
+    "spectrum_scheduling_low_rates": {
+      "44100": {
+        "artifact": "linux-spectrum-bounded-44100.json",
+        "summary": {
+          "measured_seconds": 30.005575618997682,
+          "completed_frames": 600,
+          "frames_per_second": 19.99628361137378,
+          "interval_median_ms": 50.000903007457964,
+          "interval_max_ms": 52.1817499975441,
+          "sequence_gap_count": 0,
+          "first_completed_frame_ms": 64.99957099731546,
+          "frames_with_nonzero_levels": 600,
+          "analysis_rates": [
+            44100
+          ],
+          "controls_unchanged": true
+        },
+        "counter_deltas": {
+          "underrun_frames": 0,
+          "spectrum_capture_drops": 0,
+          "spectrum_analysis_drops": 0,
+          "ownership_faults": 0
+        },
+        "max_spectrum_slice_us_lifetime": 48
+      },
+      "48000": {
+        "artifact": "linux-spectrum-bounded-48000.json",
+        "summary": {
+          "measured_seconds": 30.001593181004864,
+          "completed_frames": 600,
+          "frames_per_second": 19.998937935732112,
+          "interval_median_ms": 50.000036993878894,
+          "interval_max_ms": 51.16509700019378,
+          "sequence_gap_count": 0,
+          "first_completed_frame_ms": 61.01574499916751,
+          "frames_with_nonzero_levels": 600,
+          "analysis_rates": [
+            48000
+          ],
+          "controls_unchanged": true
+        },
+        "counter_deltas": {
+          "underrun_frames": 0,
+          "spectrum_capture_drops": 0,
+          "spectrum_analysis_drops": 0,
+          "ownership_faults": 0
+        },
+        "max_spectrum_slice_us_lifetime": 48
+      }
+    }
+  },
+  "resources": {
+    "production_flash_bytes": 128228,
+    "diagnostic_flash_bytes": 129804,
+    "production_sram_reserved_bytes": 495764,
+    "diagnostic_sram_reserved_bytes": 497344,
+    "sram_total_bytes": 532480,
+    "core0_stack_reserved_bytes": 131072,
+    "core1_stack_reserved_bytes": 32768,
+    "settings_excluded": "0x101fe000..0x10200000",
+    "embedded_c_application_sdk_tinyusb_dependency": false,
+    "build_id": "e3f28c178b7524fa"
+  },
+  "resolved_issues": [
+    "Core 0 initialization exceeded 64 KiB; reserve 128 KiB and verify headroom.",
+    "Core 1 DSP exceeded 8 KiB; reserve 32 KiB and verify headroom.",
+    "Flash readback observed cached XIP data; explicitly flush cache before verification.",
+    "Fused-math experiment did not improve timing and was removed; no libm patch or relaxed floating-point compiler flags retained.",
+    "Rapid valid/invalid USB controls timed out while clock transitions selected 12 MHz SYS. Fixed PLL and live SYS-divider transitions passed repeated raw control probes without added delays."
+  ],
+  "pending": [
+    "Windows/macOS USB and controller hardware tests (development gate waived, not passed)",
+    "Final-image format and stress coverage remains incomplete: older builds have five-minute Linux format coverage and a loaded PCM24/96 kHz hour. The current 220 MHz build has ten-format five-second smoke coverage and a user-reported five-minute PCM16/192 kHz listening pass; earlier results do not establish full acceptance of the new build.",
+    "Electrical I2S/channel/gain verification and audible checks",
+    "Full WebHID playback/lower-control checks (connection and EQ preview passed), and physical Android smoke tests",
+    "Hardware cable disconnect and suspend with queued playback; electrical silence/recovery on starvation. Runtime suspend of selected PCM16/PCM24 alternates and malformed controls passed on Linux.",
+    "Hardware factory-reset/power-loss tests; host fault injection passed",
+    "Long-duration validation of the new spectrum scheduling build; the previous 192 kHz timing/drop failure did not reproduce in its 60-second loaded check."
+  ],
+  "candidate_update": {
+    "status": "Production 5.0.3 installed on user request. Flash verification, settings comparison and HID/control readback passed. DMA delayed-polling risk remains recorded and unchanged.",
+    "change": "Preserve selected alternate over suspend, cancel on reset/unconfigure, and match C malformed/busy HID admission",
+    "diagnostic_flash_bytes": 130124,
+    "production_flash_bytes": 128452,
+    "diagnostic_sram_reserved_bytes": 497664,
+    "production_sram_reserved_bytes": 495988,
+    "artifacts": {
+      "pumper-rust-4.2-resume-diagnostics.uf2": "662de1bf5fa8db12a15fb818d78ccee05e6f3c37c28a189935cd0de7beef4b97",
+      "pumper-rust-4.2-resume.uf2": "f211504ddb1b0e715b973a6cbeefcaa57add6a44c0a9ca1d79659a197106897b"
+    },
+    "clock": {
+      "pll_hz": 180000000,
+      "stream_hz": 180000000,
+      "idle_hz": 150000381,
+      "voltage_both_states": 1.2,
+      "reason": "Avoid RP2350-E12 without switching SYS through 12 MHz; fractional idle divider contains 180 MHz cycles"
+    }
+  },
+  "default_build_export": {
+    "date": "2026-11-14",
+    "implementation": "Rust only; C source and build files removed on request",
+    "artifact": "pumper-rust-4.2.uf2",
+    "exported_to": "/home/wolf/Downloads/pumper-rust-firmware-2026-11-14.uf2",
+    "sha256": "a9479ddbb96df59d6b59e58aecfce9e215722e64c51830e5b49078f02d114238",
+    "diagnostics": false,
+    "flashed": false,
+    "flash_bytes": 128164,
+    "sram_reserved_bytes": 495700,
+    "host_tests": "34 Rust core tests, 2 packaging tests, 1 USB-stack regression, 11 Python tests passed; no C source/compiler dependency",
+    "checks": "Relocated workspace: 34 Rust core tests, 2 packaging tests, 11 Python tests, host/target Clippy, coefficient regeneration and production ELF/UF2 bounds checks passed; exported copy verified. DAC not flashed.",
+    "hardware_note": "Installed diagnostic image remains the previously recorded build; source cutover/export does not imply fresh hardware acceptance.",
+    "reproducibility": "Previous nested workspace export was verified byte-identical in an isolated copy. Relocated workspace production build passed; a new isolated comparison has not been performed for this layout.",
+    "previous_export_sha256": "762054fe5b4f3362d3a4f16de97d3ffd7d05203e2e206d886b9e24eb9dc5119d",
+    "workspace_root": "firmware/"
+  },
+  "workspace_layout": {
+    "date": "2026-11-14",
+    "root": "firmware/",
+    "embedded_crate": "firmware/src/",
+    "portable_crate": "firmware/core/",
+    "host_tools": "firmware/tools/",
+    "old_root": "firmware/rust/",
+    "note": "Historical commands and artifact identities retain their original paths; active build commands use firmware/. Installed diagnostic firmware has not been changed by this source-tree relocation.",
+    "build_status": "Production build, host tests and Clippy passed; matching Downloads UF2 updated. DAC remains on the earlier tested Rust diagnostic image."
+  },
+  "tooling_cleanup": {
+    "retained": [
+      "tools/build_firmware.py",
+      "tools/generate_spectrum_tables.py",
+      "tools/hid_probe.py",
+      "Rust UF2 packager",
+      "basic HID and fixture-integrity tests"
+    ],
+    "removed": [
+      "hardware_test_lock.py",
+      "hid_edge_probe.py",
+      "hid_spectrum_probe.py",
+      "integration_probe.py",
+      "linux_signal_probe.py",
+      "linux_smoke.py",
+      "linux_stress_probe.py",
+      "linux_suspend_probe.py",
+      "usb_edge_probe.py",
+      "test_hardware_test_lock.py",
+      "test_linux_stress_probe.py",
+      "test_usb_edge_probe.py"
+    ],
+    "note": "Advanced migration probes removed on request. Earlier measurements and test counts remain historical evidence; removed scripts are not current runnable verification commands.",
+    "current_python_tests_passed": 5,
+    "markdown_audit": "13 source Markdown files checked; known personal directory/account/host/device identifiers removed or absent; personal deployment domain replaced with an example."
+  },
+  "firmware_5_release": {
+    "date": "2026-11-14",
+    "workspace_version": "5.0.0",
+    "reported_version": "5.0",
+    "protocol_version": 1,
+    "production": true,
+    "settings_region_byte_identical": true,
+    "settings_sha256": "afb52374a63cb729231f930224013e397bdda17f53313fb2b6b8710edb885fa4",
+    "status_after_flash": {
+      "firmware": "5.0",
+      "streaming": true,
+      "rate": 96000,
+      "bits": 24,
+      "underruns": 0,
+      "clock_hz": 179999001,
+      "max_dsp_us": 456
+    },
+    "control_readback_matches_before": {
+      "global": true,
+      "bands": true,
+      "profiles": true,
+      "crossfeed": true,
+      "output": true,
+      "volume": true
+    },
+    "flash_bytes": 128164,
+    "sram_reserved_bytes": 495700,
+    "checks": "35 core tests, 2 packaging tests, 5 Python tests, host/target Clippy and production build passed; UF2 range/diagnostics exclusion and flashed bytes verified",
+    "note": "Version-only firmware release; prior incomplete platform and long-duration acceptance remain recorded. Production image has no diagnostic build-ID report."
+  },
+  "limiter_release_fix": {
+    "date": "2026-11-15",
+    "release": "5.0.1",
+    "hid_version": "5.0",
+    "production": true,
+    "cause": "Float32 exponential gain recovery can stop below the 0.9999 unity threshold at high sample rates, retaining attenuation and LIM after clipping.",
+    "fix": "Finish stalled recovery only when the instantaneous target is unity; never clear limiting during steady overload.",
+    "before_hardware": {
+      "format": "PCM24/96000",
+      "seconds": 5,
+      "silent_reports": 250,
+      "limiter_active_reports": 250
+    },
+    "host_regression": "Original implementation failed at 88200 Hz. Fixed implementation reaches exact unity and clears the meter flag at all six rates; immediate linked attack, steady overload, 50 ms release and reset pass.",
+    "audio_reference": {
+      "unchanged_tolerances_passed": true,
+      "normalized_rms": 5.128366629812686e-09,
+      "peak_error": 7.748603820800781e-07
+    },
+    "after_hardware": {
+      "status": {
+        "firmware": "5.0",
+        "streaming": true,
+        "rate": 96000,
+        "bits": 24,
+        "underruns": 0,
+        "clock_hz": 179999001,
+        "max_dsp_us": 697
+      },
+      "reports": 249,
+      "limited_reports": 0,
+      "nonzero_reports": 0,
+      "limiter_active_ms_delta": 0,
+      "first": [
+        {
+          "input_peaks": [
+            0,
+            0
+          ],
+          "output_peaks": [
+            0,
+            0
+          ],
+          "limiter": false
+        },
+        {
+          "input_peaks": [
+            0,
+            0
+          ],
+          "output_peaks": [
+            0,
+            0
+          ],
+          "limiter": false
+        },
+        {
+          "input_peaks": [
+            0,
+            0
+          ],
+          "output_peaks": [
+            0,
+            0
+          ],
+          "limiter": false
+        }
+      ],
+      "last": [
+        {
+          "input_peaks": [
+            0,
+            0
+          ],
+          "output_peaks": [
+            0,
+            0
+          ],
+          "limiter": false
+        },
+        {
+          "input_peaks": [
+            0,
+            0
+          ],
+          "output_peaks": [
+            0,
+            0
+          ],
+          "limiter": false
+        },
+        {
+          "input_peaks": [
+            0,
+            0
+          ],
+          "output_peaks": [
+            0,
+            0
+          ],
+          "limiter": false
+        }
+      ]
+    },
+    "settings_region_byte_identical": true,
+    "control_readback_matches_before": {
+      "global": true,
+      "bands": true,
+      "profiles": true,
+      "crossfeed": true,
+      "output": true,
+      "volume": true
+    },
+    "live_state_restoration": "Reboot selected saved default; restored prior active profile and live EQ without saving. Final control readback matches before flashing.",
+    "flash_bytes": 128196,
+    "sram_reserved_bytes": 495732,
+    "checks": "37 core tests, 2 packaging tests, 5 Python tests, host and production-target Clippy, formatting, production ELF/UF2 checks and verified flashing passed.",
+    "scope": "Clipping/release trajectories tested on host. Hardware observation covers silence after flashing and live-state restoration; no overload signal played on hardware. Earlier platform and long-duration gaps remain."
+  },
+  "led_disconnect_fix": {
+    "date": "2026-11-16",
+    "release": "5.0.2",
+    "hid_version": "5.0",
+    "production": true,
+    "reported_symptom": "Both LEDs sometimes freeze after disconnecting the web controller while audio continues.",
+    "cause": "LED updates shared the service loop with HID IN completion. Closing the host HID handle can leave that transfer pending indefinitely, preventing LED refresh while the independent audio loop continues.",
+    "fix": "Independent 1 ms LED timer task; preserve the pending HID transfer and its completion ordering. Clear both LEDs when the stream is idle.",
+    "host_regression": "Actual LED task refreshes changing peaks and completes coalesced activity pulses while HID remains pending with no spectrum self-wake; timer waits do not spin. Idle clears stale blue peaks and activity across timer wrap.",
+    "hardware": {
+      "cycles": [
+        {
+          "firmware": "5.0",
+          "streaming": false,
+          "rate": 48000,
+          "bits": 24,
+          "underruns": 0,
+          "clock_hz": 150000728,
+          "max_dsp_us": 0
+        },
+        {
+          "firmware": "5.0",
+          "streaming": false,
+          "rate": 48000,
+          "bits": 24,
+          "underruns": 0,
+          "clock_hz": 150000728,
+          "max_dsp_us": 0
+        },
+        {
+          "firmware": "5.0",
+          "streaming": false,
+          "rate": 48000,
+          "bits": 24,
+          "underruns": 0,
+          "clock_hz": 150000728,
+          "max_dsp_us": 0
+        },
+        {
+          "firmware": "5.0",
+          "streaming": false,
+          "rate": 48000,
+          "bits": 24,
+          "underruns": 0,
+          "clock_hz": 150000728,
+          "max_dsp_us": 0
+        },
+        {
+          "firmware": "5.0",
+          "streaming": false,
+          "rate": 48000,
+          "bits": 24,
+          "underruns": 0,
+          "clock_hz": 150000728,
+          "max_dsp_us": 0
+        }
+      ],
+      "scope": "Native HID close/reopen, audio idle; not a visual LED or browser test"
+    },
+    "settings_region_byte_identical": true,
+    "control_readback_matches_before": {
+      "global": true,
+      "bands": true,
+      "profiles": true,
+      "crossfeed": true,
+      "output": true,
+      "volume": true
+    },
+    "flash_bytes": 128708,
+    "sram_reserved_bytes": 496244,
+    "checks": "39 core tests, 2 packaging tests, 1 USB stack regression, 5 Python tests, host and both production/diagnostics target Clippy, formatting, production ELF/UF2 checks and verified flashing passed.",
+    "scope": "Hardware HID checks were performed with audio idle. Physical LED observation and a browser disconnect while playing remain for user confirmation; no electrical or cross-host acceptance claimed."
+  },
+  "migration_bug_review": {
+    "date": "2026-11-16",
+    "source_release": "5.0.3",
+    "flashed": true,
+    "committed": false,
+    "reviewed": [
+      "HID/service scheduling and LED independence",
+      "USB routing, reset, suspend and format transitions",
+      "DSP controls and limiter/ramp state",
+      "atomic publication and audio buffer handoff",
+      "spectrum epochs and chunk ownership",
+      "profile persistence and deferred flash completion"
+    ],
+    "fixed": [
+      {
+        "issue": "HID backpressure blocks housekeeping",
+        "impact": "An unread IN report could prevent host volume/mute changes from reaching DSP, prevent meter expiry/draining, and defer stream bookkeeping until HID resumes.",
+        "change": "Run bounded housekeeping and spectrum work while retaining the original transfer; a timer continues waking after spectrum is inactive. Configuration queue-full retries retain the latest snapshot. Report selection and command execution remain serialized.",
+        "regression": "Pending transfer never completes; timer still publishes mute after queue-full retry and expires the meter exactly once. Existing completion-priority and independent-LED tests pass."
+      },
+      {
+        "issue": "UAC request address validation incomplete",
+        "impact": "Matching entity high bytes could route class requests for the wrong recipient, interface or channel into audio controls.",
+        "change": "Validate interface recipient, AudioControl interface zero, master channel zero and supported entities before servicing audio GET/SET requests; also reject non-interface HID class writes.",
+        "regression": "Valid clock/feature-unit selectors accepted; every nonzero interface and channel byte rejected, together with wrong recipients and unknown entities."
+      }
+    ],
+    "open_findings": [
+      {
+        "issue": "Delayed DMA completion polling may violate buffer ownership",
+        "status": "Code-review risk; not reproduced or fixed in this patch",
+        "evidence": "I2s::service checks latched completion bits before returning active tokens, without gating re-trigger or checking current busy state. The partner channel chains back to that channel. The legacy C path used an interrupt; Rust polls after synchronous DSP.",
+        "required_followup": "Model chained-DMA retrigger/read-pointer behavior and deliberately delay servicing in a test build; establish a safe ownership gate before changing or reclaiming active buffers. Existing abstract queue tests do not cover this peripheral timing."
+      }
+    ],
+    "verification": {
+      "core_tests_passed": 41,
+      "packaging_tests_passed": 2,
+      "python_tests_passed": 5,
+      "host_clippy": "passed",
+      "production_target_clippy": "passed",
+      "diagnostics_target_clippy": "passed",
+      "frozen_compatibility_corpus": "passed without changing fixtures or tolerances",
+      "production_build": "passed",
+      "flash_bytes": 129604,
+      "sram_reserved_bytes": 497140,
+      "format": "passed",
+      "diff_check": "passed"
+    },
+    "hardware_scope": "Host-only review followed by user-requested verified production deployment. HID status and controls readback passed; no playback stress, stalled-HID mute, raw malformed USB or DMA delay injection performed for this release.",
+    "installed_release_after_flash": "5.0.3"
+  },
+  "firmware_5_0_3_deployment": {
+    "date": "2026-11-16",
+    "requested_by_user": true,
+    "artifact": "pumper-rust-5.0.3.uf2",
+    "sha256": "65c591f42606b449cc8c25563eb4b287f9d2dcc6803bbba74308c5d556e5ac74",
+    "picotool_load_verify": "passed",
+    "uf2_settings_exclusion": "passed",
+    "settings_byte_identical": true,
+    "settings_sha256": "afb52374a63cb729231f930224013e397bdda17f53313fb2b6b8710edb885fa4",
+    "control_readback_matches_before": {
+      "global": true,
+      "bands": true,
+      "profiles": true,
+      "crossfeed": true,
+      "output": true,
+      "volume": true
+    },
+    "status_before": {
+      "firmware": "5.0",
+      "streaming": false,
+      "rate": 96000,
+      "bits": 24,
+      "underruns": 2112,
+      "clock_hz": 150000728,
+      "max_dsp_us": 0
+    },
+    "status_after": {
+      "firmware": "5.0",
+      "streaming": false,
+      "rate": 48000,
+      "bits": 24,
+      "underruns": 0,
+      "clock_hz": 150000728,
+      "max_dsp_us": 0
+    },
+    "dma_risk": "Unresolved, unchanged by this patch; no hardware reproduction claimed",
+    "committed": false
+  }
+}

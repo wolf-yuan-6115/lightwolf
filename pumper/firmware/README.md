@@ -1,141 +1,103 @@
 # Pumper firmware
 
-The firmware runs on the RP2354 board and exposes a composite USB Audio Class
-2 device plus a vendor HID control interface. It provides a ten-band
-parametric EQ, headphone crossfeed, global output processing, USB host volume
-and mute, persistent profiles, and device diagnostics for the WebHID and
-Android controllers.
+Pumper's default firmware is written in Rust for the RP2354 secure Cortex-M33,
+with 2 MiB flash. It exposes USB Audio Class 2 and vendor HID interfaces for the
+existing React WebHID and Android controllers.
 
-Firmware 3.4 supports stereo PCM in these formats:
+Firmware 5.0 provides ten-band parametric EQ, crossfeed, host volume/mute and
+volume pinning, balance/mono/width controls, a stereo limiter, meters, live
+spectrum, persistent profiles, explicit saves, factory reset, restart, and BOOTSEL.
+Version 5.0 identifies the Rust firmware; HID protocol version 1 and saved-profile
+compatibility are preserved. Patch 5.0.3 keeps host volume/mute controls responsive after the controller
+disconnects and includes the earlier LED and limiter fixes. The two-component
+HID version field continues to display 5.0.
+Live edits do not save settings until the corresponding save action is used.
+Factory reset erases all saved profiles and global processing settings.
 
-- 16-bit at 44.1, 48, 88.2, 96, 176.4, and 192 kHz.
-- Packed 24-bit at 44.1, 48, 88.2, and 96 kHz.
+| Sample depth | Supported sample rates (kHz) |
+| --- | --- |
+| 16-bit stereo | 44.1, 48, 88.2, 96, 176.4, 192 |
+| Packed 24-bit stereo | 44.1, 48, 88.2, 96 |
 
-The 24-bit alternate is not available at 176.4 or 192 kHz. Profile changes and
-audio-control previews are live; persistent settings are changed only by the
-corresponding save, default, or delete action. Audio is briefly muted while a
-persistent setting is written and verified.
-Realtime meter reports also identify limiter gain reduction for controller clip
-indicators. A separate telemetry report exposes device uptime, DSP load, I2S
-buffer health, USB feedback, limiter activity, and transport/storage counters.
+PCM16/192 kHz uses a 220 MHz clock boost. Other formats run at approximately
+180 MHz, and idle operation at approximately 150 MHz. Spectrum displays processed
+digital audio before the fixed I2S output gain; it does not measure analog output.
 
-Firmware 4.0 provides a live output spectrum that is always displayed by the web
-controller (also supported on firmware 3.5): 256 display points over 20 Hz–20 kHz, targeting 20 updates per
-second. The display measures processed digital audio before the fixed I²S
-output gain; it does not measure the analog DAC output.
+Linux playback and HID checks have passed, but validation is incomplete.
+Windows, macOS, physical Android, instrumented I2S measurements, and some
+long-duration and recovery checks remain unperformed.
+
+## Source layout
+
+`firmware/` is the Cargo workspace and embedded firmware crate:
+
+- `Cargo.toml`, `src/`, `build.rs`, `memory.x`, `ram.x`: RP2354 firmware.
+- `core/`: portable Rust processing, protocol and storage library, with tests.
+- `tools/`: Rust UF2 packager and Python build/device utilities.
+- `reference/`: frozen compatibility fixtures and validation records.
+- `vendor/`: pinned Embassy patches.
 
 ## Requirements
 
-- CMake 3.13 or newer
-- Ninja, or another CMake build tool
-- A native C/C++ compiler for Pico SDK host tools
-- Arm GNU embedded toolchain, including `arm-none-eabi-gcc`
-- Pico SDK 2.3.0 with its Git submodules initialized
+- Rustup; [rust-toolchain.toml](rust-toolchain.toml) pins Rust 1.94.1
+  and the `thumbv8m.main-none-eabihf` target.
+- Python 3 for building and packaging.
+- The normal native linker required by Rust host tools and tests.
+- Optional: Python `hidapi` or a system hidapi library for diagnostics, and
+  picotool with RP2350 support for USB flashing and backups.
 
-On Debian or Ubuntu:
+The Rust firmware build does not require Pico SDK, TinyUSB, or an Arm C compiler.
 
-```sh
-sudo apt install build-essential cmake git ninja-build gcc-arm-none-eabi libnewlib-arm-none-eabi
-```
+## Build
 
-Check the two tools most commonly missing during configuration:
-
-```sh
-arm-none-eabi-gcc --version
-ninja --version
-```
-
-## Pico SDK setup
-
-Clone the verified SDK release with its submodules and point
-`PICO_SDK_PATH` at the checkout:
+From the repository root:
 
 ```sh
-git clone --branch 2.3.0 --recurse-submodules \
-  https://github.com/raspberrypi/pico-sdk.git "${HOME}/Projects/pico-sdk"
-export PICO_SDK_PATH="${HOME}/Projects/pico-sdk"
+python3 firmware/build.py
 ```
 
-The RP2350 USB audio endpoint requires the following TinyUSB fixes when they
-are not already present in the SDK checkout:
+For an ELF-only development build, run `cargo firmware --locked` from
+`firmware/`.
+
+The production image is `firmware/artifacts/pumper-rust-5.0.3.uf2`.
+The builder pins dependencies, checks RAM/flash placement, reserves the final
+8 KiB for settings, and writes a BIN and `.build.json` manifest alongside the UF2.
+It does not flash a device.
+
+To choose an output file or build test-only diagnostics:
 
 ```sh
-git -C "${PICO_SDK_PATH}/lib/tinyusb" fetch origin
-git -C "${PICO_SDK_PATH}/lib/tinyusb" cherry-pick 86c28b76f 1ec93757f
+python3 firmware/build.py --output /tmp/pumper-rust.uf2
+python3 firmware/build.py --diagnostics \
+  --output firmware/artifacts/pumper-rust-5.0.3-diagnostics.uf2
 ```
 
-Keep these SDK changes in the Pico SDK checkout; they are not project source
-files.
+See [TESTING.md](TESTING.md) for detailed build options and device probes.
 
-## Configure and build
-
-Run from the repository root. The project uses the `pico2` board definition,
-the `rp2350-arm-s` platform, and the RP2354's 2 MiB flash configuration:
+## Test
 
 ```sh
-cmake -S firmware -B firmware/build -G Ninja \
-  -DCMAKE_BUILD_TYPE=Release \
-  -DPICO_BOARD=pico2 \
-  -DPICO_PLATFORM=rp2350-arm-s \
-  -DPICO_FLASH_SIZE_BYTES=2097152
-
-cmake --build firmware/build --target rp2350_usb_dac -j
+cd firmware
+cargo test --locked
+cargo test --locked -p embassy-usb --lib
+cargo fmt --all -- --check
+cargo clippy --locked --all-targets -- -D warnings
+python3 -m unittest discover -s tools -p 'test_*.py'
 ```
 
-The UF2 image is written to:
+Rust tests compare codecs, DSP, spectrum and storage against frozen compatibility
+fixtures captured from the previous firmware, and exercise Rust state machines
+and simulated flash failures. They do not compile any C source.
 
-```text
-firmware/build/rp2350_usb_dac.uf2
-```
+## Flash and recover
 
-For later source changes, rerun only the build command. Configure into a fresh
-build directory if the SDK, board, platform, or toolchain changes. The build
-checks the firmware size and reserves the final 8 KiB of flash for settings.
+1. Request BOOTSEL from the controller, or hold the board's BOOTSEL button while
+   reconnecting USB.
+2. Copy `firmware/artifacts/pumper-rust-5.0.3.uf2` to the BOOTSEL drive.
+3. Wait for the drive to disconnect and Pumper to restart.
 
-## Flashing
-
-To flash manually:
-
-1. Disconnect the DAC.
-2. Hold the RP2354 BOOTSEL button while reconnecting USB.
-3. Release BOOTSEL when the USB mass-storage drive appears.
-4. Copy `firmware/build/rp2350_usb_dac.uf2` to the drive.
-5. Wait for the drive to disconnect and the DAC to restart.
-
-The WebHID and Android controllers can also request a BOOTSEL restart. They do
-not upload the UF2; the image must still be copied to the boot-ROM drive.
-Existing profiles are stored outside the UF2 image.
-
-## Host tests
-
-The portable configuration, DSP, protocol, audio-format, and profile-storage
-tests do not require the Pico SDK:
-
-```sh
-cmake -S firmware/tests -B /tmp/pumper-firmware-tests
-cmake --build /tmp/pumper-firmware-tests
-ctest --test-dir /tmp/pumper-firmware-tests --output-on-failure
-```
-
-## Troubleshooting
-
-- `Compiler 'arm-none-eabi-gcc' not found`: install the Arm embedded toolchain
-  or add it to `PATH`.
-- `CMAKE_MAKE_PROGRAM is not set` with the Ninja generator: install Ninja or
-  choose another installed CMake generator.
-- If USB audio or its isochronous endpoint does not work, verify the TinyUSB
-  fixes above, configure a fresh build directory, and flash the newly built
-  UF2.
-
-Firmware 4.1 supports **Follow USB volume** in output settings. Turn it off to
-pin the USB-volume stage to 100%; Master volume displays **Pinned**. USB mute
-still works. Changes preview immediately; use **Save output** to retain them
-after power cycling. Re-enabling follows the latest computer volume. Disabling
-can increase loudness. EQ, output processing, and the output safety ceiling still
-apply. Use updated controllers with pinned devices; older controllers cannot
-decode the new setting.
-
-Firmware 4.2 adds **Factory reset** beside Restart and firmware update in the
-controllers. After confirmation, it permanently erases all saved profiles,
-default-profile selection, crossfeed, and output settings, then restarts.
-Unlike live EQ Restore defaults, this clears saved settings.
+Program UF2s leave saved profiles and global settings intact. Keep a known-working
+program UF2 for rollback. To restore the previous C firmware, enter BOOTSEL and
+copy its UF2 instead; do not erase settings or restore a full-flash backup merely
+to change firmware implementations. If software BOOTSEL is unavailable, use the
+physical button.
