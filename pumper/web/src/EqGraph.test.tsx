@@ -66,7 +66,7 @@ describe("EQ graph editing", () => {
     });
     const onChangeBand = vi.fn();
     const view = render(<EqGraph config={defaultConfig} sampleRateHz={48000} selectedBand={0} onSelectBand={vi.fn()} onChangeBand={onChangeBand} spectrumEnabled />);
-    act(() => resize([{ contentRect: { width: 360 } } as ResizeObserverEntry], {} as ResizeObserver));
+    act(() => resize([{ contentRect: { width: 360, height: 280 } } as ResizeObserverEntry], {} as ResizeObserver));
     const svg = view.container.querySelector("svg")!;
     const capture = vi.fn();
     Object.defineProperty(svg, "setPointerCapture", { value: capture });
@@ -83,6 +83,25 @@ describe("EQ graph editing", () => {
     expect(onChangeBand).toHaveBeenCalledWith(0, { frequencyHz: 630, gainDb: 6 });
     view.unmount();
     expect(disconnect).toHaveBeenCalledOnce();
+  });
+
+  it("keeps drag gain accurate when the desktop chart grows taller", () => {
+    let resize!: ResizeObserverCallback;
+    vi.stubGlobal("ResizeObserver", class {
+      constructor(callback: ResizeObserverCallback) { resize = callback; }
+      observe() {}
+      disconnect() {}
+    });
+    const onChangeBand = vi.fn();
+    const view = render(<EqGraph config={defaultConfig} sampleRateHz={48000} selectedBand={0} onSelectBand={vi.fn()} onChangeBand={onChangeBand} spectrumEnabled />);
+    act(() => resize([{ contentRect: { width: 1035, height: 500 } } as ResizeObserverEntry], {} as ResizeObserver));
+    const svg = view.container.querySelector("svg")!;
+    expect(svg).toHaveAttribute("viewBox", "0 0 1035 500");
+    Object.defineProperty(svg, "getBoundingClientRect", { value: () => ({ left: 10, top: 20, width: 1035, height: 500 }) });
+    fireEvent.pointerDown(screen.getByLabelText("Band 1 graph handle"), { pointerId: 1 });
+    // The taller plot is 442 px high: one quarter from its top is +6 dB.
+    fireEvent.pointerMove(svg, { clientX: 528.5, clientY: 150.5 });
+    expect(onChangeBand).toHaveBeenCalledWith(0, { frequencyHz: 630, gainDb: 6 });
   });
 
   it("pins gain-independent handles to zero and changes only frequency while dragging", () => {

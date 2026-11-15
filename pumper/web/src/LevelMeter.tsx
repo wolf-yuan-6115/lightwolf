@@ -15,8 +15,12 @@ function roundDb(value: number): number {
   return Object.is(rounded, -0) ? 0 : rounded;
 }
 
+function displayValue(value: number): string {
+  return Number.isFinite(value) ? roundDb(value).toFixed(1) : "-inf";
+}
+
 function displayDb(value: number): string {
-  return Number.isFinite(value) ? `${roundDb(value).toFixed(1)} dBFS` : "-inf dBFS";
+  return `${displayValue(value)} dBFS`;
 }
 
 interface ChannelMeterProps {
@@ -34,10 +38,10 @@ function ChannelMeter({ channel, peak, source, tone }: ChannelMeterProps) {
     : "bg-emerald-500";
 
   return (
-    <div className="grid min-w-0 grid-cols-[18px_minmax(0,1fr)_76px] items-center gap-2.5 max-sm:grid-cols-[14px_minmax(0,1fr)_64px] max-sm:gap-1.5" aria-label={t(source === "input" ? "{channel} input {level}" : "{channel} output {level}", { channel, level: displayDb(currentPeakDb) })}>
+    <div className="flex min-w-0 flex-col items-center gap-2" aria-label={t(source === "input" ? "{channel} input {level}" : "{channel} output {level}", { channel, level: displayDb(currentPeakDb) })}>
       <strong className="text-[11px] text-base-content/70">{channel}</strong>
-      {/* Fixed pixel tracks keep compact meter segments from rounding to unequal widths. */}
-      <div className="grid h-3.5 w-max grid-cols-[repeat(24,4px)] gap-[2px]" aria-hidden="true">
+      {/* Low levels start at the bottom; fixed-height segments keep both channels aligned. */}
+      <div className="flex w-5 flex-col-reverse gap-0.5" aria-hidden="true">
         {thresholdsDb.map((threshold) => {
           const lit = displayedPeakDb >= threshold;
           const color = !lit
@@ -47,15 +51,18 @@ function ChannelMeter({ channel, peak, source, tone }: ChannelMeterProps) {
               : threshold >= -6
                 ? "bg-amber-400"
                 : nominalColor;
-          return <span className={`min-w-0 rounded-[1px] ${lit ? "transition-none" : "transition-colors duration-50"} ${color}`} key={threshold} />;
+          return <span className={`h-1 w-full shrink-0 rounded-[1px] ${lit ? "transition-none" : "transition-colors duration-50"} ${color}`} key={threshold} />;
         })}
       </div>
-      <span className="text-right text-[10px] tabular-nums text-base-content/70">{displayDb(currentPeakDb)}</span>
+      <span className="text-center text-[10px] tabular-nums text-base-content/70">
+        <span className="block">{displayValue(currentPeakDb)}</span>
+        <span className="block">dBFS</span>
+      </span>
     </div>
   );
 }
 
-interface MeterRowProps {
+interface MeterPairProps {
   title: string;
   source: "input" | "output";
   tone: "indigo" | "emerald";
@@ -63,17 +70,15 @@ interface MeterRowProps {
   limiterIndicator?: React.ReactNode;
 }
 
-function MeterRow({ title, source, tone, level, limiterIndicator }: MeterRowProps) {
+function MeterPair({ title, source, tone, level, limiterIndicator }: MeterPairProps) {
   return (
-    <div className="grid min-w-0 gap-2 p-4">
-      <div className="flex items-center justify-between gap-3">
-        <strong className="text-xs font-semibold">{title}</strong>
-        {limiterIndicator}
-      </div>
-      <div className="grid min-w-0 gap-1.5">
+    <div className="flex min-w-0 flex-col items-center gap-3 p-3">
+      <strong className="flex min-h-5 items-center text-center text-xs font-semibold">{title}</strong>
+      <div className="grid grid-cols-[repeat(2,2rem)] gap-2">
         <ChannelMeter channel="L" peak={level?.leftPeak ?? 0} source={source} tone={tone} />
         <ChannelMeter channel="R" peak={level?.rightPeak ?? 0} source={source} tone={tone} />
       </div>
+      <div className="flex h-5 items-center justify-center">{limiterIndicator}</div>
     </div>
   );
 }
@@ -99,9 +104,9 @@ export function LevelMeter({ level }: { level: MeterLevel | null }) {
   return (
     <section className="mt-auto min-w-0 border-t border-base-300 bg-base-200/40 text-base-content" aria-label={t("Realtime input and output levels")}>
       <h2 className="sr-only">{t("Signal levels")}</h2>
-      <div className="grid min-w-0 divide-y divide-base-200">
-        <MeterRow title={t("INPUT")} source="input" tone="indigo" level={level?.preEq ?? null} />
-        <MeterRow
+      <div className="mx-auto grid w-full min-w-0 max-w-sm grid-cols-2 divide-x divide-base-300">
+        <MeterPair title={t("INPUT")} source="input" tone="indigo" level={level?.preEq ?? null} />
+        <MeterPair
           title={t("OUTPUT")}
           source="output"
           tone="emerald"

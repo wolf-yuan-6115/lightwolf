@@ -50,7 +50,7 @@ export function EqGraph({ spectrumTransport = null, spectrumEnabled = false, con
   const svgRef = useRef<SVGSVGElement>(null);
   const descriptionId = useId();
   const [width, setWidth] = useState(1000);
-  const height = width < 640 ? 280 : 350;
+  const [height, setHeight] = useState(350);
   const viewWidth = spectrumEnabled ? width + 35 : width;
   const graphWidth = width - margin.left - margin.right;
   const graphHeight = height - margin.top - margin.bottom;
@@ -64,7 +64,10 @@ export function EqGraph({ spectrumTransport = null, spectrumEnabled = false, con
     if (!svg || typeof ResizeObserver === "undefined") return;
     const observer = new ResizeObserver(([entry]) => {
       if (entry.contentRect.width > 0) {
-        setWidth(Math.max(280, Math.min(1000, Math.round(entry.contentRect.width) - (spectrumEnabled ? 35 : 0))));
+        setWidth(Math.max(280, Math.round(entry.contentRect.width) - (spectrumEnabled ? 35 : 0)));
+      }
+      if (entry.contentRect.height > 0) {
+        setHeight(Math.round(entry.contentRect.height));
       }
     });
     observer.observe(svg);
@@ -151,8 +154,7 @@ export function EqGraph({ spectrumTransport = null, spectrumEnabled = false, con
   return (
     <svg
       ref={svgRef}
-      className="block max-h-[440px] w-full touch-none select-none"
-      style={{ aspectRatio: `${viewWidth} / ${height}` }}
+      className="absolute inset-0 block h-full w-full touch-none select-none"
       viewBox={`0 0 ${viewWidth} ${height}`}
       role="group"
       aria-label={t("Combined equalizer frequency response")}

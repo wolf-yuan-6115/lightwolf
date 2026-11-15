@@ -826,7 +826,7 @@ export default function App() {
               <h2 className="flex items-center gap-2.5 text-xl font-semibold tracking-tight sm:text-2xl"><ChartSpline size={22} className="text-accent" aria-hidden="true" />{t("Frequency response")}</h2>
               <span className="flex items-center gap-2 text-xs font-medium text-base-content/70"><span className={`size-1.5 rounded-full ${!connected ? "bg-base-content/40" : config.enabled ? "bg-success" : "bg-warning"}`} aria-hidden="true" />{!connected ? t("DAC disconnected") : config.enabled ? t("EQ enabled") : t("EQ bypassed")}</span>
             </div>
-            <div className="px-1 pt-4 sm:px-3">
+            <div className="relative mx-1 mt-4 min-h-[280px] flex-1 sm:mx-3 sm:min-h-[350px]">
               <EqGraph spectrumTransport={transport.current} spectrumEnabled={connected && spectrumSupported} config={config} sampleRateHz={sampleRateHz} selectedBand={selectedBand} onSelectBand={setSelectedBand} onChangeBand={updateBand} interactive={connected && !connecting && !writing && !audioSettings.saving} />
             </div>
             <div className="mt-auto px-4 pb-5 sm:px-6">
