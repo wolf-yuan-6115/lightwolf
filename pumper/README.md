@@ -87,7 +87,7 @@ remain incomplete.
 python3 firmware/build.py
 ```
 
-Flash `firmware/artifacts/pumper-rust-5.0.3.uf2` using the RP2354 BOOTSEL drive.
+Flash `firmware/artifacts/pumper-rust-5.1.0.uf2` using the RP2354 BOOTSEL drive.
 
 ### Web controller
 

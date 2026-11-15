@@ -7,6 +7,17 @@ use pumper_core::{
 };
 
 #[test]
+fn usb_volume_range_and_set_validation_agree() {
+    use pumper_core::usb::{valid_volume, volume_range};
+    // One subrange: -100 dB, 0 dB, half-dB resolution, in 1/256 dB units.
+    assert_eq!(volume_range(), [1, 0, 0, 0x9c, 0, 0, 0x80, 0]);
+    for raw in i16::MIN..=i16::MAX {
+        let expected = (-25600..=0).contains(&raw) && raw % 128 == 0;
+        assert_eq!(valid_volume(raw), expected, "raw volume {raw}");
+    }
+}
+
+#[test]
 fn c_reference_pcm_feedback_rounding_and_reports() {
     let reference = include_bytes!("../../reference/golden/compat.bin");
     let mut result = Vec::new();

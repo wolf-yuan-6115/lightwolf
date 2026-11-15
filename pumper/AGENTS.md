@@ -216,8 +216,8 @@ external Pico SDK checkout untouched; it is not part of the active codebase.
   Jetpack Compose/Material 3. Keep debug-only simulator code out of release
   builds.
 - Set the Android `versionName` to `1.<firmware major>.<firmware minor>` for
-  the newest firmware version it supports (currently `1.4.1` for firmware
-  4.1). Update it when supported firmware changes, and increment `versionCode`
+  the newest firmware version it supports (currently `1.5.1` for firmware
+  5.1). Update it when supported firmware changes, and increment `versionCode`
   for every release.
 - Use the same fixed-size HID protocol and persistence semantics as the web
   controller. Crossfeed, output processing, and EQ profile saves remain
@@ -289,7 +289,7 @@ could not be performed.
 ### Factory reset (firmware 4.2)
 
 - FactoryReset (`0x42`) takes an empty payload and erases/verifies the entire final 8 KiB settings region through the deferred flash-safe path. Success has an empty response before delayed reboot; failure returns storage error without reboot. No replacement bank is written.
-- Both controllers gate the destructive confirmation action at 4.2. Android version is 1.4.2 (code 7). Interrupted erasure is not atomic.
+- Both controllers gate the destructive confirmation action at 4.2. Android version at introduction was 1.4.2 (code 7). Interrupted erasure is not atomic.
 
 ### Rust firmware ownership and validation
 
@@ -299,7 +299,7 @@ could not be performed.
   does not convert any missing hardware check into a pass; preserve those gaps
   and historical build identities in the validation record.
 - The transport prototype reported 0.0; the complete command/DSP implementation
-  reports 5.0. Artifact names and diagnostic build identity distinguish the Rust
+  reports 5.1. Artifact names and diagnostic build identity distinguish the Rust
   candidate. Do not add prototype handling to the existing controllers.
 - The 80% processing-load limit is waived. Retain historical load, underrun and
   spectrum timing measurements; a waived load limit is not evidence of zero
@@ -408,3 +408,12 @@ could not be performed.
 - Route UAC entity controls only for interface recipients addressing
   AudioControl interface 0 and master channel 0. Reject other addresses before
   reading or changing clock, volume or mute state.
+
+### Expanded USB volume (firmware 5.1)
+
+- Advertise −100 to 0 dB in 0.5 dB steps through the UAC RANGE response; use the
+  same constants to validate SET_CUR. Keep signed 1/256 dB HID readback unchanged.
+- Both controllers must accept readings down to −100 dB while retaining older
+  firmware compatibility. Android support version is 1.5.1 (code 8).
+- Preserve host mute, the 10 ms gain ramp, unity pinning and volatile host-volume
+  state. Expanded device volume cannot disable host-side software attenuation.

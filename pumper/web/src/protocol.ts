@@ -194,7 +194,7 @@ export function decodeAudioControls(payload: Uint8Array): AudioControls {
   const view = viewFor(payload);
   const channels = [0, 1, 2].map((index): AudioChannelControl => {
     const volumeDb = view.getInt16(index * 2, true) / 256;
-    if (volumeDb < -50 || volumeDb > 0 || payload[6 + index] > 1) {
+    if (volumeDb < -100 || volumeDb > 0 || payload[6 + index] > 1) {
       throw new Error(t("Invalid USB audio control response"));
     }
     return { volumeDb, muted: payload[6 + index] === 1 };

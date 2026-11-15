@@ -245,7 +245,7 @@ impl Handler for Control<'_> {
                 2
             }
             (2, 2, 2) if channel == 0 && (req.length == 2 || req.length == 8) => {
-                buf[..8].copy_from_slice(&[1, 0, 0, 206, 0, 0, 0, 1]);
+                buf[..8].copy_from_slice(&pumper_core::usb::volume_range());
                 8
             }
             _ => return Some(InResponse::Rejected),
@@ -293,7 +293,7 @@ impl Handler for Control<'_> {
             }
             (2, 2, 1) if req.value as u8 == 0 && data.len() == 2 => {
                 let value = i16::from_le_bytes([data[0], data[1]]);
-                if !(-12800..=0).contains(&value) || value % 256 != 0 {
+                if !pumper_core::usb::valid_volume(value) {
                     false
                 } else {
                     s.volume = value;

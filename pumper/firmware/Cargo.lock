@@ -895,14 +895,14 @@ dependencies = [
 
 [[package]]
 name = "pumper-core"
-version = "5.0.3"
+version = "5.1.0"
 dependencies = [
  "libm",
 ]
 
 [[package]]
 name = "pumper-device"
-version = "5.0.3"
+version = "5.1.0"
 dependencies = [
  "cortex-m",
  "cortex-m-rt",
@@ -922,7 +922,7 @@ dependencies = [
 
 [[package]]
 name = "pumper-tools"
-version = "5.0.3"
+version = "5.1.0"
 dependencies = [
  "pumper-core",
 ]

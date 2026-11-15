@@ -1,7 +1,7 @@
 {
   "date": "2026-11-13",
   "phase": "Rust is the default and sole firmware implementation by user request on 2026-11-14. C source/build system removed; frozen compatibility fixtures retained. Hardware acceptance gaps remain recorded.",
-  "installed_artifact": "pumper-rust-5.0.3.uf2",
+  "installed_artifact": "pumper-rust-5.1.0.uf2",
   "installed_build_id": null,
   "artifact_sha256": {
     "pumper-rust-4.2-candidate.uf2": "329c726e5aec580ad9fccf68802fa0d52fa98147d8544cf309b7de86d72ddaef",
@@ -23,7 +23,9 @@
     "pumper-rust-5.0.2.uf2": "9938a466ba505c2d3c04e7963dd747f7c660799605a8a113d1c599b1d934d0bf",
     "pumper-rust-5.0.2.bin": "d0ce465dfcd9cff1a8a75d96a0dcf417b4c68ed434ec261160adb716b1f33290",
     "pumper-rust-5.0.3.uf2": "65c591f42606b449cc8c25563eb4b287f9d2dcc6803bbba74308c5d556e5ac74",
-    "pumper-rust-5.0.3.bin": "60e9f2f8c13678787ee098c7797ae5a8744ebf0257ff2f21f7db6669d6e179e4"
+    "pumper-rust-5.0.3.bin": "60e9f2f8c13678787ee098c7797ae5a8744ebf0257ff2f21f7db6669d6e179e4",
+    "pumper-rust-5.1.0.uf2": "3111c3f86b92e06e4d09e672614866c3c4d00e677fc68090635936b2c17e7038",
+    "pumper-rust-5.1.0.bin": "ac29a4ec4eeacfe6b58e546e1fbf872489aae9f1a08c0d292ae559602138af97"
   },
   "decisions": {
     "windows_macos_development_gate": "waived by user; both remain untested",
@@ -731,7 +733,7 @@
     "Long-duration validation of the new spectrum scheduling build; the previous 192 kHz timing/drop failure did not reproduce in its 60-second loaded check."
   ],
   "candidate_update": {
-    "status": "Production 5.0.3 installed on user request. Flash verification, settings comparison and HID/control readback passed. DMA delayed-polling risk remains recorded and unchanged.",
+    "status": "Production 5.1.0 installed and verified. Linux enumerates the expanded -100..0 dB range; saved settings are byte-identical and live profile/processing previews restored. Host requested volume was not changed.",
     "change": "Preserve selected alternate over suspend, cancel on reset/unconfigure, and match C malformed/busy HID admission",
     "diagnostic_flash_bytes": 130124,
     "production_flash_bytes": 128452,
@@ -1113,5 +1115,91 @@
     },
     "dma_risk": "Unresolved, unchanged by this patch; no hardware reproduction claimed",
     "committed": false
+  },
+  "firmware_5_1_volume_range": {
+    "date": "2026-11-16",
+    "firmware": "5.1.0",
+    "reported_version": "5.1",
+    "flashed": true,
+    "volume": {
+      "min_db": -100,
+      "max_db": 0,
+      "step_db": 0.5,
+      "positions": 201,
+      "uac_range_hex": "0100009c00008000"
+    },
+    "compatibility": "HID protocol 1, 9-byte host audio state and flash schema 5 unchanged. Updated controllers accept values below -50 dB and retain old readings. Older controller builds may reject expanded readback.",
+    "controllers": {
+      "web": "expanded decoder range",
+      "android_version": "1.5.1",
+      "android_version_code": 8
+    },
+    "verification": {
+      "rust_core_tests": 43,
+      "packaging_tests": 2,
+      "usb_stack_tests": 1,
+      "python_tests": 5,
+      "web_tests": 138,
+      "web_build": "passed",
+      "android": {
+        "tests": 45,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      "android_lint_debug_build": "passed",
+      "android_build_runtime": "Available JDK 21 used for Gradle; source/target compatibility remains Java 17",
+      "host_clippy": "passed",
+      "production_and_diagnostics_target_clippy": "passed",
+      "format": "passed",
+      "diff_check": "passed",
+      "production_elf_uf2_checks": "passed",
+      "flash_bytes": 129604,
+      "sram_reserved_bytes": 497140
+    },
+    "coverage": "Every signed 16-bit SET_CUR value tested against declared min/max/step; range bytes exact. Extended readback and 10 ms gain ramp tested at all six sample rates; pinning and mute retained. Frozen C compatibility fixtures and tolerances unchanged.",
+    "hardware_pending": "Full volume sweep, loaded playback and physical Android checks remain unperformed. Existing DMA timing risk and platform acceptance gaps unchanged.",
+    "source_commit_subject": "feat(firmware): extend USB volume range to -100 dB",
+    "deployment": {
+      "date": "2026-11-16",
+      "load_verify": "passed",
+      "uf2_settings_exclusion": "passed",
+      "settings_byte_identical": true,
+      "settings_sha256": "e72434f24e49c1c852428fc4fab7423e529e5040fa1f762e03cc09404bdef560",
+      "live_controls_restored": {
+        "global": true,
+        "bands": true,
+        "profiles": true,
+        "crossfeed": true,
+        "output": true
+      },
+      "status_before": {
+        "firmware": "5.0",
+        "streaming": false,
+        "rate": 96000,
+        "bits": 24,
+        "underruns": 192,
+        "clock_hz": 150000728,
+        "max_dsp_us": 0
+      },
+      "status_after": {
+        "firmware": "5.1",
+        "streaming": false,
+        "rate": 48000,
+        "bits": 24,
+        "underruns": 0,
+        "clock_hz": 150000728,
+        "max_dsp_us": 0
+      },
+      "linux_alsa": {
+        "min_index": 0,
+        "max_index": 200,
+        "min_db": -100,
+        "max_db": 0,
+        "current_index": 54,
+        "current_db": -73
+      },
+      "host_volume_note": "PipeWire reports 6% / -73.07 dB after re-enumeration. Previous device readback was clamped at -50 dB; expanded device readback is -73 dB. No host volume setter was called. Restored live EQ/profile/output preview without writes; reboot had loaded saved default and saved pinning state."
+    }
   }
 }

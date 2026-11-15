@@ -417,7 +417,7 @@ object PumperProtocol {
             if (value !in 0..1) throw ProtocolException("Invalid USB audio mute value")
             value == 1
         }
-        if (volumes.any { it !in -50.0..0.0 }) throw ProtocolException("Invalid USB audio volume")
+        if (volumes.any { it !in -100.0..0.0 }) throw ProtocolException("Invalid USB audio volume")
         return AudioControls(
             master = AudioChannelControl(volumes[0], mutes[0]),
             left = AudioChannelControl(volumes[1], mutes[1]),
@@ -427,7 +427,7 @@ object PumperProtocol {
 
     fun encodeAudioControls(controls: AudioControls): ByteArray {
         val channels = listOf(controls.master, controls.left, controls.right)
-        if (channels.any { it.volumeDb !in -50.0..0.0 }) throw ProtocolException("Invalid USB audio volume")
+        if (channels.any { it.volumeDb !in -100.0..0.0 }) throw ProtocolException("Invalid USB audio volume")
         return ByteArray(9).also { payload ->
             channels.forEachIndexed { index, channel ->
                 payload.putI16(index * 2, (channel.volumeDb * 256.0).roundToInt())

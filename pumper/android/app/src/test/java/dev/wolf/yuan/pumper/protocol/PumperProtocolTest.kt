@@ -193,6 +193,31 @@ class PumperProtocolTest {
     }
 
     @Test
+    fun `firmware 5_1 volume range decodes alongside older readings`() {
+        for (volumeDb in listOf(-100.0, -99.5, -50.5, -50.0, -0.5, 0.0)) {
+            val controls = AudioControls(
+                master = AudioChannelControl(volumeDb, true),
+                left = AudioChannelControl(0.0, false),
+                right = AudioChannelControl(0.0, false),
+            )
+            assertEquals(controls, PumperProtocol.decodeAudioControls(PumperProtocol.encodeAudioControls(controls)))
+        }
+        for (raw in listOf(-25601, 128)) {
+            val payload = ByteArray(9)
+            ByteBuffer.wrap(payload).order(ByteOrder.LITTLE_ENDIAN).putShort(0, raw.toShort())
+            assertThrows(ProtocolException::class.java) { PumperProtocol.decodeAudioControls(payload) }
+        }
+        for (volumeDb in listOf(-100.5, 0.5, Double.NaN)) {
+            val controls = AudioControls(
+                master = AudioChannelControl(volumeDb, false),
+                left = AudioChannelControl(0.0, false),
+                right = AudioChannelControl(0.0, false),
+            )
+            assertThrows(ProtocolException::class.java) { PumperProtocol.encodeAudioControls(controls) }
+        }
+    }
+
+    @Test
     fun `crossfeed record and dirty state round trip`() {
         val live = CrossfeedConfig(CrossfeedMode.Custom, 21.25, 1_230, 0.37)
         val saved = CrossfeedConfig(CrossfeedMode.Medium, 20.0, 700, 0.25)

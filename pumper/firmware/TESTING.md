@@ -1,6 +1,6 @@
 # Firmware testing and recovery
 
-This is the default Rust implementation of Pumper firmware 5.0. It supports
+This is the default Rust implementation of Pumper firmware 5.1. It supports
 the existing USB format matrix, ten-band EQ, crossfeed, host volume/mute and
 pinning, output processing, limiter, meters, spectrum, profiles, explicit saves,
 factory reset, restart, and BOOTSEL. The React and Android controllers use the
@@ -33,7 +33,7 @@ cargo test --locked -p embassy-usb --lib
 cargo fmt --all -- --check
 cargo clippy --locked --all-targets -- -D warnings
 python3 tools/build_firmware.py \
-  --output artifacts/pumper-rust-5.0.3.uf2
+  --output artifacts/pumper-rust-5.1.0.uf2
 cargo clippy --locked -p pumper-device --release \
   --target thumbv8m.main-none-eabihf --features diagnostics -- -D warnings
 ```
@@ -84,7 +84,7 @@ For each combination, play audio for five minutes. Check left/right channels,
 host volume/mute, and absence of clicks/dropouts. Capture status and diagnostics
 after playback starts and again before it stops; underruns must not increase.
 Record any format the OS does not expose instead of substituting a different
-format. Status should show version 5.0, the selected rate/depth, streaming true,
+format. Status should show version 5.1, the selected rate/depth, streaming true,
 and 220000000 Hz for PCM16/192 kHz, approximately 180 MHz for other
 streaming formats, and approximately 150 MHz after returning idle.
 
@@ -121,7 +121,7 @@ testing. Hardware acceptance remains incomplete.
 ```sh
 python3 tools/hid_probe.py bootsel
 picotool save -a -v artifacts/device-before-rust.bin
-picotool load -v -x artifacts/pumper-rust-5.0.3.uf2
+picotool load -v -x artifacts/pumper-rust-5.1.0.uf2
 ```
 
 To restore the C firmware, request BOOTSEL and load the saved C **program** UF2.

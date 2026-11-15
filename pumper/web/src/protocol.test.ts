@@ -89,7 +89,21 @@ describe("Pumper HID protocol", () => {
     payload[6] = 2;
     expect(() => decodeAudioControls(payload)).toThrow();
     payload[6] = 0;
-    new DataView(payload.buffer).setInt16(0, -51 * 256, true);
+    new DataView(payload.buffer).setInt16(0, -100 * 256 - 1, true);
+    expect(() => decodeAudioControls(payload)).toThrow();
+  });
+
+  it("decodes firmware 5.1 volume range while retaining older volume readings", () => {
+    const payload = new Uint8Array(9);
+    const view = new DataView(payload.buffer);
+    for (const volumeDb of [-100, -99.5, -50.5, -50, -0.5, 0]) {
+      view.setInt16(0, volumeDb * 256, true);
+      expect(decodeAudioControls(payload).master).toEqual({ volumeDb, muted: false });
+      payload[6] = 1;
+      expect(decodeAudioControls(payload).master).toEqual({ volumeDb, muted: true });
+      payload[6] = 0;
+    }
+    view.setInt16(0, 128, true);
     expect(() => decodeAudioControls(payload)).toThrow();
   });
 

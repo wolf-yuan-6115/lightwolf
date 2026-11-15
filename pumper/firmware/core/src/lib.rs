@@ -2,7 +2,7 @@
 #![forbid(unsafe_code)]
 
 /// Firmware release reported through HID; wire protocol remains version 1.
-pub const FIRMWARE_VERSION: (u8, u8) = (5, 0);
+pub const FIRMWARE_VERSION: (u8, u8) = (5, 1);
 
 pub mod activity;
 pub mod config;

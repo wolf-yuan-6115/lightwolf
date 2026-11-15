@@ -6,5 +6,5 @@ import sys
 
 firmware = Path(__file__).resolve().parent
 command = [sys.executable, str(firmware / 'tools/build_firmware.py'),
-           '--output', str(firmware / 'artifacts/pumper-rust-5.0.3.uf2'), *sys.argv[1:]]
+           '--output', str(firmware / 'artifacts/pumper-rust-5.1.0.uf2'), *sys.argv[1:]]
 raise SystemExit(subprocess.call(command))

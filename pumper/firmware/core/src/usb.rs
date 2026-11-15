@@ -92,6 +92,24 @@ impl Stream {
 
 pub const HID_REPORT_BYTES: &[u8] = crate::descriptors::DESC_HID_REPORT;
 
+// USB Audio volume values are signed dB in units of 1/256 dB.
+pub const VOLUME_MIN: i16 = -100 * 256;
+pub const VOLUME_MAX: i16 = 0;
+pub const VOLUME_STEP: i16 = 128;
+
+pub fn valid_volume(value: i16) -> bool {
+    (VOLUME_MIN..=VOLUME_MAX).contains(&value) && value % VOLUME_STEP == 0
+}
+
+pub fn volume_range() -> [u8; 8] {
+    let mut range = [0; 8];
+    range[..2].copy_from_slice(&1u16.to_le_bytes());
+    range[2..4].copy_from_slice(&VOLUME_MIN.to_le_bytes());
+    range[4..6].copy_from_slice(&VOLUME_MAX.to_le_bytes());
+    range[6..8].copy_from_slice(&VOLUME_STEP.to_le_bytes());
+    range
+}
+
 /// UAC entities belong to AudioControl interface zero and expose master-channel
 /// controls only. Do not let a matching high byte route a request for another
 /// interface (or a device/endpoint recipient) into audio state changes.

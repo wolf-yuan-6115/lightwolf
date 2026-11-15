@@ -4,13 +4,14 @@ Pumper's default firmware is written in Rust for the RP2354 secure Cortex-M33,
 with 2 MiB flash. It exposes USB Audio Class 2 and vendor HID interfaces for the
 existing React WebHID and Android controllers.
 
-Firmware 5.0 provides ten-band parametric EQ, crossfeed, host volume/mute and
+Firmware 5.1 provides ten-band parametric EQ, crossfeed, host volume/mute and
 volume pinning, balance/mono/width controls, a stereo limiter, meters, live
 spectrum, persistent profiles, explicit saves, factory reset, restart, and BOOTSEL.
-Version 5.0 identifies the Rust firmware; HID protocol version 1 and saved-profile
-compatibility are preserved. Patch 5.0.3 keeps host volume/mute controls responsive after the controller
-disconnects and includes the earlier LED and limiter fixes. The two-component
-HID version field continues to display 5.0.
+Version 5 identifies the Rust firmware; HID protocol version 1 and saved-profile
+compatibility are preserved. Firmware 5.1 supports USB volume from −100 to 0 dB
+in 0.5 dB steps. Volume pinning bypasses device-side gain while still honoring
+host mute; it cannot bypass software attenuation applied by the host.
+Use updated web/Android controllers to display volume readings below −50 dB.
 Live edits do not save settings until the corresponding save action is used.
 Factory reset erases all saved profiles and global processing settings.
 
@@ -59,7 +60,7 @@ python3 firmware/build.py
 For an ELF-only development build, run `cargo firmware --locked` from
 `firmware/`.
 
-The production image is `firmware/artifacts/pumper-rust-5.0.3.uf2`.
+The production image is `firmware/artifacts/pumper-rust-5.1.0.uf2`.
 The builder pins dependencies, checks RAM/flash placement, reserves the final
 8 KiB for settings, and writes a BIN and `.build.json` manifest alongside the UF2.
 It does not flash a device.
@@ -69,7 +70,7 @@ To choose an output file or build test-only diagnostics:
 ```sh
 python3 firmware/build.py --output /tmp/pumper-rust.uf2
 python3 firmware/build.py --diagnostics \
-  --output firmware/artifacts/pumper-rust-5.0.3-diagnostics.uf2
+  --output firmware/artifacts/pumper-rust-5.1.0-diagnostics.uf2
 ```
 
 See [TESTING.md](TESTING.md) for detailed build options and device probes.
@@ -93,7 +94,7 @@ and simulated flash failures. They do not compile any C source.
 
 1. Request BOOTSEL from the controller, or hold the board's BOOTSEL button while
    reconnecting USB.
-2. Copy `firmware/artifacts/pumper-rust-5.0.3.uf2` to the BOOTSEL drive.
+2. Copy `firmware/artifacts/pumper-rust-5.1.0.uf2` to the BOOTSEL drive.
 3. Wait for the drive to disconnect and Pumper to restart.
 
 Program UF2s leave saved profiles and global settings intact. Keep a known-working

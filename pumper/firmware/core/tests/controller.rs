@@ -23,7 +23,7 @@ fn call(c: &mut Controller, op: u8, p: &[u8], now: u64) -> Reply {
 fn preview_load_and_independent_saves() {
     let mut c = Controller::new(Store::default());
     let reply = call(&mut c, 2, &[], 0);
-    assert_eq!(&reply.bytes[8..11], &[5, 0, 10]);
+    assert_eq!(&reply.bytes[8..11], &[5, 1, 10]);
     let mut eq = Config::FLAT;
     eq.preamp = -4.0;
     assert_eq!(call(&mut c, 0x10, &eq.global(), 0).bytes[7], 0);
@@ -109,7 +109,7 @@ fn malformed_reports_and_subscriptions() {
 #[test]
 fn pinning_preserves_host_readback_and_mute() {
     let mut c = Controller::new(Store::default());
-    c.volume = -12800;
+    c.volume = -25600;
     c.publish_controls();
     assert!(c.runtime.gains[0] < 0.01);
     let output = Output {
@@ -119,7 +119,7 @@ fn pinning_preserves_host_readback_and_mute() {
     call(&mut c, 0x13, &output.encode(), 0);
     assert_eq!(c.runtime.gains, [1.0; 2]);
     let reply = call(&mut c, 6, &[], 0);
-    assert_eq!(u16le(&reply.bytes[8..]) as i16, -12800);
+    assert_eq!(u16le(&reply.bytes[8..]) as i16, -25600);
     c.mute = true;
     c.publish_controls();
     assert_eq!(c.runtime.gains, [0.0; 2]);
@@ -154,4 +154,32 @@ fn firmware_release_matches_package_and_preserves_wire_protocol() {
     assert_eq!(major.to_string(), env!("CARGO_PKG_VERSION_MAJOR"));
     assert_eq!(minor.to_string(), env!("CARGO_PKG_VERSION_MINOR"));
     assert_eq!(pumper_core::protocol::VERSION, 1);
+}
+
+#[test]
+fn extended_usb_volume_readback_and_ten_ms_gain_ramp() {
+    use pumper_core::{dsp::Dsp, format::RATES};
+    for rate in RATES {
+        for db in [-100.0f32, -99.5, -50.5, -50.0, -0.5, 0.0] {
+            let mut c = Controller::new(Store::default());
+            c.volume = (db * 256.0) as i16;
+            c.publish_controls();
+            let reply = call(&mut c, 6, &[], 0);
+            assert_eq!(u16le(&reply.bytes[8..]) as i16, c.volume);
+            let expected = 10.0f64.powf(f64::from(db) / 20.0) as f32;
+            assert!((c.runtime.gains[0] - expected).abs() <= expected * 1e-6);
+            let mut dsp = Dsp::new(rate, c.runtime);
+            let mut first = [16384.0; 2];
+            dsp.process(&mut first, false, |_| {});
+            if db < 0.0 {
+                assert!(first[0] > 16384.0 * expected && first[0] < 16384.0);
+            }
+            let mut ramp = vec![16384.0; ((rate / 100 - 1) * 2) as usize];
+            dsp.process(&mut ramp, false, |_| {});
+            let target = 16384.0 * expected;
+            assert!((ramp[ramp.len() - 1] - target).abs() <= target * 1e-6);
+            assert!(!c.eq_dirty());
+            assert_eq!(c.store.mask(), 0); // host volume never creates saved profiles
+        }
+    }
 }

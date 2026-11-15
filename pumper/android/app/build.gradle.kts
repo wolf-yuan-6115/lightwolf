@@ -15,8 +15,8 @@ android {
         applicationId = "dev.wolf.yuan.pumper"
         minSdk = 34
         targetSdk = 37
-        versionCode = 7
-        versionName = "1.4.2"
+        versionCode = 8
+        versionName = "1.5.1"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true

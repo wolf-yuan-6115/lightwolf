@@ -108,3 +108,7 @@ Firmware 4.2 adds **Factory reset** beside Restart and firmware update in the
 controllers. After confirmation, it permanently erases all saved profiles,
 default-profile selection, crossfeed, and output settings, then restarts.
 Unlike live EQ Restore defaults, this clears saved settings.
+
+Firmware 5.1 extends USB volume to **−100 to 0 dB in 0.5 dB steps**. This
+controller supports the expanded readback range and remains compatible with
+earlier firmware.
